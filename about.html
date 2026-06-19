@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accidental Graphics</title>
+  <meta name="description" content="Tool to make accidental graphics">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/nav.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="16x16" href="images/face cursor.png">
+  <script defer src="scripts/navConfig.js"></script>
+  <script defer src="scripts/navMenu.js"></script>
+</head>
+
+<body>
+
+
+
+<style>
+    /* Image as button */
+    .image-button {
+      border: none;
+      background: none;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .image-button img {
+      display: block;
+      width: 50px;
+      height: auto;
+      transition: transform 0.2s;
+    }
+
+    .image-button img:hover {
+      transform: scale(1.05);
+    }
+
+    #drawPrompt {
+      position: absolute;
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: clamp(2rem, 8vw, 5rem);
+      letter-spacing: 0.6rem;
+      color: rgba(255,255,255,0.2);
+      text-transform: uppercase;
+      font-weight: 700;
+      pointer-events: none;
+      user-select: none;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      text-align: center;
+    }
+
+    #drawPrompt.hidden {
+      opacity: 0;
+      transform: translate(-50%, -20px);
+    }
+  </style>
+
+
+
+
+<div id="main" >
+  <!-- Left text column -->
+  <div id="controls" >
+    <h1>about</h1>
+    <div class="text-block">This project explores what happens when we move beyond traditional graphic software.</div>
+    <div class="text-block">Away from Illustrator and Photoshop.</div>
+    <div class="text-block">Here, graphics aren’t designed on rules, but rather grow accidentally.</div>
+    <div class="text-block">Through errors, code, and unexpected interactions, new forms emerge.</div>
+    <div class="text-block">The goal is not perfection but exploration.</div>
+    <div class="text-block">Created by Jorne Scholiers</div>
+    <div style="display:flex; gap:18px; align-items:center; justify-content:center; margin-top:30px;">
+     
+      <a href="https://jornescholiers.cargo.site" target="_blank" class="image-button" aria-label="Portfolio">
+        <img src="images/icon_Blue.png" alt="Portfolio" style="width:46px; height:auto;">
+      </a>
+      <a href="https://www.instagram.com/byjorne?igsh=N3M1dWQ1Nm1hbjN4&utm_source=qr" target="_blank" class="image-button" aria-label="Instagram">
+        <img src="images/insta.png" alt="Instagram" style="width:36px; height:auto;">
+      </a>
+    </div>
+  </div>
+
+  <!-- Right canvas -->
+  <div id="right" style="flex:1; position:relative; overflow:hidden;">
+    <div id="drawPrompt">draw</div>
+    <canvas id="drawingCanvas" style="width:100%; height:100%; display:block; cursor: url('images/face cursor.png') 16 16, auto;"></canvas>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('drawingCanvas');
+const ctx = canvas.getContext('2d');
+const drawPrompt = document.getElementById('drawPrompt');
+let canvasWidth, canvasHeight;
+let promptVisible = true;
+
+function resizeCanvas() {
+  canvasWidth = canvas.parentElement.clientWidth;
+  canvasHeight = canvas.parentElement.clientHeight;
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// Load brush images (1–15)
+const brushImages = [];
+for (let i = 1; i <= 15; i++) {
+  const img = new Image();
+  img.src = `images/brushes/brush${i}.png`; // use relative path
+  brushImages.push(img);
+}
+
+// Drawing
+let drawing = false;
+function hidePrompt(){
+  if(!promptVisible) return;
+  promptVisible = false;
+  drawPrompt.classList.add('hidden');
+}
+canvas.addEventListener('mousedown', () => {
+  drawing = true;
+  hidePrompt();
+});
+canvas.addEventListener('mouseup', () => drawing = false);
+canvas.addEventListener('mouseout', () => drawing = false);
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!drawing) return;
+  hidePrompt();
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  // Cycle through brushes 1–15 sequentially
+  const brushIndex = Math.floor(Math.random() * brushImages.length);
+  const brush = brushImages[brushIndex];
+  const size = 50 + Math.random() * 30; // random size
+
+  ctx.drawImage(brush, x - size/2, y - size/2, size, size);
+});
+</script>
+
+<div class="app-year">2025 Accidental Graphics</div>
+</body>
+</html>

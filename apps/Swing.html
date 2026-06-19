@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accidental Graphics</title>
+  <meta name="description" content="Tool to make accidental graphics">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/nav.css">
+  <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
+  <script defer src="../scripts/navConfig.js"></script>
+  <script defer src="../scripts/navMenu.js"></script>
+  <style>
+    #c {
+      background-color: #111;
+      display: block;
+    }
+    #ui {
+      position: fixed;
+      top: 96px;
+      left: 20px;
+      width: min(320px, calc(100% - 40px));
+      background: rgba(0, 0, 0, 0.8);
+      padding: 16px;
+      border-radius: 14px;
+      font-family: var(--font-ui);
+      color: white;
+      box-shadow: 0 20px 35px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(6px);
+      z-index: 200;
+      max-height: calc(100vh - 190px);
+      overflow-y: auto;
+      color: #fff;
+    }
+    #ui * {
+      color: inherit;
+    }
+    #ui h1 {
+      font-family: var(--font-ui), system-ui;
+      font-weight: 900;
+      font-variation-settings: "ROND" 70;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+    }
+    #ui button {
+      margin: 6px 4px 0 0;
+    }
+    .toggle-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .toggle-row button {
+      flex: 1;
+    }
+    .toggle-btn.active {
+      background: #fff;
+      color: #111;
+    }
+    #ui a,
+    #ui a:visited,
+    #ui a:active {
+      color: #fff;
+      text-decoration: none;
+    }
+    .control-label {
+      display: block;
+      margin-top: 12px;
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+    #ui select {
+      width: 100%;
+      margin-top: 6px;
+    }
+    .color-input {
+      flex: 1;
+      width: 100%;
+      padding: 0;
+      border: none;
+      height: 38px;
+      background: transparent;
+    }
+    .color-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 6px;
+    }
+    .color-row .color-block {
+      flex: 1;
+    }
+    .color-row label {
+      display: block;
+      margin-bottom: 4px;
+    }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 10px 0;
+    }
+    .slider-row label {
+      font-weight: 500;
+      min-width: 60px;
+    }
+    .slider-row input[type="range"] {
+      flex: 1 1 auto;
+    }
+    .value-label {
+      min-width: 50px;
+      text-align: right;
+    }
+    .size-preview {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ff2d55;
+      border: 2px solid rgba(255,255,255,0.6);
+      box-shadow: 0 0 8px rgba(0,0,0,0.4);
+    }
+    .shape-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .action-row {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .shape-btn {
+      flex: 0 0 auto;
+      min-width: 40px;
+      height: 36px;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .shape-btn.active {
+      background: #fff;
+      color: #111;
+    }
+    @media (max-width: 768px) {
+      #ui {
+        position: static;
+        width: 100%;
+        max-width: none;
+        margin: 16px auto;
+        max-height: none;
+        overflow: visible;
+      }
+      #ui button {
+        width: 100%;
+      }
+      .toggle-row {
+        flex-direction: column;
+      }
+      .toggle-row button {
+        width: 100%;
+      }
+      .slider-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .slider-row label,
+      .slider-row .value-label {
+        text-align: left;
+      }
+      .slider-row input[type="range"] {
+        width: 100%;
+      }
+      .action-row {
+        flex-direction: column;
+        align-items: center;
+      }
+      .action-row button {
+        width: auto;
+      }
+    }
+  </style>
+</head>
+
+<body class="app-page">
+<canvas id="c"></canvas>
+<div id="ui">
+  <h1>Swing</h1>
+  <p class="app-description">Pendulum-inspired brush physics that swing around your cursor for fast gestural paintings.</p>
+
+  <div class="color-row">
+    <div class="color-block">
+      <label for="color" class="control-label">Ball</label>
+      <input type="color" id="color" value="#ff2d55" class="color-input">
+    </div>
+    <div class="color-block">
+      <label for="ropeColor" class="control-label">Rope</label>
+      <input type="color" id="ropeColor" value="#ffffff" class="color-input">
+    </div>
+    <div class="color-block">
+      <label for="strokeColor" class="control-label">Stroke</label>
+      <input type="color" id="strokeColor" value="#ffffff" class="color-input">
+    </div>
+  </div>
+  <div class="slider-row">
+    <label for="size">Size</label>
+    <input type="range" id="size" min="2" max="300" value="12" class="slider">
+    <span class="value-label" id="sizeLabel">12 px</span>
+    <span class="size-preview" id="sizePreview" aria-hidden="true"></span>
+  </div>
+  <div class="slider-row">
+    <label for="strokeWidth">Stroke</label>
+    <input type="range" id="strokeWidth" min="0" max="40" value="0" class="slider">
+    <span class="value-label" id="strokeWidthLabel">0 px</span>
+  </div>
+  Segments: <input type="range" id="segments" min="1" max="6" value="1" class="slider"> <span id="segmentsLabel">1</span><br>
+  Length: <input type="range" id="length" min="40" max="800" value="200" class="slider"> <span id="lengthLabel">200 px</span><br>
+  <div class="toggle-row">
+    <button id="stretchBtn" class="toggle-btn">Stretch: Off</button>
+  </div>
+  <div class="toggle-row">
+    <button id="ballBtn" class="toggle-btn active">Ball: On</button>
+    <button id="ropeBtn" class="toggle-btn active">Rope: On</button>
+    <button id="strokeBtn" class="toggle-btn">Stroke: Off</button>
+  </div>
+  <label class="control-label">Ball Shape</label>
+  <div class="shape-buttons">
+    <button type="button" class="shape-btn active" data-shape="circle" title="Circle">●</button>
+    <button type="button" class="shape-btn" data-shape="square" title="Square">■</button>
+    <button type="button" class="shape-btn" data-shape="diamond" title="Diamond">◆</button>
+    <button type="button" class="shape-btn" data-shape="triangle" title="Triangle">▲</button>
+    <button type="button" class="shape-btn" data-shape="star" title="Star">★</button>
+  </div>
+  <input type="file" id="importShapeInput" accept="image/*" hidden>
+  <div class="action-row">
+    <button type="button" class="shape-btn" id="importShapeBtn" data-shape="image" data-import="true" title="Import image">IMG</button>
+  </div>
+  <div class="action-row">
+    <button id="resetBtn">Reset (R)</button>
+    <button id="exportBtn">Export (E)</button>
+  </div>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W,H;
+function resize(){
+  W=window.innerWidth; H=window.innerHeight;
+  canvas.width=W; canvas.height=H;
+}
+window.addEventListener('resize',resize); resize();
+function clearCanvas(){
+  ctx.clearRect(0,0,W,H);
+}
+clearCanvas();
+// Keyboard shortcuts
+window.addEventListener('keydown', e => {
+  if (e.key.toLowerCase() === 'r') {
+    // Reset canvas
+    clearCanvas();
+  }
+  if (e.key.toLowerCase() === 'e') {
+    // Export canvas
+    const link = document.createElement('a');
+    link.download = 'schilderij.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }
+});
+
+// instellingen
+const colorInput = document.getElementById('color');
+const sizeInput = document.getElementById('size');
+const sizeLabel = document.getElementById('sizeLabel');
+const sizePreview = document.getElementById('sizePreview');
+let paintColor = colorInput.value;
+let paintSize = Number(sizeInput.value);
+const segmentInput = document.getElementById('segments');
+const segmentLabel = document.getElementById('segmentsLabel');
+let segmentCount = Number(segmentInput.value);
+segmentLabel.textContent = segmentCount;
+const lengthInput = document.getElementById('length');
+const lengthLabel = document.getElementById('lengthLabel');
+let ropeLength = Number(lengthInput.value);
+lengthLabel.textContent = `${ropeLength} px`;
+const stretchBtn = document.getElementById('stretchBtn');
+const ballBtn = document.getElementById('ballBtn');
+const ropeColorInput = document.getElementById('ropeColor');
+const ropeBtn = document.getElementById('ropeBtn');
+const shapeButtons = Array.from(document.querySelectorAll('.shape-btn'));
+const importShapeInput = document.getElementById('importShapeInput');
+const strokeColorInput = document.getElementById('strokeColor');
+const strokeWidthInput = document.getElementById('strokeWidth');
+const strokeWidthLabel = document.getElementById('strokeWidthLabel');
+const strokeBtn = document.getElementById('strokeBtn');
+let stretchMode = false;
+let showBall = true;
+let ballShape = 'circle';
+let ropeColor = ropeColorInput.value;
+let showRope = true;
+let importedImage = null;
+let strokeColor = strokeColorInput.value;
+let strokeWidth = Number(strokeWidthInput.value);
+let showStroke = false;
+if(strokeWidthLabel) strokeWidthLabel.textContent = `${strokeWidth} px`;
+
+colorInput.addEventListener('input', e=>{
+  paintColor = e.target.value;
+  updateSizePreview(paintSize);
+});
+sizeInput.addEventListener('input', e=>{
+  updateSizePreview(Number(e.target.value));
+});
+segmentInput.addEventListener('input', e=>{
+  segmentCount = Number(e.target.value);
+  segmentLabel.textContent = segmentCount;
+  initSegments();
+});
+lengthInput.addEventListener('input', e=>{
+  ropeLength = Number(e.target.value);
+  lengthLabel.textContent = `${ropeLength} px`;
+  initSegments();
+});
+
+function syncToggle(btn, state, label){
+  btn.textContent = `${label}: ${state ? 'On' : 'Off'}`;
+  btn.classList.toggle('active', state);
+}
+syncToggle(stretchBtn, stretchMode, 'Stretch');
+syncToggle(ballBtn, showBall, 'Ball');
+syncToggle(ropeBtn, showRope, 'Rope');
+syncToggle(strokeBtn, showStroke, 'Stroke');
+
+stretchBtn.addEventListener('click', ()=>{
+  stretchMode = !stretchMode;
+  syncToggle(stretchBtn, stretchMode, 'Stretch');
+});
+ballBtn.addEventListener('click', ()=>{
+  showBall = !showBall;
+  syncToggle(ballBtn, showBall, 'Ball');
+});
+ropeBtn.addEventListener('click', ()=>{
+  showRope = !showRope;
+  syncToggle(ropeBtn, showRope, 'Rope');
+});
+ropeColorInput.addEventListener('input', e=>{
+  ropeColor = e.target.value;
+});
+strokeColorInput.addEventListener('input', e=>{
+  strokeColor = e.target.value;
+});
+strokeWidthInput.addEventListener('input', e=>{
+  strokeWidth = Number(e.target.value);
+  if(strokeWidthLabel) strokeWidthLabel.textContent = `${strokeWidth} px`;
+});
+strokeBtn.addEventListener('click', ()=>{
+  showStroke = !showStroke;
+  syncToggle(strokeBtn, showStroke, 'Stroke');
+});
+
+function updateSizePreview(value){
+  const size = value ?? Number(sizeInput.value);
+  paintSize = size;
+  if (sizeLabel) {
+    sizeLabel.textContent = `${size} px`;
+  }
+  if (sizePreview) {
+    sizePreview.style.width = `${size}px`;
+    sizePreview.style.height = `${size}px`;
+    sizePreview.style.background = paintColor;
+  }
+}
+updateSizePreview(paintSize);
+
+function setBallShape(shape){
+  ballShape = shape;
+  shapeButtons.forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.shape === shape);
+  });
+}
+
+shapeButtons.forEach(btn=>{
+  const shape = btn.dataset.shape;
+  if (btn.dataset.import === 'true') {
+    btn.addEventListener('click', ()=>{
+      importShapeInput.click();
+    });
+  } else {
+    btn.addEventListener('click', ()=>{
+      setBallShape(shape);
+    });
+  }
+});
+
+importShapeInput.addEventListener('change', e=>{
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = event=>{
+    const img = new Image();
+    img.onload = ()=>{
+      importedImage = img;
+      setBallShape('image');
+    };
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
+  importShapeInput.value = '';
+});
+
+setBallShape(ballShape);
+
+// Reset en export knoppen
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  clearCanvas();
+});
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const link = document.createElement('a');
+  link.download = 'schilderij.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+// muispositie
+let mouse = {x:canvas.width/2,y:canvas.height/2};
+function updateMousePosition(clientX, clientY){
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = clientX - rect.left;
+  mouse.y = clientY - rect.top;
+}
+window.addEventListener('mousemove', e=>{
+  updateMousePosition(e.clientX, e.clientY);
+});
+window.addEventListener('touchmove', e=>{
+  if(e.touches[0]){updateMousePosition(e.touches[0].clientX, e.touches[0].clientY);}
+}, {passive:true});
+
+// slinger massa's
+const gravity = 0.5;
+const damping = 0.98;
+let segments = [];
+
+function initSegments(){
+  const segmentLength = ropeLength / segmentCount;
+  segments = Array.from({length: segmentCount}, (_, i) => ({
+    x: mouse.x,
+    y: mouse.y + (i + 1) * segmentLength,
+    px: mouse.x,
+    py: mouse.y + (i + 1) * segmentLength
+  }));
+}
+initSegments();
+
+function loop(){
+  requestAnimationFrame(loop);
+
+  if (!segments.length) initSegments();
+  const segmentLength = ropeLength / segmentCount;
+  let anchorX = mouse.x;
+  let anchorY = mouse.y;
+
+  // verlet integratie voor inertie
+  segments.forEach(seg => {
+    const vx = (seg.x - seg.px) * damping;
+    const vy = (seg.y - seg.py) * damping + gravity;
+    seg.px = seg.x;
+    seg.py = seg.y;
+    seg.x += vx;
+    seg.y += vy;
+  });
+
+  // beperk elke segment op vaste lengte
+  segments.forEach(seg => {
+    const dx = seg.x - anchorX;
+    const dy = seg.y - anchorY;
+    let dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist === 0) dist = 0.0001;
+    const nx = dx / dist;
+    const ny = dy / dist;
+    if (stretchMode) {
+      const diff = segmentLength - dist;
+      const softness = 0.2;
+      seg.x += nx * diff * softness;
+      seg.y += ny * diff * softness;
+    } else {
+      seg.x = anchorX + nx * segmentLength;
+      seg.y = anchorY + ny * segmentLength;
+    }
+
+    anchorX = seg.x;
+    anchorY = seg.y;
+  });
+
+  const tip = segments[segments.length-1];
+  if (!tip) return;
+
+  const shouldDrawBall = showBall || (showStroke && strokeWidth > 0);
+  if (shouldDrawBall) {
+    drawBallTip(tip.x, tip.y, showBall);
+  }
+
+  if (showRope) {
+    // touw met meerdere segmenten tekenen
+    ctx.beginPath();
+    ctx.strokeStyle = ropeColor;
+    ctx.lineWidth = 2;
+    ctx.moveTo(mouse.x, mouse.y);
+    segments.forEach(seg=>{
+      ctx.lineTo(seg.x, seg.y);
+    });
+    ctx.stroke();
+  }
+}
+
+function drawBallTip(x, y, fillBall = true){
+  const r = paintSize / 2;
+  ctx.beginPath();
+  switch(ballShape){
+    case 'square':
+      ctx.rect(x - r, y - r, paintSize, paintSize);
+      break;
+    case 'diamond':
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x + r, y);
+      ctx.lineTo(x, y + r);
+      ctx.lineTo(x - r, y);
+      ctx.closePath();
+      break;
+    case 'triangle':
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x + r, y + r);
+      ctx.lineTo(x - r, y + r);
+      ctx.closePath();
+      break;
+    case 'star':
+      drawStar(ctx, x, y, r);
+      break;
+    default:
+      ctx.arc(x, y, r, 0, Math.PI*2);
+      break;
+  }
+
+  if(fillBall){
+    if(ballShape === 'image' && importedImage){
+      ctx.drawImage(importedImage, x - paintSize / 2, y - paintSize / 2, paintSize, paintSize);
+    } else {
+      ctx.fillStyle = paintColor;
+      ctx.fill();
+    }
+  }
+
+  if(showStroke && strokeWidth > 0){
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth;
+    ctx.stroke();
+  }
+}
+function drawStar(ctx, x, y, outerRadius){
+  const spikes = 5;
+  const innerRadius = outerRadius * 0.5;
+  let rot = Math.PI / 2 * 3;
+  ctx.moveTo(x, y - outerRadius);
+  for (let i = 0; i < spikes; i++) {
+    ctx.lineTo(x + Math.cos(rot) * outerRadius, y + Math.sin(rot) * outerRadius);
+    rot += Math.PI / spikes;
+    ctx.lineTo(x + Math.cos(rot) * innerRadius, y + Math.sin(rot) * innerRadius);
+    rot += Math.PI / spikes;
+  }
+  ctx.closePath();
+}
+loop();
+</script>
+<div class="app-year">2025 Accidental Graphics</div>
+</body>
+</html>

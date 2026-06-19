@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accidental Graphics</title>
+  <meta name="description" content="Tool to make accidental graphics">
+  <link rel="stylesheet" href="../css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
+  <link rel="stylesheet" href="../css/nav.css">
+  <script defer src="../scripts/navConfig.js"></script>
+  <script defer src="../scripts/navMenu.js"></script>
+</head>
+
+<body class="app-page">
+
+  <div id="main">
+    <!-- Left: Controls -->
+    <div id="controls">
+      <h1>MotionStills</h1>
+
+<p class="app-description">
+        MotionStills paints motion trails from any video. Upload a base clip, hit play to generate strokes,
+        then optionally layer more videos and export the combined artwork or the raw paint layer.
+      </p>
+
+     
+      <div class="sample-loader sample-loader--carousel">
+        <label>Try a sample clip</label>
+        <div class="sample-loader__actions">
+          <button type="button" id="motionSampleBaseBtn" class="file-button file-button--full">Load as base</button>
+          <button type="button" id="motionSampleLayerBtn" class="file-button file-button--full">Layer sample</button>
+        </div>
+      </div>
+      <div class="dual-upload">
+        <label class="file-button file-button--full">
+          <span>Import Video</span>
+          <input id="file" type="file" accept="video/*">
+        </label>
+        <label class="file-button file-button--full">
+          <span>Add Video Layer</span>
+          <input id="layerVideoFile" type="file" accept="video/*">
+        </label>
+      </div>
+
+      <div class="button-row">
+        <button id="play">Play</button>
+        <button id="pause">Pause</button>
+      </div>
+      <button id="clear">Clear Paint</button>
+      <div class="button-row">
+        <button id="export">Export</button>
+        <button id="exportPaintOnly">Export Paint</button>
+      </div>
+      
+      <label>Motion threshold: <span id="thVal">20</span></label>
+      <input id="threshold" type="range" min="1" max="100" value="100" class="slider">
+
+      <label>Brush radius (px): <span id="brushVal">28</span></label>
+      <input id="brush" type="range" min="2" max="200" value="50" class="slider">
+
+      <label>Smear length (px): <span id="smearVal">60</span></label>
+      <input id="smear" type="range" min="0" max="300" value="60" class="slider">
+
+      <label>Paint intensity (alpha): <span id="alphaVal">0.7</span></label>
+      <input id="alpha" type="range" min="0" max="1" step="0.01" value="0.7" class="slider">
+
+      <label>Fade per frame: <span id="fadeVal">0.985</span></label>
+      <input id="fade" type="range" min="0.90" max="1" step="0.0005" value="1" class="slider">
+
+      <label>Max blobs to track: <span id="countVal">5</span></label>
+      <input id="maxBlobs" type="range" min="1" max="20" value="15" class="slider">
+    </div>
+
+    <!-- Right: Canvas -->
+    <div class="canvas-stage">
+      <div class="canvas-prompt" id="playPrompt">press play</div>
+      <canvas id="canvas"></canvas>
+    </div>
+</div>
+
+<div class="sample-modal" id="videoSampleModal" aria-hidden="true">
+  <div class="sample-dialog" role="dialog" aria-modal="true" aria-labelledby="videoSampleModalTitle">
+    <div class="sample-dialog__head">
+      <h2 id="videoSampleModalTitle" style="margin:0;">Choose a sample clip</h2>
+      <button type="button" id="closeVideoSampleModalBtn">Close</button>
+    </div>
+    <div class="sample-grid" id="videoSampleGrid"></div>
+    <div class="sample-dialog__actions">
+      <button type="button" id="cancelVideoSampleBtn">Cancel</button>
+      <button type="button" id="confirmVideoSampleBtn">Load selected</button>
+    </div>
+  </div>
+</div>
+
+
+<script src="../scripts/sampleMedia.js"></script>
+<script>
+/* MotionStills - CPU (2D canvas)
+   - paints only where motion occurs
+   - moving blobs produce brush strokes (smear/paste)
+   - static background preserved
+*/
+
+// DOM
+const fileInput = document.getElementById('file');
+const canvas = document.getElementById('canvas');
+const playPrompt = document.getElementById('playPrompt');
+const playBtn = document.getElementById('play');
+const pauseBtn = document.getElementById('pause');
+const clearBtn = document.getElementById('clear');
+const exportBtn = document.getElementById('export');
+const layerVideoInput = document.getElementById('layerVideoFile');
+const sampleBaseBtn = document.getElementById('motionSampleBaseBtn');
+const sampleLayerBtn = document.getElementById('motionSampleLayerBtn');
+const videoSampleModal = document.getElementById('videoSampleModal');
+const videoSampleGrid = document.getElementById('videoSampleGrid');
+const confirmVideoSampleBtn = document.getElementById('confirmVideoSampleBtn');
+const cancelVideoSampleBtn = document.getElementById('cancelVideoSampleBtn');
+const closeVideoSampleModalBtn = document.getElementById('closeVideoSampleModalBtn');
+const exportPaintOnlyBtn = document.getElementById('exportPaintOnly');
+const controlsPanel = document.getElementById('controls');
+const stackedQuery = window.matchMedia ? window.matchMedia('(max-width: 900px)') : {matches: false};
+
+const thresholdEl = document.getElementById('threshold');
+const thresholdVal = document.getElementById('thVal');
+const brushEl = document.getElementById('brush');
+const brushVal = document.getElementById('brushVal');
+const smearEl = document.getElementById('smear');
+const smearVal = document.getElementById('smearVal');
+const alphaEl = document.getElementById('alpha');
+const alphaVal = document.getElementById('alphaVal');
+const fadeEl = document.getElementById('fade');
+const fadeVal = document.getElementById('fadeVal');
+const maxBlobsEl = document.getElementById('maxBlobs');
+const countVal = document.getElementById('countVal');
+
+// state
+const video = document.createElement('video');
+video.crossOrigin = 'anonymous';
+video.muted = true;
+video.playsInline = true;
+video.addEventListener('play', hidePlayPrompt);
+
+let procW = 640, procH = 360;
+let canvasW = 1280, canvasH = 720;
+let displayW = 0, displayH = 0;
+let displayAspect = 16 / 9;
+let prevFrame = null;
+let rafId = null;
+let prevBlobs = [];
+let currentVideoSource = null;
+let baseVideoLoaded = false;
+
+// processing canvases (lower res for speed)
+const procCanvas = document.createElement('canvas');
+const procCtx = procCanvas.getContext('2d');
+
+const prevCanvas = document.createElement('canvas');
+const prevCtx = prevCanvas.getContext('2d');
+
+// painting canvas (accumulates)
+const paintCanvas = document.createElement('canvas');
+const paintCtx = paintCanvas.getContext('2d');
+
+// source buffer for sampling current frame at display resolution
+const sourceCanvas = document.createElement('canvas');
+const sourceCtx = sourceCanvas.getContext('2d');
+
+// canvas canvas context
+const dispCtx = canvas.getContext('2d');
+
+// trail tracking
+const trails = new Map();
+let blobIdSeed = 0;
+
+let sampleVideoData = window.SampleMedia?.getList?.('videos') || [];
+if (!sampleVideoData.length) {
+  sampleVideoData = [
+    { src: "../images/samplevideo's/samplevideo1.mp4", label: 'Sample Video 01' },
+    { src: "../images/samplevideo's/samplevideo2.mp4", label: 'Sample Video 02' },
+    { src: "../images/samplevideo's/samplevideo3.mp4", label: 'Sample Video 03' }
+  ];
+}
+let selectedVideoSrc = null;
+let sampleAction = 'base';
+
+function buildVideoSampleGrid() {
+  if (!videoSampleGrid || videoSampleGrid.childElementCount) return;
+  if (!sampleVideoData.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'No sample clips available.';
+    videoSampleGrid.appendChild(empty);
+    return;
+  }
+  sampleVideoData.forEach((item, idx) => {
+    const tile = document.createElement('button');
+    tile.type = 'button';
+    tile.className = 'sample-tile';
+    tile.dataset.src = item.src;
+    const preview = document.createElement('video');
+    preview.src = item.preview || item.src;
+    preview.autoplay = true;
+    preview.muted = true;
+    preview.loop = true;
+    preview.playsInline = true;
+    preview.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('div');
+    label.className = 'sample-tile__label';
+    label.textContent = item.label || `Sample ${idx + 1}`;
+    tile.appendChild(preview);
+    tile.appendChild(label);
+    tile.addEventListener('click', () => {
+      selectedVideoSrc = item.src;
+      videoSampleGrid.querySelectorAll('.sample-tile').forEach(btn => btn.classList.remove('is-selected'));
+      tile.classList.add('is-selected');
+    });
+    videoSampleGrid.appendChild(tile);
+  });
+}
+
+function openVideoSampleModal(action = 'base') {
+  if (!sampleVideoData.length) {
+    alert('No sample clips available.');
+    return;
+  }
+  sampleAction = action;
+  selectedVideoSrc = null;
+  videoSampleGrid?.querySelectorAll('.sample-tile').forEach(btn => btn.classList.remove('is-selected'));
+  buildVideoSampleGrid();
+  videoSampleModal?.classList.add('is-open');
+  videoSampleModal?.setAttribute('aria-hidden', 'false');
+}
+
+function closeVideoSampleModal() {
+  videoSampleModal?.classList.remove('is-open');
+  videoSampleModal?.setAttribute('aria-hidden', 'true');
+}
+
+let playPromptVisible = true;
+function hidePlayPrompt(){
+  if(!playPrompt || !playPromptVisible) return;
+  playPromptVisible = false;
+  playPrompt.classList.add('hidden');
+}
+
+async function loadVideoSource(nextUrl, {preservePaint = false, cleanup} = {}){
+  if(!nextUrl) return;
+  const previousSource = currentVideoSource;
+  const metadataPromise = new Promise((resolve, reject)=>{
+    function cleanup(){
+      video.removeEventListener('loadedmetadata', onLoaded);
+      video.removeEventListener('error', onError);
+    }
+    function onLoaded(){
+      cleanup();
+      const vw = Math.round(video.videoWidth || 0);
+      const vh = Math.round(video.videoHeight || 0);
+      if(!vw || !vh){
+        reject(new Error('Could not determine the video dimensions.'));
+        return;
+      }
+      const hasDisplay = displayW && displayH;
+      const shouldResize = !preservePaint || !hasDisplay;
+      if(shouldResize){
+        updatePaintSize(vw, vh);
+        lockProcessingResolutionToSource(vw, vh);
+        resetProcessingState({clearPaint: !preservePaint});
+        baseVideoLoaded = true;
+      } else {
+        resetProcessingState({clearPaint: false});
+        if(!baseVideoLoaded){
+          baseVideoLoaded = true;
+        }
+      }
+      resolve();
+    }
+    function onError(){
+      cleanup();
+      reject(new Error('Failed to load the selected video.'));
+    }
+    video.addEventListener('loadedmetadata', onLoaded, {once:true});
+    video.addEventListener('error', onError, {once:true});
+    video.src = nextUrl;
+  });
+  try{
+    await metadataPromise;
+    currentVideoSource = { url: nextUrl, cleanup };
+    if(previousSource && typeof previousSource.cleanup === 'function'){
+      previousSource.cleanup();
+    }
+    video.pause();
+    video.currentTime = 0;
+  } catch(err){
+    if(typeof cleanup === 'function'){
+      cleanup();
+    }
+    if(previousSource?.url){
+      video.src = previousSource.url;
+      video.load();
+    } else {
+      video.removeAttribute('src');
+      video.load();
+    }
+    throw err;
+  }
+}
+async function prepareVideoFromFile(file, options = {}){
+  if(!file) return;
+  const objectUrl = URL.createObjectURL(file);
+  await loadVideoSource(objectUrl, {
+    ...options,
+    cleanup: () => URL.revokeObjectURL(objectUrl)
+  });
+}
+async function prepareVideoFromURL(sourceUrl, options = {}){
+  if(!sourceUrl) return;
+  await loadVideoSource(sourceUrl, options);
+}
+
+async function loadSampleVideoAsset(path, options = {}){
+  if(!path) throw new Error('Missing sample path.');
+  try{
+    const response = await fetch(path);
+    if(!response.ok) throw new Error('Failed to fetch sample asset.');
+    const blob = await response.blob();
+    const filename = path.split('/').pop() || 'sample.mp4';
+    const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
+    await prepareVideoFromFile(file, options);
+  } catch(err){
+    console.warn('Sample fetch failed, falling back to direct URL.', err);
+    await prepareVideoFromURL(path, options);
+  }
+}
+
+// initialize sizes
+function setProcessingResolution(width, height){
+  const nextW = parseInt(width, 10);
+  const nextH = parseInt(height, 10);
+  if(!nextW || !nextH) return;
+  procW = nextW;
+  procH = nextH;
+  procCanvas.width = procW;
+  procCanvas.height = procH;
+  prevCanvas.width = procW;
+  prevCanvas.height = procH;
+}
+function lockProcessingResolutionToSource(width, height){
+  if(!width || !height) return;
+  setProcessingResolution(width, height);
+}
+function resetProcessingState({clearPaint = false} = {}){
+  prevFrame = null;
+  prevCtx.clearRect(0, 0, prevCanvas.width, prevCanvas.height);
+  prevBlobs = [];
+  trails.clear();
+  if(clearPaint){
+    paintCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+  }
+}
+function updatePaintSize(newW, newH){
+  if(typeof newW === 'number' && typeof newH === 'number' && newW > 0 && newH > 0){
+    displayAspect = newW / newH;
+  }
+  if(!isFinite(displayAspect) || displayAspect <= 0){
+    displayAspect = 16 / 9;
+  }
+
+  const viewportHeight = Math.max(240, Math.floor(window.innerHeight || document.documentElement?.clientHeight || displayH || 720));
+  const viewportWidth = Math.max(320, Math.floor(window.innerWidth || document.documentElement?.clientWidth || displayW || 1280));
+  const lateralGap = stackedQuery.matches ? 0 : 32;
+  const controlsWidth = !stackedQuery.matches && controlsPanel ? controlsPanel.getBoundingClientRect().width : 0;
+  const availableWidth = Math.max(320, viewportWidth - controlsWidth - lateralGap);
+
+  let targetHeight = viewportHeight;
+  let targetWidth = Math.round(targetHeight * displayAspect);
+
+  if(targetWidth > availableWidth){
+    targetWidth = availableWidth;
+    targetHeight = Math.round(targetWidth / displayAspect);
+  }
+
+  displayW = Math.max(320, targetWidth);
+  displayH = Math.max(240, targetHeight);
+
+  const resized = canvas.width !== displayW || canvas.height !== displayH;
+  canvas.width = displayW;
+  canvas.height = displayH;
+  canvas.style.width = `${displayW}px`;
+  canvas.style.height = `${displayH}px`;
+  canvasW = canvas.width;
+  canvasH = canvas.height;
+  if(resized){
+    paintCanvas.width = canvasW; paintCanvas.height = canvasH;
+    sourceCanvas.width = canvasW; sourceCanvas.height = canvasH;
+    paintCtx.clearRect(0,0,paintCanvas.width,paintCanvas.height);
+  }
+}
+setProcessingResolution(procW, procH);
+updatePaintSize();
+
+// wire control canvass
+thresholdEl.addEventListener('input', ()=> thresholdVal.textContent = thresholdEl.value);
+brushEl.addEventListener('input', ()=> brushVal.textContent = brushEl.value);
+smearEl.addEventListener('input', ()=> smearVal.textContent = smearEl.value);
+alphaEl.addEventListener('input', ()=> alphaVal.textContent = alphaEl.value);
+fadeEl.addEventListener('input', ()=> fadeVal.textContent = fadeEl.value);
+maxBlobsEl.addEventListener('input', ()=> countVal.textContent = maxBlobsEl.value);
+
+// blob detection helper (lightweight)
+function findBlobsFromBinary(imgData, w, h, maxBlobs){
+  // imgData: Uint8ClampedArray (RGBA) of binary motion map (0 or 255)
+  // We'll compute energy like previous approach and pick local maxima
+  const energy = new Float32Array(w*h);
+  for(let y=1;y<h-1;y++){
+    for(let x=1;x<w-1;x++){
+      let s = 0;
+      for(let oy=-1; oy<=1; oy++){
+        for(let ox=-1; ox<=1; ox++){
+          const i = ((y+oy)*w + (x+ox))*4;
+          s += imgData[i]; // r channel (same as g,b)
+        }
+      }
+      energy[y*w + x] = s;
+    }
+  }
+  const peaks = [];
+  for(let y=2;y<h-2;y++){
+    for(let x=2;x<w-2;x++){
+      const idx = y*w + x;
+      const val = energy[idx];
+      if(val < 50) continue; // tiny noise skip
+      let isMax = true;
+      for(let oy=-2; oy<=2 && isMax; oy++){
+        for(let ox=-2; ox<=2; ox++){
+          if(energy[(y+oy)*w + (x+ox)] > val){ isMax = false; break; }
+        }
+      }
+      if(isMax) peaks.push({x,y,val});
+    }
+  }
+  peaks.sort((a,b)=>b.val - a.val);
+  const blobs = [];
+  const taken = new Uint8Array(w*h);
+  const suppression = Math.max(6, Math.floor(Math.min(w,h)/30));
+  for(const p of peaks){
+    if(blobs.length >= maxBlobs) break;
+    if(taken[p.y*w + p.x]) continue;
+    // centroid around peak
+    const r = Math.max(4, Math.floor(Math.min(w,h)/40));
+    let sx=0, sy=0, sw=0;
+    for(let yy=Math.max(0,p.y-r); yy<=Math.min(h-1,p.y+r); yy++){
+      for(let xx=Math.max(0,p.x-r); xx<=Math.min(w-1,p.x+r); xx++){
+        const v = energy[yy*w + xx];
+        if(v>0){ sx += xx * v; sy += yy * v; sw += v; }
+      }
+    }
+    if(sw===0) continue;
+    const cx = sx / sw, cy = sy / sw;
+    // mark suppression
+    for(let yy=Math.max(0,Math.floor(cy)-suppression); yy<=Math.min(h-1,Math.floor(cy)+suppression); yy++){
+      for(let xx=Math.max(0,Math.floor(cx)-suppression); xx<=Math.min(w-1,Math.floor(cx)+suppression); xx++){
+        taken[yy*w + xx] = 1;
+      }
+    }
+    blobs.push({x: cx, y: cy, strength: p.val});
+  }
+  return blobs;
+}
+
+// load video and fit sizes
+fileInput.addEventListener('change', async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  try{
+    await prepareVideoFromFile(file, {preservePaint: false});
+  } catch(err){
+    alert(err.message);
+  } finally {
+    fileInput.value = '';
+  }
+});
+layerVideoInput.addEventListener('click', e=>{
+  if(!baseVideoLoaded){
+    e.preventDefault();
+    alert('Load a base video first.');
+    return;
+  }
+  layerVideoInput.value = '';
+});
+layerVideoInput.addEventListener('change', async ()=>{
+  if(!baseVideoLoaded){
+    layerVideoInput.value = '';
+    alert('Load a base video first.');
+    return;
+  }
+  const file = layerVideoInput.files && layerVideoInput.files[0];
+  if(!file) return;
+  try{
+    await prepareVideoFromFile(file, {preservePaint: true});
+  } catch(err){
+    alert(err.message);
+  } finally {
+    layerVideoInput.value = '';
+  }
+});
+
+async function loadSampleClip({preservePaint = false} = {}){
+  const sample = sampleVideoData.find(s => s.src === selectedVideoSrc) || sampleVideoData[0];
+  if(!sample?.src){
+    alert('No sample clips available.');
+    return;
+  }
+  try{
+    await loadSampleVideoAsset(sample.src, {preservePaint});
+  } catch(err){
+    alert(err.message || 'Could not load the sample clip.');
+  }
+}
+
+sampleBaseBtn?.addEventListener('click', ()=> openVideoSampleModal('base'));
+sampleLayerBtn?.addEventListener('click', ()=>{
+  if(!baseVideoLoaded){
+    alert('Load a base video first.');
+    return;
+  }
+  openVideoSampleModal('layer');
+});
+
+confirmVideoSampleBtn?.addEventListener('click', ()=>{
+  if(sampleAction === 'layer' && !baseVideoLoaded){
+    alert('Load a base video first.');
+    closeVideoSampleModal();
+    return;
+  }
+  loadSampleClip({preservePaint: sampleAction === 'layer'}).finally(closeVideoSampleModal);
+});
+
+cancelVideoSampleBtn?.addEventListener('click', closeVideoSampleModal);
+closeVideoSampleModalBtn?.addEventListener('click', closeVideoSampleModal);
+videoSampleModal?.addEventListener('click', (e)=>{
+  if(e.target === videoSampleModal){
+    closeVideoSampleModal();
+  }
+});
+window.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape' && videoSampleModal?.classList.contains('is-open')){
+    closeVideoSampleModal();
+  }
+});
+
+// simple matching for velocities between frames (blobs array of {x,y} in normalized proc coords)
+function assignBlobId(blob){
+  if(blob.id == null){
+    blob.id = blobIdSeed++;
+  }
+  return blob.id;
+}
+
+function matchBlobs(prevPoints, currPoints){
+  const res = [];
+  const used = new Array(currPoints.length).fill(false);
+  for(const p of prevPoints){
+    let bestIndex = -1, bestD = 1e9;
+    for(let i=0;i<currPoints.length;i++){
+      if(used[i]) continue;
+      const c = currPoints[i];
+      const dx = c.x - p.x, dy = c.y - p.y;
+      const d = Math.hypot(dx,dy);
+      if(d < bestD){ bestD = d; bestIndex = i; }
+    }
+    if(bestIndex >= 0 && bestD < 0.2){ // threshold in normalized coords
+      used[bestIndex] = true;
+      const curr = currPoints[bestIndex];
+      curr.id = curr.id ?? p.id ?? assignBlobId(curr);
+      res.push({prev: p, curr, matched:true, trackId: curr.id});
+    } else {
+      res.push({prev: p, curr: null, matched:false, trackId: p.id});
+    }
+  }
+  // add unmatched currPoints as new
+  for(let i=0;i<currPoints.length;i++){
+    if(!used[i]){
+      const curr = currPoints[i];
+      curr.id = curr.id ?? assignBlobId(curr);
+      res.push({prev: null, curr, matched:false, trackId: curr.id});
+    }
+  }
+  return res;
+}
+
+function ensureTrail(trackId){
+  if(!trackId && trackId !== 0) return null;
+  if(!trails.has(trackId)){
+    trails.set(trackId, {
+      points: [],
+      hue: Math.floor(Math.random() * 360),
+      lastSeen: performance.now()
+    });
+  }
+  return trails.get(trackId);
+}
+
+// painting parameters
+let lastFrameTime = performance.now();
+const TRAIL_HISTORY = 32;
+const TRAIL_DECAY_MS = 1400;
+
+function processLoop(){
+  if(video.paused || video.ended){ rafId = requestAnimationFrame(processLoop); return; }
+
+  // draw current video frame into proc canvas
+  procCtx.drawImage(video, 0, 0, procW, procH);
+  const currImage = procCtx.getImageData(0,0,procW,procH);
+
+  // compute difference with prev
+  if(prevFrame === null){
+    prevFrame = new Uint8ClampedArray(currImage.data);
+    prevCtx.putImageData(currImage, 0, 0);
+    rafId = requestAnimationFrame(processLoop); 
+    return;
+  }
+
+  // build binary motion map (RGBA)
+  const motion = new Uint8ClampedArray(procW * procH * 4);
+  const thresh = parseInt(thresholdEl.value, 10);
+  for(let i=0;i<currImage.data.length;i+=4){
+    const dr = Math.abs(currImage.data[i] - prevFrame[i]);
+    const dg = Math.abs(currImage.data[i+1] - prevFrame[i+1]);
+    const db = Math.abs(currImage.data[i+2] - prevFrame[i+2]);
+    const d = (dr + dg + db) / 3;
+    const flag = d > thresh ? 255 : 0;
+    motion[i] = motion[i+1] = motion[i+2] = flag;
+    motion[i+3] = 255;
+  }
+  // detect blobs from motion map
+  const maxBlobs = parseInt(maxBlobsEl.value, 10);
+  const blobs = findBlobsFromBinary(motion, procW, procH, maxBlobs);
+
+  // convert to normalized coords and flip Y to match canvas coordinates
+  const currPoints = blobs.map(b => ({ x: b.x / procW, y: 1 - (b.y / procH), strength: b.strength, id: null }));
+
+  // match prev->curr to estimate velocities
+  const matches = matchBlobs(prevBlobs, currPoints);
+
+  const now = performance.now();
+
+  // fade paint canvas (persistence)
+  const fade = parseFloat(fadeEl.value);
+  paintCtx.globalCompositeOperation = 'source-over';
+  paintCtx.fillStyle = `rgba(0,0,0,${1 - fade})`;
+  paintCtx.fillRect(0,0,paintCanvas.width, paintCanvas.height);
+
+  // draw per-blob paint stroke using current video frame as source
+  // We'll sample region from the full-size video frame. Map blob normalized coords to canvas pixel coords.
+  // For simplicity, draw circular stamps sampled from the current video frame, displaced along velocity.
+  const smearPx = parseFloat(smearEl.value);
+  const brushPx = parseFloat(brushEl.value);
+  const alpha = parseFloat(alphaEl.value);
+
+  // draw current video frame to the reusable source canvas at display resolution
+  if(sourceCanvas.width !== canvasW || sourceCanvas.height !== canvasH){
+    sourceCanvas.width = canvasW;
+    sourceCanvas.height = canvasH;
+  }
+  sourceCtx.drawImage(video, 0, 0, canvasW, canvasH);
+
+  // for each matched pair compute velocity and stamp multiple samples
+  for(const m of matches){
+    if(!m.curr) continue;
+    const cxNorm = m.curr.x, cyNorm = m.curr.y;
+    const cx = Math.floor(cxNorm * canvasW);
+    const cy = Math.floor(cyNorm * canvasH);
+
+    const trail = ensureTrail(m.trackId);
+    if(trail){
+      trail.points.push({x: cx, y: cy, t: now});
+      if(trail.points.length > TRAIL_HISTORY) trail.points.shift();
+      trail.lastSeen = now;
+    }
+
+    // velocity in normalized coords
+    let vx = 0, vy = 0;
+    if(m.prev && m.prev.x != null){
+      vx = m.curr.x - m.prev.x;
+      vy = m.curr.y - m.prev.y;
+    } else {
+      // no prev match: we can approximate using frame diff strength direction by sampling neighborhood gradient
+      // but to keep CPU simple, treat as small motion or skip directional smear
+      vx = 0; vy = 0;
+    }
+    const vmag = Math.hypot(vx, vy);
+
+    // determine direction (if almost zero, use tiny random jitter to still paint)
+    let ndx = 0, ndy = 0;
+    if(vmag > 0.0001){
+      ndx = vx / vmag; ndy = vy / vmag;
+    } else {
+      // low motion, use small random direction to create texture
+      const a = (Math.random() - 0.5) * 2 * Math.PI;
+      ndx = Math.cos(a) * 0.1; ndy = Math.sin(a) * 0.1;
+    }
+
+    // number of stamps depends on smear length
+    const stamps = Math.max(1, Math.round(Math.min(30, smearPx / Math.max(4, brushPx/2))));
+    for(let s=0; s<stamps; s++){
+      const t = (s + 1) / (stamps + 1); // 0..1 along smear
+      // displacement amount scales with t and with vmag and smearPx
+      const disp = (vmag * smearPx * 1.5) * t + smearPx * (t * 0.25);
+      const sx = Math.floor(cx - ndx * disp);
+      const sy = Math.floor(cy - ndy * disp);
+
+      // sample a circular region from sourceCanvas at (sx,sy) with radius brushPx and draw onto paintCanvas
+      const r = Math.max(1, Math.round(brushPx));
+      // clipping source rect
+      const srcX = Math.max(0, sx - r);
+      const srcY = Math.max(0, sy - r);
+      const srcW = Math.min(canvasW - srcX, r*2);
+      const srcH = Math.min(canvasH - srcY, r*2);
+      if(srcW <= 0 || srcH <= 0) continue;
+
+      const img = sourceCtx.getImageData(srcX, srcY, srcW, srcH);
+      // draw onto paintCtx with circular mask
+      paintCtx.save();
+      paintCtx.globalAlpha = alpha;
+      paintCtx.beginPath();
+      paintCtx.arc(sx, sy, r, 0, Math.PI*2);
+      paintCtx.closePath();
+      paintCtx.clip();
+      paintCtx.putImageData(img, srcX, srcY);
+      paintCtx.restore();
+    }
+  }
+
+  // render luminous trails following recent motion
+  for(const [id, trail] of trails){
+    // prune stale points
+    trail.points = trail.points.filter(pt => now - pt.t <= TRAIL_DECAY_MS);
+    if(trail.points.length < 2){
+      if(now - trail.lastSeen > TRAIL_DECAY_MS){
+        trails.delete(id);
+      }
+      continue;
+    }
+    const start = trail.points[0];
+    const end = trail.points[trail.points.length - 1];
+    const strength = Math.min(1, trail.points.length / TRAIL_HISTORY + 0.15);
+    paintCtx.save();
+    paintCtx.globalCompositeOperation = 'lighter';
+    paintCtx.lineCap = 'round';
+    paintCtx.lineJoin = 'round';
+    paintCtx.lineWidth = Math.max(2, brushPx * 0.55);
+    const grad = paintCtx.createLinearGradient(start.x, start.y, end.x, end.y);
+    grad.addColorStop(0, `hsla(${trail.hue}, 85%, 55%, 0)`);
+    grad.addColorStop(0.45, `hsla(${trail.hue}, 85%, 60%, ${strength * 0.45})`);
+    grad.addColorStop(1, `hsla(${trail.hue}, 85%, 70%, ${strength})`);
+    paintCtx.strokeStyle = grad;
+    paintCtx.globalAlpha = alpha * 0.7;
+    paintCtx.beginPath();
+    paintCtx.moveTo(start.x, start.y);
+    for(let i=1;i<trail.points.length;i++){
+      const p = trail.points[i];
+      paintCtx.lineTo(p.x, p.y);
+    }
+    paintCtx.stroke();
+    paintCtx.restore();
+  }
+
+  // composite: draw the static background (the current video frame) but keep non-moving areas static:
+  // We'll draw the original video frame as background, then overlay paint layer.
+  // The idea in your request was to keep non-moving parts unaffected by paint; so we draw the video as base (unchanged)
+  // and the paint (accumulation) on top — the paint only comes from moving parts by construction.
+  dispCtx.clearRect(0,0,canvasW,canvasH);
+  // draw current video scaled to canvas (so static areas visible)
+  dispCtx.drawImage(video, 0, 0, canvasW, canvasH);
+  // overlay paint (which contains marks only sampled from moving areas)
+  dispCtx.drawImage(paintCanvas, 0, 0);
+
+  // prepare for next frame
+  prevFrame = new Uint8ClampedArray(currImage.data);
+  prevCtx.putImageData(currImage, 0, 0);
+  prevBlobs = currPoints.map(p => ({x: p.x, y: p.y}));
+
+  rafId = requestAnimationFrame(processLoop);
+}
+
+// controls
+playBtn.addEventListener('click', ()=>{
+  if(!video.src) return alert('Load a video first');
+  video.play();
+  if(!rafId) processLoop();
+});
+pauseBtn.addEventListener('click', ()=>{ video.pause(); });
+clearBtn.addEventListener('click', ()=>{ paintCtx.clearRect(0,0,paintCanvas.width, paintCanvas.height); });
+exportBtn.addEventListener('click', ()=>{
+  if(!canvas.width || !canvas.height){
+    alert('Nothing to export yet');
+    return;
+  }
+  canvas.toBlob(blob => {
+    if(!blob){
+      alert('Unable to export PNG.');
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'MotionStills.png';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, 'image/png');
+});
+exportPaintOnlyBtn.addEventListener('click', ()=>{
+  if(!paintCanvas.width || !paintCanvas.height){
+    alert('Nothing to export yet');
+    return;
+  }
+  paintCanvas.toBlob(blob =>{
+    if(!blob){
+      alert('Unable to export paint layer.');
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'MotionStills-paint.png';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, 'image/png');
+});
+
+// keep canvas sized nicely on window resize
+window.addEventListener('resize', ()=> {
+  updatePaintSize();
+});
+
+// initial state: no video loaded
+console.log('MotionStills (CPU) ready. Load a video to begin.');
+</script>
+<div class="app-year">2025 Accidental Graphics</div>
+</body>
+</html>

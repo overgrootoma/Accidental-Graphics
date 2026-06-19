@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accidental Graphics</title>
+  <meta name="description" content="Tool to make accidental graphics">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/nav.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
+  <script defer src="../scripts/navConfig.js"></script>
+  <script defer src="../scripts/navMenu.js"></script>
+</head>
+
+<body class="app-page">
+
+<div id="main">
+  <!-- Sidebar controls -->
+  <div id="controls">
+<h1>2images</h1>
+<p class="app-description">Blend two source images into a blocky collage by matching brightness and exporting the remixed grid.</p>
+  <div class="sample-loader sample-loader--carousel">
+    <label>Use sample images</label>
+    <div class="sample-carousel-controls">
+      <button type="button" id="twoImagesSamplePrev" aria-label="Previous sample">&#8592;</button>
+      <span class="sample-carousel-name" id="twoImagesSampleName">Sample 01</span>
+      <button type="button" id="twoImagesSampleNext" aria-label="Next sample">&#8594;</button>
+    </div>
+    <div class="sample-preview" id="twoImagesSamplePreview"></div>
+    <div class="sample-loader__actions">
+      <button type="button" id="loadSampleTarget">Send to target</button>
+      <button type="button" id="loadSamplePalette">Send to palette</button>
+    </div>
+  </div>
+  <label class="file-button file-button--full">Target Image
+    <input type="file" id="img1Input" accept="image/*">
+  </label>
+  <label class="file-button file-button--full">Source Palette Image
+    <input type="file" id="img2Input" accept="image/*">
+  </label>
+  <label>Target Block size: <input type="range" id="blockSizeInput" value="10" min="2" max="50" class="slider"></label>
+  <button id="processBtn" disabled>Generate</button>
+  <button id="exportBtn">Export Image</button>
+</div>
+<canvas id="canvas"></canvas>
+<div class="app-year">2025 Accidental Graphics</div>
+<script src="../scripts/sampleMedia.js"></script>
+<script>
+const img1Input = document.getElementById('img1Input');
+const img2Input = document.getElementById('img2Input');
+const processBtn = document.getElementById('processBtn');
+const exportBtn = document.getElementById('exportBtn');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const blockSizeInput = document.getElementById('blockSizeInput');
+const loadSampleTargetBtn = document.getElementById('loadSampleTarget');
+const loadSamplePaletteBtn = document.getElementById('loadSamplePalette');
+const samplePreview = document.getElementById('twoImagesSamplePreview');
+const sampleName = document.getElementById('twoImagesSampleName');
+const samplePrevBtn = document.getElementById('twoImagesSamplePrev');
+const sampleNextBtn = document.getElementById('twoImagesSampleNext');
+
+let img1 = new Image();
+let img2 = new Image();
+let img1Loaded = false, img2Loaded = false;
+
+const sampleCarousel = window.SampleMedia?.createCarousel({
+  type: 'images',
+  previewEl: samplePreview,
+  nameEl: sampleName,
+  prevBtn: samplePrevBtn,
+  nextBtn: sampleNextBtn,
+  emptyMessage: 'Add sample stills in sampleMedia.js'
+});
+
+function assignImage(target, src, { revokeUrl = false } = {}){
+  target.onload = () => {
+    if(target === img1) img1Loaded = true;
+    if(target === img2) img2Loaded = true;
+    enableButton();
+    if(revokeUrl) URL.revokeObjectURL(src);
+  };
+  target.onerror = () => {
+    alert('Could not load that image. Try another file.');
+    if(revokeUrl) URL.revokeObjectURL(src);
+  };
+  target.src = src;
+}
+
+function loadImageFile(target, file){
+  if(!file) return;
+  const url = URL.createObjectURL(file);
+  assignImage(target, url, { revokeUrl: true });
+}
+
+img1Input.addEventListener('change', e => loadImageFile(img1, e.target.files[0]));
+img2Input.addEventListener('change', e => loadImageFile(img2, e.target.files[0]));
+
+if(sampleCarousel?.hasSamples){
+  loadSampleTargetBtn?.addEventListener('click', ()=>{
+    const sample = sampleCarousel.getCurrentSample?.();
+    if(!sample?.src) return;
+    assignImage(img1, `${sample.src}?t=${Date.now()}`);
+  });
+  loadSamplePaletteBtn?.addEventListener('click', ()=>{
+    const sample = sampleCarousel.getCurrentSample?.();
+    if(!sample?.src) return;
+    assignImage(img2, `${sample.src}?p=${Date.now()}`);
+  });
+} else {
+  loadSampleTargetBtn?.setAttribute('disabled','true');
+  loadSamplePaletteBtn?.setAttribute('disabled','true');
+}
+
+function enableButton(){
+  processBtn.disabled = !(img1Loaded && img2Loaded);
+}
+
+function getBlockBrightness(imageData, xStart, yStart, blockSize){
+  let sum = 0, count=0;
+  for(let y=0;y<blockSize;y++){
+    for(let x=0;x<blockSize;x++){
+      const px = xStart + x;
+      const py = yStart + y;
+      if(px>=imageData.width || py>=imageData.height) continue;
+      const idx = (py*imageData.width + px)*4;
+      const r = imageData.data[idx];
+      const g = imageData.data[idx+1];
+      const b = imageData.data[idx+2];
+      sum += 0.299*r + 0.587*g + 0.114*b;
+      count++;
+    }
+  }
+  return sum/count;
+}
+
+processBtn.addEventListener('click', ()=>{
+  const blockSize = parseInt(blockSizeInput.value) || 30;
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.width = img1.width * dpr;
+  canvas.height = img1.height * dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  const tempCanvas1 = document.createElement('canvas');
+  tempCanvas1.width = img1.width;
+  tempCanvas1.height = img1.height;
+  const ctx1 = tempCanvas1.getContext('2d');
+  ctx1.drawImage(img1,0,0);
+  const img1Data = ctx1.getImageData(0,0,img1.width,img1.height);
+
+  const blockSourceSize = 30;
+  const tempCanvas2 = document.createElement('canvas');
+  tempCanvas2.width = img2.width;
+  tempCanvas2.height = img2.height;
+  const ctx2 = tempCanvas2.getContext('2d');
+  ctx2.drawImage(img2,0,0);
+  const img2Data = ctx2.getImageData(0,0,img2.width,img2.height);
+
+  const sourceBlocks = [];
+  for(let y=0; y<img2.height; y+=blockSourceSize){
+    for(let x=0; x<img2.width; x+=blockSourceSize){
+      const brightness = getBlockBrightness(img2Data,x,y,blockSourceSize);
+      const blockCanvas = document.createElement('canvas');
+      blockCanvas.width = blockSourceSize;
+      blockCanvas.height = blockSourceSize;
+      const blockCtx = blockCanvas.getContext('2d');
+      blockCtx.putImageData(ctx2.getImageData(x,y,blockSourceSize,blockSourceSize),0,0);
+      sourceBlocks.push({brightness,canvas:blockCanvas});
+    }
+  }
+
+  sourceBlocks.sort((a,b)=>a.brightness-b.brightness);
+  const step = Math.floor(sourceBlocks.length/10);
+  const selectedBlocks = [];
+  for(let i=0;i<10;i++) selectedBlocks.push(sourceBlocks[i*step]);
+
+  const targetBlocks = [];
+  for(let y=0; y<img1.height; y+=blockSize){
+    for(let x=0; x<img1.width; x+=blockSize){
+      const brightness = getBlockBrightness(img1Data,x,y,blockSize);
+      targetBlocks.push({x,y,brightness});
+    }
+  }
+
+  targetBlocks.sort((a,b)=>a.brightness-b.brightness);
+
+  targetBlocks.forEach((block,i)=>{
+    const sourceBlock = selectedBlocks[Math.floor(i/targetBlocks.length*selectedBlocks.length)];
+    ctx.drawImage(sourceBlock.canvas,block.x,block.y,blockSize,blockSize);
+  });
+});
+
+exportBtn.addEventListener('click', ()=>{
+  const link = document.createElement('a');
+  link.download = 'mapped_image.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+</script>
+</body>
+</html>

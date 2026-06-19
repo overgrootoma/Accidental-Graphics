@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accidental Graphics</title>
+  <meta name="description" content="Tool to make accidental graphics">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/nav.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
+  <script defer src="../scripts/navConfig.js"></script>
+  <script defer src="../scripts/navMenu.js"></script>
+</head>
+
+<body class="app-page">
+
+  <!-- Main layout: sidebar links + canvas rechts -->
+<div id="main">
+  <!-- Controls / sidebar -->
+  <div id="controls">
+    <h1>PhotoGrid</h1>
+    <p class="app-description">Warp a loaded photo into animated rectangles, tweaking grids, distortion and rhythm for rhythmic compositions.</p>
+    <div class="sample-loader sample-loader--carousel">
+      <label>Use a sample image</label>
+      <div class="sample-carousel-controls">
+        <button type="button" id="photoGridSamplePrev" aria-label="Previous sample">&#8592;</button>
+        <span class="sample-carousel-name" id="photoGridSampleName">Sample 01</span>
+        <button type="button" id="photoGridSampleNext" aria-label="Next sample">&#8594;</button>
+      </div>
+      <div class="sample-preview" id="photoGridSamplePreview"></div>
+      <div class="sample-loader__actions">
+        <button type="button" id="photoGridSampleBtn">Load sample</button>
+      </div>
+    </div>
+    <label class="file-button file-button--full">
+      Upload Image
+      <input type="file" id="imageInput" accept="image/*">
+    </label>
+
+    <label>Grid Resolution</label>
+    <input type="range" id="gridRes" min="5" max="25" value="15" class="slider">
+
+    <label>Distortion</label>
+    <input type="range" id="distortion" min="0" max="1" step="0.01" value="0.3" class="slider">
+
+    <label>Animation Speed</label>
+    <input type="range" id="speed" min="0" max="5" step="0.1" value="1" class="slider">
+
+    <div class="button-row">
+      <button type="button" id="pauseBtn">Pause Animation</button>
+    </div>
+
+    <label>Animation Phase</label>
+    <input type="range" id="timeScrub" min="0" max="1" step="0.001" value="0" class="slider">
+
+    <label>Animation Mode</label>
+    <div class="mode-buttons">
+      <button type="button" data-mode="wave" class="mode-btn is-active">Wave</button>
+      <button type="button" data-mode="chaotic" class="mode-btn">Chaos</button>
+      <button type="button" data-mode="tide" class="mode-btn">Tide</button>
+      <button type="button" data-mode="spiral" class="mode-btn">Spiral</button>
+      <button type="button" data-mode="vortex" class="mode-btn">Vortex</button>
+      <button type="button" data-mode="ripple-shift" class="mode-btn">Ripple</button>
+      <button type="button" data-mode="pulse" class="mode-btn">Pulse</button>
+      <button type="button" data-mode="shear" class="mode-btn">Shear</button>
+      <button type="button" data-mode="orbit" class="mode-btn">Orbit</button>
+      <button type="button" data-mode="fold" class="mode-btn">Fold</button>
+      <button type="button" data-mode="glitch" class="mode-btn">Glitch</button>
+      <button type="button" data-mode="drift" class="mode-btn">Drift</button>
+    </div>
+
+    <label>Grid Line Thickness</label>
+    <input type="range" id="lineThickness" min="0" max="5" step="0.1" value="1" class="slider">
+
+    <div class="button-row">
+      <button type="button" id="exportBtn">Export PNG</button>
+      <button type="button" id="toggleGridBtn">Hide Grid</button>
+    </div>
+  </div>
+
+  <!-- Canvas rechts -->
+  <canvas id="canvas"></canvas>
+</div>
+
+
+<div class="app-year">2025 Accidental Graphics</div>
+
+<script src="../scripts/sampleMedia.js"></script>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const imgInput = document.getElementById('imageInput');
+const sampleBtn = document.getElementById('photoGridSampleBtn');
+const samplePreview = document.getElementById('photoGridSamplePreview');
+const sampleName = document.getElementById('photoGridSampleName');
+const samplePrevBtn = document.getElementById('photoGridSamplePrev');
+const sampleNextBtn = document.getElementById('photoGridSampleNext');
+const gridResSlider = document.getElementById('gridRes');
+const distortionSlider = document.getElementById('distortion');
+const speedSlider = document.getElementById('speed');
+const pauseBtn = document.getElementById('pauseBtn');
+const timeScrub = document.getElementById('timeScrub');
+const modeButtons = Array.from(document.querySelectorAll('.mode-btn'));
+const lineThicknessSlider = document.getElementById('lineThickness');
+const exportBtn = document.getElementById('exportBtn');
+const toggleGridBtn = document.getElementById('toggleGridBtn');
+const controlsPanel = document.getElementById('controls');
+const stackedQuery = window.matchMedia('(max-width: 900px)');
+const layoutGap = 24;
+
+let img = new Image();
+let gridRes = +gridResSlider.value;
+let distortion = +distortionSlider.value;
+let speed = +speedSlider.value;
+let mode = 'wave';
+let lineThickness = +lineThicknessSlider.value;
+let time = 0;
+let showGrid = true;
+let isPaused = false;
+let isScrubbing = false;
+if(toggleGridBtn){
+  toggleGridBtn.textContent = showGrid ? 'Hide Grid' : 'Show Grid';
+}
+
+let points = [];
+let mouse = {x:0, y:0};
+
+function calculateCanvasSize(){
+  const parentWidth = canvas.parentElement ? canvas.parentElement.getBoundingClientRect().width : window.innerWidth;
+  const controlsWidth = controlsPanel ? controlsPanel.getBoundingClientRect().width : 0;
+  const headerHeight = document.querySelector('header')?.offsetHeight || 0;
+  const controlsHeight = controlsPanel ? controlsPanel.offsetHeight : 0;
+  const viewportHeight = window.innerHeight - headerHeight - 24;
+  const isStacked = stackedQuery.matches;
+  const width = isStacked ? parentWidth : Math.max(360, parentWidth - controlsWidth - layoutGap);
+  const height = Math.max(360, isStacked ? viewportHeight - controlsHeight : viewportHeight);
+  return { width: Math.round(width), height: Math.round(height) };
+}
+
+function resizeCanvas(){
+  const { width, height } = calculateCanvasSize();
+  if (canvas.width === width && canvas.height === height) return;
+  canvas.width = width;
+  canvas.height = height;
+  buildGrid();
+}
+
+window.addEventListener('resize', resizeCanvas);
+if (stackedQuery.addEventListener) {
+  stackedQuery.addEventListener('change', resizeCanvas);
+} else if (stackedQuery.addListener) {
+  stackedQuery.addListener(resizeCanvas);
+}
+resizeCanvas();
+window.addEventListener('load', resizeCanvas);
+
+function setImageSource(src, { revokeUrl = false } = {}){
+  img.onload = () => {
+    if(revokeUrl) URL.revokeObjectURL(src);
+  };
+  img.onerror = () => {
+    alert('Could not load that image.');
+    if(revokeUrl) URL.revokeObjectURL(src);
+  };
+  img.src = src;
+}
+
+imgInput.addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(file){
+    const url = URL.createObjectURL(file);
+    setImageSource(url, { revokeUrl: true });
+  }
+});
+
+const sampleCarousel = window.SampleMedia?.createCarousel({
+  type: 'images',
+  previewEl: samplePreview,
+  nameEl: sampleName,
+  prevBtn: samplePrevBtn,
+  nextBtn: sampleNextBtn,
+  emptyMessage: 'Add sample stills in sampleMedia.js'
+});
+
+if(sampleCarousel?.hasSamples){
+  sampleBtn?.addEventListener('click', ()=>{
+    const sample = sampleCarousel.getCurrentSample?.();
+    if(!sample?.src) return;
+    setImageSource(`${sample.src}?c=${Date.now()}`);
+  });
+} else {
+  sampleBtn?.setAttribute('disabled','true');
+}
+
+canvas.addEventListener('mousemove', e=>{
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = e.clientX - rect.left;
+  mouse.y = e.clientY - rect.top;
+});
+
+function buildGrid(){
+  points = [];
+  const cols = gridRes;
+  const rows = Math.floor(gridRes * canvas.height / canvas.width);
+  for(let y=0; y<=rows; y++){
+    points[y] = [];
+    for(let x=0; x<=cols; x++){
+      const px = x*canvas.width/cols;
+      const py = y*canvas.height/rows;
+      points[y][x] = {x:px, y:py, ox:px, oy:py};
+    }
+  }
+}
+
+function drawTexturedTriangle(img, s0, s1, s2, d0, d1, d2){
+  const denom =
+    s0.x * (s1.y - s2.y) +
+    s1.x * (s2.y - s0.y) +
+    s2.x * (s0.y - s1.y);
+  if (denom === 0) return;
+
+  const m11 =
+    (d0.x * (s1.y - s2.y) +
+      d1.x * (s2.y - s0.y) +
+      d2.x * (s0.y - s1.y)) /
+    denom;
+  const m12 =
+    (d0.x * (s2.x - s1.x) +
+      d1.x * (s0.x - s2.x) +
+      d2.x * (s1.x - s0.x)) /
+    denom;
+  const m21 =
+    (d0.y * (s1.y - s2.y) +
+      d1.y * (s2.y - s0.y) +
+      d2.y * (s0.y - s1.y)) /
+    denom;
+  const m22 =
+    (d0.y * (s2.x - s1.x) +
+      d1.y * (s0.x - s2.x) +
+      d2.y * (s1.x - s0.x)) /
+    denom;
+  const dx =
+    (d0.x * (s1.x * s2.y - s2.x * s1.y) +
+      d1.x * (s2.x * s0.y - s0.x * s2.y) +
+      d2.x * (s0.x * s1.y - s1.x * s0.y)) /
+    denom;
+  const dy =
+    (d0.y * (s1.x * s2.y - s2.x * s1.y) +
+      d1.y * (s2.x * s0.y - s0.x * s2.y) +
+      d2.y * (s0.x * s1.y - s1.x * s0.y)) /
+    denom;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(d0.x, d0.y);
+  ctx.lineTo(d1.x, d1.y);
+  ctx.lineTo(d2.x, d2.y);
+  ctx.closePath();
+  ctx.clip();
+  ctx.transform(m11, m21, m12, m22, dx, dy);
+  ctx.drawImage(img, 0, 0);
+  ctx.restore();
+}
+
+function drawCell(img, p1, p2, p3, p4){
+  const cx = (p1.x + p2.x + p3.x + p4.x) / 4;
+  const cy = (p1.y + p2.y + p3.y + p4.y) / 4;
+  const inflatePoint = (p) => {
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) return { x: p.x, y: p.y };
+    const overlap = 1;
+    const scale = (len + overlap) / len;
+    return { x: cx + dx * scale, y: cy + dy * scale };
+  };
+  const dp1 = inflatePoint(p1);
+  const dp2 = inflatePoint(p2);
+  const dp3 = inflatePoint(p3);
+  const dp4 = inflatePoint(p4);
+
+  const s1 = { x: (p1.ox / canvas.width) * img.width, y: (p1.oy / canvas.height) * img.height };
+  const s2 = { x: (p2.ox / canvas.width) * img.width, y: (p2.oy / canvas.height) * img.height };
+  const s3 = { x: (p3.ox / canvas.width) * img.width, y: (p3.oy / canvas.height) * img.height };
+  const s4 = { x: (p4.ox / canvas.width) * img.width, y: (p4.oy / canvas.height) * img.height };
+
+  const adjustDiagonal = (a, b, amount) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    return {
+      aIn: { x: a.x - nx * amount, y: a.y - ny * amount },
+      bIn: { x: b.x - nx * amount, y: b.y - ny * amount },
+      aOut: { x: a.x + nx * amount, y: a.y + ny * amount },
+      bOut: { x: b.x + nx * amount, y: b.y + ny * amount },
+    };
+  };
+  const diagonalOffsets = adjustDiagonal(dp1, dp3, 1);
+
+  drawTexturedTriangle(img, s1, s2, s3, diagonalOffsets.aOut, dp2, diagonalOffsets.bOut);
+  drawTexturedTriangle(img, s1, s3, s4, diagonalOffsets.aIn, diagonalOffsets.bIn, dp4);
+}
+
+function animate(){
+  if(!img.complete){ requestAnimationFrame(animate); return; }
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const cols = points[0].length-1;
+  const rows = points.length-1;
+
+  // update points
+  for(let y=0; y<=rows; y++){
+    for(let x=0; x<=cols; x++){
+      const p = points[y][x];
+      const nx = x/cols;
+      const ny = y/rows;
+      const f = getWarp(nx, ny, time, x, y);
+      p.x = p.ox + f.x*distortion*canvas.width*0.1;
+      p.y = p.oy + f.y*distortion*canvas.height*0.1;
+    }
+  }
+
+  // draw cells
+  for(let y=0; y<rows; y++){
+    for(let x=0; x<cols; x++){
+      const p1 = points[y][x];
+      const p2 = points[y][x+1];
+      const p3 = points[y+1][x+1];
+      const p4 = points[y+1][x];
+      drawCell(img, p1,p2,p3,p4);
+    }
+  }
+
+  // draw grid lines
+  if(showGrid && lineThickness>0){
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = lineThickness;
+    for(let y=0; y<=rows; y++){
+      for(let x=0; x<cols; x++){
+        ctx.beginPath();
+        ctx.moveTo(points[y][x].x, points[y][x].y);
+        ctx.lineTo(points[y][x+1].x, points[y][x+1].y);
+        ctx.stroke();
+      }
+    }
+    for(let x=0; x<=cols; x++){
+      for(let y=0; y<rows; y++){
+        ctx.beginPath();
+        ctx.moveTo(points[y][x].x, points[y][x].y);
+        ctx.lineTo(points[y+1][x].x, points[y+1][x].y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  if(!isPaused){
+    time += 0.02*speed;
+  }
+  const normalizedPhase = ((time % PHASE_RANGE) + PHASE_RANGE) % PHASE_RANGE / PHASE_RANGE;
+  if(!isScrubbing && timeScrub){
+    timeScrub.value = normalizedPhase.toString();
+  }
+  requestAnimationFrame(animate);
+}
+
+function getWarp(nx, ny, t, ix, iy){
+  switch(mode){
+    case 'wave':
+      return {x: Math.sin(t + nx*6)*1, y: Math.cos(t + ny*6)*1};
+    case 'chaotic':
+      return {x: Math.sin(nx*10+t)*1, y: Math.cos(ny*10+t)*1};
+    case 'tide':
+      return {x: Math.sin(nx*8 + t)*1, y: Math.sin(ny*8 - t)*1};
+    case 'spiral':
+      return {
+        x: Math.cos(t + nx * 12) * (0.5 + ny),
+        y: Math.sin(t + ny * 12) * (0.5 + nx)
+      };
+    case 'vortex':
+      const angle = Math.atan2(ny - 0.5, nx - 0.5);
+      const radius = Math.hypot(nx - 0.5, ny - 0.5);
+      return {
+        x: Math.sin(angle * 6 + t) * radius * 2,
+        y: Math.cos(angle * 6 - t) * radius * 2
+      };
+    case 'ripple-shift':
+      return {
+        x: Math.sin((nx + ny) * 10 + t) * (1 - ny),
+        y: Math.cos((nx - ny) * 10 - t) * (1 - nx)
+      };
+    case 'pulse':
+      return {
+        x: Math.sin(t * 2 + nx * 20) * 0.8,
+        y: Math.sin(t * 2 + ny * 20) * 0.8
+      };
+    case 'shear':
+      return {
+        x: ny * Math.sin(t + nx * 8),
+        y: nx * Math.cos(t - ny * 8)
+      };
+    case 'orbit':
+      return {
+        x: Math.cos(t + nx * 15) * (ny - 0.5),
+        y: Math.sin(t + ny * 15) * (nx - 0.5)
+      };
+    case 'fold':
+      return {
+        x: Math.abs(Math.sin(nx * 12 + t)) * (ny - 0.5) * 2,
+        y: Math.abs(Math.cos(ny * 12 - t)) * (nx - 0.5) * 2
+      };
+    case 'glitch':
+      return {
+        x: (Math.random() - 0.5) * 0.5 + Math.sin(t + nx * 25) * 0.4,
+        y: (Math.random() - 0.5) * 0.5 + Math.cos(t + ny * 25) * 0.4
+      };
+    case 'drift':
+      return {
+        x: Math.sin(t * 0.5 + nx * 6 + ny * 6) * (0.2 + ny),
+        y: Math.cos(t * 0.5 + nx * 6 - ny * 6) * (0.2 + nx)
+      };
+    default:
+      return {x:0,y:0};
+  }
+}
+
+gridResSlider.oninput = ()=>{gridRes = +gridResSlider.value; buildGrid();};
+distortionSlider.oninput = ()=>distortion = +distortionSlider.value;
+speedSlider.oninput = ()=>speed = +speedSlider.value;
+modeButtons.forEach((btn)=>{
+  btn.addEventListener('click', ()=>{
+    mode = btn.dataset.mode;
+    modeButtons.forEach((b)=>b.classList.toggle('is-active', b === btn));
+  });
+});
+lineThicknessSlider.oninput = ()=>lineThickness = +lineThicknessSlider.value;
+
+pauseBtn?.addEventListener('click', ()=>{
+  isPaused = !isPaused;
+  pauseBtn.textContent = isPaused ? 'Resume Animation' : 'Pause Animation';
+});
+
+const PHASE_RANGE = Math.PI * 4;
+timeScrub?.addEventListener('pointerdown', ()=>{ isScrubbing = true; });
+window.addEventListener('pointerup', ()=>{
+  if(isScrubbing){
+    isScrubbing = false;
+  }
+});
+timeScrub?.addEventListener('input', ()=>{
+  const normalized = parseFloat(timeScrub.value) || 0;
+  time = normalized * PHASE_RANGE;
+});
+
+exportBtn?.addEventListener('click', ()=>{
+  const link = document.createElement('a');
+  link.href = canvas.toDataURL('image/png');
+  link.download = `photogrid-${Date.now()}.png`;
+  link.click();
+});
+
+toggleGridBtn?.addEventListener('click', ()=>{
+  showGrid = !showGrid;
+  toggleGridBtn.textContent = showGrid ? 'Hide Grid' : 'Show Grid';
+});
+
+animate();
+</script>
+</body>
+</html>

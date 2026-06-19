@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Color Range Lab · Accidental Graphics</title>
+  <meta name="description" content="Extract, paint, and layer color bands from multiple images.">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/nav.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
+  <script defer src="../scripts/navConfig.js"></script>
+  <script defer src="../scripts/navMenu.js"></script>
+  <script defer src="../scripts/sampleMedia.js"></script>
+  <style>
+    .control-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .layer-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.75;
+    }
+
+    .layer-card {
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .layer-card.is-active {
+      border-color: var(--blue-accent);
+      box-shadow: 0 10px 28px rgba(41, 151, 255, 0.25);
+    }
+
+    .layer-card.is-collapsed .layer-controls,
+    .layer-card.is-collapsed .focus-row {
+      display: none;
+    }
+
+    .layer-card__row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: space-between;
+    }
+
+    .layer-title {
+      flex: 1;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .layer-card__actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 8px;
+      width: 100%;
+    }
+
+    .layer-card__actions button {
+      width: 100%;
+    }
+
+    .layer-controls {
+      display: grid;
+      gap: 12px;
+    }
+
+    .focus-row {
+      display: flex;
+      align-items: stretch;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .focus-row > * {
+      min-width: 0;
+    }
+
+    .focus-row label {
+      flex: 1 1 200px;
+      margin: 0;
+    }
+
+    .focus-row input[type="color"] {
+      width: 100%;
+      height: 44px;
+      border-radius: 12px;
+      padding: 0;
+      cursor: pointer;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+    }
+
+    .focus-row button {
+      flex: 1 1 140px;
+      min-width: 140px;
+      height: 44px;
+    }
+
+    .stacked {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .stacked em {
+      font-style: normal;
+      opacity: 0.7;
+      margin-left: 6px;
+      letter-spacing: 0.04em;
+    }
+
+    button.is-active {
+      box-shadow: 0 0 0 3px rgba(41, 151, 255, 0.25);
+    }
+
+    select {
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .stage-overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: rgba(255, 255, 255, 0.9);
+      letter-spacing: 0.1em;
+      background: rgba(0, 0, 0, 0.45);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+      text-transform: uppercase;
+      font-size: 0.9rem;
+    }
+
+    .stage-overlay.is-visible {
+      opacity: 1;
+    }
+
+    .muted {
+      color: rgba(255, 255, 255, 0.65);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    .export-panel .button-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      width: 100%;
+    }
+
+    .sample-buttons {
+      width: 100%;
+    }
+
+    .sample-buttons > * {
+      flex: 1 1 0;
+    }
+
+    .sample-buttons .file-button {
+      width: 100%;
+      justify-content: center;
+      border-radius: 12px;
+    }
+
+    @media (max-width: 560px) {
+      .focus-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .focus-row button {
+        width: 100%;
+        min-width: 0;
+      }
+    }
+
+  </style>
+</head>
+<body class="app-page">
+  <div id="main">
+    <div id="controls">
+      <h1>Color Range Lab</h1>
+      <p class="app-description">Pull color bands out of multiple images, paint them onto a fresh canvas, and stack the results with blend modes.</p>
+
+      <div class="control-stack">
+        <div class="button-row sample-buttons">
+          <label class="file-button file-button--full">
+            Import Image
+            <input id="imageInput" type="file" accept="image/*" multiple>
+          </label>
+          <button id="sampleChooserBtn" type="button" class="file-button file-button--full">Choose sample images</button>
+        </div>
+        <button id="pickColorBtn" type="button">Pick a color from the canvas</button>
+      </div>
+
+      <div class="panel">
+      
+        <div class="layer-list" id="layerList">
+          <p class="muted">Drop in a still or load a sample to start painting.</p>
+        </div>
+      </div>
+
+      <div class="panel export-panel">
+        <div class="panel-head">
+          <span>Export</span>
+          <span>PNG</span>
+        </div>
+        <div class="button-row">
+          <button id="exportBtn" type="button">Export canvas</button>
+          <button id="clearBtn" type="button">Reset</button>
+        </div>
+        <p class="muted" style="margin-top: 10px;">Visible layers are flattened with their blend modes and opacity.</p>
+      </div>
+    </div>
+
+    <div class="canvas-stage">
+      <canvas id="canvas" aria-label="Color extraction canvas"></canvas>
+      <div class="stage-overlay" id="pickHint">Click to pick a color</div>
+    </div>
+  </div>
+  <div class="sample-modal" id="sampleModal" aria-hidden="true">
+    <div class="sample-dialog" role="dialog" aria-modal="true" aria-labelledby="sampleModalTitle">
+      <div class="sample-dialog__head">
+        <h2 id="sampleModalTitle" style="margin:0;">Choose sample images</h2>
+        <button type="button" id="closeSampleModalBtn">Close</button>
+      </div>
+      <div class="sample-grid" id="sampleGrid"></div>
+      <div class="sample-dialog__actions">
+        <button type="button" id="cancelSampleBtn">Cancel</button>
+        <button type="button" id="confirmSampleBtn">Add selected</button>
+      </div>
+    </div>
+  </div>
+  <div class="app-year">2025 Accidental Graphics</div>
+
+  <script>
+    (() => {
+      const dpr = window.devicePixelRatio || 1;
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const fileInput = document.getElementById('imageInput');
+      const sampleChooserBtn = document.getElementById('sampleChooserBtn');
+      const sampleModal = document.getElementById('sampleModal');
+      const sampleGrid = document.getElementById('sampleGrid');
+      const confirmSampleBtn = document.getElementById('confirmSampleBtn');
+      const cancelSampleBtn = document.getElementById('cancelSampleBtn');
+      const closeSampleModalBtn = document.getElementById('closeSampleModalBtn');
+      const exportBtn = document.getElementById('exportBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const pickColorBtn = document.getElementById('pickColorBtn');
+      const layerList = document.getElementById('layerList');
+      const pickHint = document.getElementById('pickHint');
+
+      let sampleData = [
+        { src: '../images/sampleimages/sample01.jpg', label: 'Sample 01' },
+        { src: '../images/sampleimages/sample02.jpg', label: 'Sample 02' },
+        { src: '../images/sampleimages/sample03.jpg', label: 'Sample 03' },
+        { src: '../images/sampleimages/sample04.jpg', label: 'Sample 04' },
+        { src: '../images/sampleimages/sample05.jpg', label: 'Sample 05' },
+        { src: '../images/sampleimages/sample06.jpg', label: 'Sample 06' },
+        { src: '../images/sampleimages/sample07.jpg', label: 'Sample 07' }
+      ];
+      const mediaSamples = window.SampleMedia?.getList?.('images') || [];
+      if (mediaSamples.length) {
+        sampleData = mediaSamples.map((sample, i) => ({
+          src: sample.src,
+          label: sample.label || `Sample ${i + 1}`,
+        }));
+      }
+      const blendModes = ['normal', 'multiply', 'overlay', 'screen', 'lighten', 'darken', 'difference'];
+
+      const layers = [];
+      let activeLayerId = null;
+      let baseAspect = 1.45;
+      let pickMode = false;
+      let viewWidth = 920;
+      let viewHeight = 580;
+      const selectedSamples = new Set();
+
+      function testImageLoad(src) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          if (/^https?:\/\//i.test(src)) {
+            img.crossOrigin = 'anonymous';
+          }
+          img.onload = () => resolve(src);
+          img.onerror = () => reject(new Error('Image load failed'));
+          img.src = src;
+        });
+      }
+
+      async function fetchImageObjectURL(src) {
+        const response = await fetch(src);
+        if (!response.ok) throw new Error('Failed to fetch sample image.');
+        const blob = await response.blob();
+        return URL.createObjectURL(blob);
+      }
+
+      function randomId() {
+        return 'layer-' + Math.random().toString(16).slice(2);
+      }
+
+      function hexToRgb(hex) {
+        const clean = hex.replace('#', '');
+        const expanded = clean.length === 3
+          ? clean.split('').map((c) => c + c).join('')
+          : clean.padEnd(6, '0');
+        const int = parseInt(expanded, 16);
+        return {
+          r: (int >> 16) & 255,
+          g: (int >> 8) & 255,
+          b: int & 255,
+        };
+      }
+
+      function rgbToHex(r, g, b) {
+        return (
+          '#' +
+          [r, g, b]
+            .map((v) => Math.max(0, Math.min(255, v)))
+            .map((v) => v.toString(16).padStart(2, '0'))
+            .join('')
+        );
+      }
+
+      function colorDistance(target, current) {
+        const dr = current.r - target.r;
+        const dg = current.g - target.g;
+        const db = current.b - target.b;
+        return Math.sqrt(dr * dr + dg * dg + db * db);
+      }
+
+      function sampleColorAtPoint(layer, point) {
+        if (!layer?.image) return null;
+        const stageW = Math.max(1, Math.round(viewWidth));
+        const stageH = Math.max(1, Math.round(viewHeight));
+        const off = document.createElement('canvas');
+        off.width = stageW;
+        off.height = stageH;
+        const offCtx = off.getContext('2d', { willReadFrequently: true });
+        const fit = fitImage(layer.image, stageW, stageH);
+        offCtx.drawImage(layer.image, fit.x, fit.y, fit.w, fit.h);
+        const sx = Math.floor(point.x / dpr);
+        const sy = Math.floor(point.y / dpr);
+        if (sx < 0 || sy < 0 || sx >= stageW || sy >= stageH) return null;
+        const data = offCtx.getImageData(sx, sy, 1, 1).data;
+        return { r: data[0], g: data[1], b: data[2] };
+      }
+
+
+      function getAspect() {
+        if (layers.length && layers[0].image?.naturalWidth && layers[0].image?.naturalHeight) {
+          return layers[0].image.naturalWidth / layers[0].image.naturalHeight;
+        }
+        return baseAspect;
+      }
+
+      function fitImage(image, w, h) {
+        const aspect = image.naturalWidth && image.naturalHeight
+          ? image.naturalWidth / image.naturalHeight
+          : 1;
+        const stageAspect = w / h;
+        let drawW, drawH;
+        if (aspect > stageAspect) {
+          drawW = w;
+          drawH = w / aspect;
+        } else {
+          drawH = h;
+          drawW = h * aspect;
+        }
+        return {
+          x: (w - drawW) / 2,
+          y: (h - drawH) / 2,
+          w: drawW,
+          h: drawH,
+        };
+      }
+
+      function resizeCanvas() {
+        const wrapper = document.querySelector('.canvas-stage');
+        const rect = wrapper?.getBoundingClientRect?.() || { width: window.innerWidth, height: window.innerHeight - 160 };
+        const aspect = getAspect();
+        const maxWidth = Math.max(320, rect.width);
+        const maxHeight = Math.max(260, rect.height);
+        let width = maxWidth;
+        let height = width / aspect;
+        if (height > maxHeight) {
+          height = maxHeight;
+          width = height * aspect;
+        }
+        viewWidth = Math.round(width);
+        viewHeight = Math.round(height);
+        canvas.width = Math.max(1, Math.round(viewWidth * dpr));
+        canvas.height = Math.max(1, Math.round(viewHeight * dpr));
+        canvas.style.width = viewWidth + 'px';
+        canvas.style.height = viewHeight + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        markAllDirty();
+        render();
+      }
+
+      function markAllDirty() {
+        layers.forEach((layer) => {
+          layer.dirty = true;
+        });
+      }
+
+      function syncActiveHighlight() {
+        const cards = layerList?.querySelectorAll('.layer-card') || [];
+        cards.forEach((card) => {
+          const cardId = card.getAttribute('data-layer-id');
+          const isMatch = cardId === activeLayerId;
+          card.classList.toggle('is-active', isMatch);
+        });
+      }
+
+      function setActiveLayer(id, options = {}) {
+        const { silent = false } = options;
+        activeLayerId = id;
+        if (silent) {
+          syncActiveHighlight();
+        } else {
+          renderLayerList();
+        }
+        updateStatus();
+      }
+
+      function updateStatus() {}
+
+      function createLayerFromSource(src, label, revokeUrl = false) {
+        const img = new Image();
+        if (/^https?:\/\//i.test(src)) {
+          img.crossOrigin = 'anonymous';
+        }
+        img.onload = () => {
+          if (!layers.length && img.naturalWidth && img.naturalHeight) {
+            baseAspect = img.naturalWidth / img.naturalHeight;
+            resizeCanvas();
+          }
+          const layer = {
+            id: randomId(),
+            name: label || `Layer ${layers.length + 1}`,
+            image: img,
+            color: '#ff9c4c',
+            tolerance: 56,
+            brushSize: 8,
+            opacity: 0.88,
+            blendMode: 'normal',
+            visible: true,
+            buffer: null,
+            dirty: true,
+            collapsed: false,
+          };
+          layers.push(layer);
+          setActiveLayer(layer.id);
+          renderLayerList();
+          render();
+          if (revokeUrl) {
+            URL.revokeObjectURL(src);
+          }
+        };
+        img.onerror = () => {
+          alert('Could not load that image.');
+          if (revokeUrl) {
+            URL.revokeObjectURL(src);
+          }
+        };
+        img.src = src;
+      }
+
+      function rebuildLayerBuffer(layer) {
+        if (!layer?.image) return;
+        const w = Math.max(1, Math.round(viewWidth));
+        const h = Math.max(1, Math.round(viewHeight));
+        const off = document.createElement('canvas');
+        off.width = w;
+        off.height = h;
+        const offCtx = off.getContext('2d', { willReadFrequently: true });
+        const fit = fitImage(layer.image, w, h);
+
+        offCtx.drawImage(layer.image, fit.x, fit.y, fit.w, fit.h);
+        const imgData = offCtx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+        const outData = offCtx.createImageData(w, h);
+        const out = outData.data;
+        const target = hexToRgb(layer.color);
+        const tolerance = layer.tolerance;
+        const feather = Math.max(0, layer.brushSize || 0);
+        const featherSpan = Math.max(1, feather * 2);
+
+        let hasContent = false;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const a = data[i + 3];
+          if (a === 0) continue;
+          const dist = colorDistance(target, { r, g, b });
+          if (dist <= tolerance) {
+            out[i] = r;
+            out[i + 1] = g;
+            out[i + 2] = b;
+            out[i + 3] = a;
+            hasContent = true;
+          } else if (feather > 0 && dist <= tolerance + featherSpan) {
+            const falloff = 1 - (dist - tolerance) / featherSpan;
+            const alpha = Math.max(0, Math.min(1, falloff)) * (a / 255);
+            out[i] = r;
+            out[i + 1] = g;
+            out[i + 2] = b;
+            out[i + 3] = Math.round(alpha * 255);
+            if (out[i + 3] > 0) hasContent = true;
+          }
+        }
+
+        offCtx.clearRect(0, 0, w, h);
+        offCtx.putImageData(outData, 0, 0);
+
+        if (!hasContent) {
+          offCtx.clearRect(0, 0, w, h);
+          offCtx.drawImage(layer.image, fit.x, fit.y, fit.w, fit.h);
+          layer.buffer = off;
+          layer.dirty = false;
+          return;
+        }
+
+        if (feather > 1) {
+          const blurred = document.createElement('canvas');
+          blurred.width = w;
+          blurred.height = h;
+          const blurCtx = blurred.getContext('2d');
+          blurCtx.filter = `blur(${Math.round(feather * 0.6)}px)`;
+          blurCtx.drawImage(off, 0, 0);
+          layer.buffer = blurred;
+        } else {
+          layer.buffer = off;
+        }
+
+        layer.dirty = false;
+      }
+
+      function render() {
+        const displayW = viewWidth;
+        const displayH = viewHeight;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        layers.forEach((layer) => {
+          if (!layer.visible) return;
+          if (layer.dirty || !layer.buffer) {
+            rebuildLayerBuffer(layer);
+          }
+          if (!layer.buffer) return;
+          ctx.save();
+          ctx.globalAlpha = layer.opacity;
+          ctx.globalCompositeOperation = layer.blendMode;
+          ctx.drawImage(layer.buffer, 0, 0, displayW, displayH);
+          ctx.restore();
+        });
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
+
+      function getCanvasPoint(evt) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        return {
+          x: (evt.clientX - rect.left) * scaleX,
+          y: (evt.clientY - rect.top) * scaleY,
+        };
+      }
+
+      function updatePickMode(on) {
+        pickMode = on;
+        pickColorBtn?.classList.toggle('is-active', pickMode);
+        pickHint?.classList.toggle('is-visible', pickMode);
+      }
+
+      function renderLayerList() {
+        layerList.innerHTML = '';
+        if (!layers.length) {
+          const empty = document.createElement('p');
+          empty.className = 'muted';
+          empty.textContent = 'Drop in a still or load a sample to start painting.';
+          layerList.appendChild(empty);
+          return;
+        }
+
+        layers.forEach((layer) => {
+          const card = document.createElement('div');
+          const isActive = layer.id === activeLayerId;
+          card.className = `layer-card ${isActive ? 'is-active' : ''} ${layer.collapsed ? 'is-collapsed' : ''}`;
+          card.dataset.layerId = layer.id;
+
+          const row = document.createElement('div');
+          row.className = 'layer-card__row';
+
+          const visibilityBtn = document.createElement('button');
+          visibilityBtn.type = 'button';
+          visibilityBtn.textContent = layer.visible ? 'Visible' : 'Hidden';
+          visibilityBtn.addEventListener('click', () => {
+            layer.visible = !layer.visible;
+            renderLayerList();
+            render();
+          });
+
+          const title = document.createElement('div');
+          title.className = 'layer-title';
+          title.textContent = layer.name;
+          title.title = 'Click to set active';
+          title.addEventListener('click', () => setActiveLayer(layer.id));
+
+          row.appendChild(visibilityBtn);
+          row.appendChild(title);
+          card.appendChild(row);
+
+          const actions = document.createElement('div');
+          actions.className = 'layer-card__actions';
+
+          const renameBtn = document.createElement('button');
+          renameBtn.type = 'button';
+          renameBtn.textContent = 'Rename';
+          renameBtn.addEventListener('click', () => {
+            const nextName = prompt('Rename layer', layer.name);
+            if (nextName && nextName.trim()) {
+              layer.name = nextName.trim();
+              renderLayerList();
+              updateStatus();
+            }
+          });
+
+          const collapseBtn = document.createElement('button');
+          collapseBtn.type = 'button';
+          collapseBtn.textContent = layer.collapsed ? 'Expand' : 'Collapse';
+          collapseBtn.addEventListener('click', () => {
+            layer.collapsed = !layer.collapsed;
+            renderLayerList();
+          });
+
+          const removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.textContent = 'Remove';
+          removeBtn.addEventListener('click', () => {
+            const idx = layers.findIndex((l) => l.id === layer.id);
+            if (idx === -1) return;
+            layers.splice(idx, 1);
+            const fallback = layers[idx] || layers[idx - 1];
+            setActiveLayer(fallback ? fallback.id : null);
+            render();
+          });
+
+          actions.appendChild(renameBtn);
+          actions.appendChild(collapseBtn);
+          actions.appendChild(removeBtn);
+          card.appendChild(actions);
+
+          const focusRow = document.createElement('div');
+          focusRow.className = 'focus-row';
+          const colorLabel = document.createElement('label');
+          colorLabel.className = 'stacked';
+          const colorSpan = document.createElement('span');
+          colorSpan.textContent = 'Color focus';
+          const colorInput = document.createElement('input');
+          colorInput.type = 'color';
+          colorInput.value = layer.color;
+          const handleColor = (value) => {
+            if (!value) return;
+            layer.color = value;
+            layer.dirty = true;
+            render();
+          };
+          colorInput.addEventListener('input', (e) => handleColor(e.target.value));
+          colorInput.addEventListener('change', (e) => handleColor(e.target.value));
+          colorInput.addEventListener('focus', () => setActiveLayer(layer.id, { silent: true }));
+          colorLabel.appendChild(colorSpan);
+          colorLabel.appendChild(colorInput);
+          focusRow.appendChild(colorLabel);
+
+          const pickBtn = document.createElement('button');
+          pickBtn.type = 'button';
+          pickBtn.textContent = 'Pick focus';
+          pickBtn.addEventListener('click', () => {
+            layer.collapsed = false;
+            setActiveLayer(layer.id);
+            renderLayerList();
+            updatePickMode(true);
+          });
+          focusRow.appendChild(pickBtn);
+          card.appendChild(focusRow);
+
+          const controlsWrap = document.createElement('div');
+          controlsWrap.className = 'layer-controls';
+
+
+          const tolLabel = document.createElement('label');
+          tolLabel.className = 'stacked';
+          const tolText = document.createElement('span');
+          const tolValue = document.createElement('em');
+          tolValue.textContent = layer.tolerance;
+          tolText.textContent = 'Sensitivity ';
+          tolText.appendChild(tolValue);
+          const tolRange = document.createElement('input');
+          tolRange.type = 'range';
+          tolRange.min = 8;
+          tolRange.max = 160;
+          tolRange.value = layer.tolerance;
+          tolRange.className = 'slider';
+          tolRange.addEventListener('input', (e) => {
+            layer.tolerance = parseInt(e.target.value, 10) || layer.tolerance;
+            tolValue.textContent = layer.tolerance;
+            layer.dirty = true;
+            render();
+          });
+          tolRange.addEventListener('change', () => setActiveLayer(layer.id));
+          tolLabel.appendChild(tolText);
+          tolLabel.appendChild(tolRange);
+          controlsWrap.appendChild(tolLabel);
+
+          const brushLabel = document.createElement('label');
+          brushLabel.className = 'stacked';
+          const brushText = document.createElement('span');
+          const brushValue = document.createElement('em');
+          brushValue.textContent = layer.brushSize;
+          brushText.textContent = 'Feather / density ';
+          brushText.appendChild(brushValue);
+          const brushRange = document.createElement('input');
+          brushRange.type = 'range';
+          brushRange.min = 0;
+          brushRange.max = 24;
+          brushRange.step = 1;
+          brushRange.value = layer.brushSize;
+          brushRange.className = 'slider';
+          brushRange.addEventListener('input', (e) => {
+            const next = parseInt(e.target.value, 10);
+            layer.brushSize = Number.isFinite(next) ? next : layer.brushSize;
+            brushValue.textContent = layer.brushSize;
+            layer.dirty = true;
+            render();
+          });
+          brushRange.addEventListener('change', () => setActiveLayer(layer.id));
+          brushLabel.appendChild(brushText);
+          brushLabel.appendChild(brushRange);
+          controlsWrap.appendChild(brushLabel);
+
+          const opacityLabel = document.createElement('label');
+          opacityLabel.className = 'stacked';
+          const opacityText = document.createElement('span');
+          const opacityValue = document.createElement('em');
+          opacityValue.textContent = `${Math.round(layer.opacity * 100)}%`;
+          opacityText.textContent = 'Opacity ';
+          opacityText.appendChild(opacityValue);
+          const opacityRange = document.createElement('input');
+          opacityRange.type = 'range';
+          opacityRange.min = 0.1;
+          opacityRange.max = 1;
+          opacityRange.step = 0.05;
+          opacityRange.value = layer.opacity;
+          opacityRange.className = 'slider';
+          opacityRange.addEventListener('input', (e) => {
+            layer.opacity = parseFloat(e.target.value) || layer.opacity;
+            opacityValue.textContent = `${Math.round(layer.opacity * 100)}%`;
+            render();
+          });
+          opacityRange.addEventListener('change', () => setActiveLayer(layer.id));
+          opacityLabel.appendChild(opacityText);
+          opacityLabel.appendChild(opacityRange);
+          controlsWrap.appendChild(opacityLabel);
+
+          const blendLabel = document.createElement('label');
+          blendLabel.className = 'stacked';
+          const blendText = document.createElement('span');
+          blendText.textContent = 'Blend mode';
+          const blendSelect = document.createElement('select');
+          blendModes.forEach((mode) => {
+            const opt = document.createElement('option');
+            opt.value = mode;
+            opt.textContent = mode;
+            if (mode === layer.blendMode) opt.selected = true;
+            blendSelect.appendChild(opt);
+          });
+          blendSelect.addEventListener('change', (e) => {
+            layer.blendMode = e.target.value;
+            render();
+            setActiveLayer(layer.id);
+          });
+          blendLabel.appendChild(blendText);
+          blendLabel.appendChild(blendSelect);
+          controlsWrap.appendChild(blendLabel);
+
+          card.appendChild(controlsWrap);
+
+          layerList.appendChild(card);
+        });
+      }
+
+      function buildSampleGrid() {
+        if (!sampleGrid || sampleGrid.childElementCount) return;
+        if (!sampleData.length) {
+          const empty = document.createElement('p');
+          empty.className = 'muted';
+          empty.textContent = 'No sample images available.';
+          sampleGrid.appendChild(empty);
+          return;
+        }
+        sampleData.forEach((item, index) => {
+          const tile = document.createElement('button');
+          tile.type = 'button';
+          tile.className = 'sample-tile';
+          tile.dataset.src = item.src;
+          tile.dataset.label = item.label || `Sample ${index + 1}`;
+          const img = document.createElement('img');
+          img.src = item.src;
+          img.alt = item.label || `Sample ${index + 1}`;
+          const label = document.createElement('div');
+          label.className = 'sample-tile__label';
+          label.textContent = item.label || `Sample ${index + 1}`;
+          tile.appendChild(img);
+          tile.appendChild(label);
+          tile.addEventListener('click', () => {
+            const key = tile.dataset.src;
+            if (selectedSamples.has(key)) {
+              selectedSamples.delete(key);
+              tile.classList.remove('is-selected');
+            } else {
+              selectedSamples.add(key);
+              tile.classList.add('is-selected');
+            }
+          });
+          sampleGrid.appendChild(tile);
+        });
+      }
+
+      function openSampleModal() {
+        if (!sampleData.length) {
+          alert('No sample images available.');
+          return;
+        }
+        selectedSamples.clear();
+        sampleGrid?.querySelectorAll('.sample-tile').forEach((tile) => tile.classList.remove('is-selected'));
+        buildSampleGrid();
+        sampleModal?.classList.add('is-open');
+        sampleModal?.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+      }
+
+      function closeSampleModal() {
+        sampleModal?.classList.remove('is-open');
+        sampleModal?.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+      }
+
+      fileInput?.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        files.forEach((file) => {
+          const url = URL.createObjectURL(file);
+          const name = file.name.replace(/\.[^/.]+$/, '');
+          createLayerFromSource(url, name, true);
+        });
+        fileInput.value = '';
+      });
+
+      sampleChooserBtn?.addEventListener('click', openSampleModal);
+
+      confirmSampleBtn?.addEventListener('click', async () => {
+        const picks = selectedSamples.size
+          ? Array.from(selectedSamples)
+          : [sampleData[0]?.src].filter(Boolean);
+        if (!picks.length) return;
+        for (let i = 0; i < picks.length; i++) {
+          const src = picks[i];
+          const match = sampleData.find((s) => s.src === src);
+          const label = match?.label || `Sample ${i + 1}`;
+          try {
+            let resolvedSrc = src;
+            let revoke = false;
+            try {
+              await testImageLoad(src);
+            } catch {
+              resolvedSrc = await fetchImageObjectURL(src);
+              revoke = true;
+            }
+            createLayerFromSource(resolvedSrc, label, revoke);
+          } catch (err) {
+            console.error(err);
+            alert('Could not load one of the samples.');
+          }
+        }
+        closeSampleModal();
+      });
+
+      cancelSampleBtn?.addEventListener('click', closeSampleModal);
+      closeSampleModalBtn?.addEventListener('click', closeSampleModal);
+      sampleModal?.addEventListener('click', (e) => {
+        if (e.target === sampleModal) {
+          closeSampleModal();
+        }
+      });
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && sampleModal?.classList.contains('is-open')) {
+          closeSampleModal();
+        }
+      });
+
+      exportBtn?.addEventListener('click', () => {
+        if (!layers.length) {
+          alert('Add at least one layer before exporting.');
+          return;
+        }
+        const link = document.createElement('a');
+        link.download = 'color-range-lab.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      });
+
+      clearBtn?.addEventListener('click', () => {
+        layers.splice(0, layers.length);
+        baseAspect = 1.45;
+        updatePickMode(false);
+        setActiveLayer(null);
+        resizeCanvas();
+      });
+
+      pickColorBtn?.addEventListener('click', () => {
+        if (!layers.length) return;
+        updatePickMode(!pickMode);
+      });
+
+      canvas.addEventListener('click', (evt) => {
+        if (!pickMode) return;
+        const active = layers.find((l) => l.id === activeLayerId);
+        if (!active) return;
+        const point = getCanvasPoint(evt);
+        const sampled = sampleColorAtPoint(active, point);
+        if (!sampled) return;
+        active.color = rgbToHex(sampled.r, sampled.g, sampled.b);
+        active.dirty = true;
+        updatePickMode(false);
+        renderLayerList();
+        render();
+      });
+
+      window.addEventListener('resize', resizeCanvas);
+      requestAnimationFrame(resizeCanvas);
+    })();
+  </script>
+</body>
+</html>

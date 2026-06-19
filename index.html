@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accidental Graphics</title>
+  <meta name="description" content="Tool to make accidental graphics">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/nav.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="16x16" href="images/face cursor.png">
+  <script defer src="scripts/navConfig.js"></script>
+  <script defer src="scripts/navMenu.js"></script>
+</head>
+
+<body>
+  <main class="app-grid-wrapper">
+    <div class="home-hero">
+      <p class="eyebrow eyebrow--brand">AccidentalGraphics</p>
+      <h1>Welcome</h1>
+      <p class="home-lede">A growing lab of code-driven experiments that go beyond traditional design software.</p>
+      <a class="home-gallery-link" href="gallery.html">Browse the gallery of user outcomes &rarr;</a>
+    </div>
+    <div class="app-grid" id="appGrid" role="list" aria-label="Available experiments"></div>
+  </main>
+  <div class="app-year">2025 Accidental Graphics</div>
+
+  <script>
+  window.addEventListener('DOMContentLoaded', () => {
+    const appGrid = document.getElementById('appGrid');
+    if (!appGrid) return;
+
+    const coverMap = {
+      "Color Range Lab": "images/page gifs/colorrange.gif",
+      "Swing": "images/page gifs/swing.gif",
+      "IMAGEine": "images/page gifs/IMAGEine.gif",
+      "PhotoGrid": "images/page gifs/griddistort.gif",
+      "MotionStills": "images/page gifs/motionbrush.gif",
+    };
+    const fallbackCover = "images/icon_Blue.png";
+    const apps = Array.isArray(window.APP_LINKS) ? window.APP_LINKS : [];
+    const activeApps = apps.filter(app => !app.archived);
+
+    if (!activeApps.length) {
+      const emptyState = document.createElement('p');
+      emptyState.className = 'home-empty';
+      emptyState.textContent = 'Experiments coming soon.';
+      appGrid.appendChild(emptyState);
+      return;
+    }
+
+    activeApps.forEach(app => {
+      const card = document.createElement('a');
+      card.href = app.url;
+      card.className = 'app-card';
+      card.setAttribute('role', 'listitem');
+      card.setAttribute('aria-label', `${app.name} experiment`);
+      card.style.backgroundImage = `url('${coverMap[app.name] || fallbackCover}')`;
+
+      const label = document.createElement('span');
+      label.className = 'app-card__label';
+      label.textContent = app.name;
+      card.appendChild(label);
+
+      const yearBadge = document.createElement('span');
+      yearBadge.className = 'app-card__meta';
+      const creationYear = app.year ? `Since ${app.year}` : 'Since 2025';
+      yearBadge.textContent = creationYear;
+      card.appendChild(yearBadge);
+
+      appGrid.appendChild(card);
+    });
+
+    const archiveCard = document.createElement('a');
+    archiveCard.href = 'archive.html';
+    archiveCard.className = 'app-card app-card--archive';
+    archiveCard.setAttribute('role', 'listitem');
+    archiveCard.setAttribute('aria-label', 'Explore archived experiments');
+
+    const archiveLabel = document.createElement('span');
+    archiveLabel.className = 'app-card__label';
+    archiveLabel.textContent = 'Archive';
+    archiveCard.appendChild(archiveLabel);
+
+    const archiveMeta = document.createElement('span');
+    archiveMeta.className = 'app-card__meta';
+    archiveMeta.textContent = 'Back Shelf';
+    archiveCard.appendChild(archiveMeta);
+
+    appGrid.appendChild(archiveCard);
+  });
+  </script>
+</body>
+</html>

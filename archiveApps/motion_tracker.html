@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accidental Graphics</title>
+  <meta name="description" content="Tool to make accidental graphics">
+  <link rel="stylesheet" href="../css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
+<link rel="stylesheet" href="../css/nav.css">
+<script defer src="../scripts/navConfig.js"></script>
+<script defer src="../scripts/navMenu.js"></script>
+</head>
+
+<body class="app-page">
+
+
+<div id="main">
+    <!-- Left: Controls -->
+    <div id="controls">
+      <h1>MotionDrawing</h1>
+      <p class="app-description">Track motion from webcam or uploaded clips and let the optical flow plot luminous trails you can export as PNGs.</p>
+
+    <label class="file-button file-button--full">
+      Import Video
+      <input id="fileInput" type="file" accept="video/*">
+    </label>
+    <div class="sample-loader sample-loader--carousel">
+      <label>Try a sample clip</label>
+      <div class="sample-carousel-controls">
+        <button type="button" id="motionDrawingPrev" aria-label="Previous sample">&#8592;</button>
+        <span class="sample-carousel-name" id="motionDrawingName">Sample Video 01</span>
+        <button type="button" id="motionDrawingNext" aria-label="Next sample">&#8594;</button>
+      </div>
+      <div class="sample-preview" id="motionDrawingPreview"></div>
+      <div class="sample-loader__actions">
+        <button type="button" id="motionDrawingSampleBtn">Load sample video</button>
+      </div>
+    </div>
+    <button id="btnWebcam">Enable Webcam</button>
+
+    <div class="button-row">
+      <button id="btnPlay">▶ </button>
+      <button id="btnStop">⏸ </button>
+    </div>
+
+    <button id="btnClear"> Clear Trails</button>
+    <button id="btnExport">Export PNG</button>
+
+    <label for="colorPicker">Line Color</label>
+    <input type="color" id="colorPicker" value="#ffffff">
+
+    <p style="font-size:0.85rem;color:#aaa;margin-top:auto;">
+      
+    </p>
+  </div>
+
+  <!-- Canvas area -->
+  <canvas id="canvasTrails"></canvas>
+  <video id="video" class="webcam-hidden" crossorigin="anonymous" playsinline muted></video>
+</div>
+
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+<script src="../scripts/sampleMedia.js"></script>
+<script>
+const fileInput = document.getElementById('fileInput');
+const video = document.getElementById('video');
+const canvasTrails = document.getElementById('canvasTrails');
+const ctx = canvasTrails.getContext('2d');
+const btnPlay = document.getElementById('btnPlay');
+const btnStop = document.getElementById('btnStop');
+const btnExport = document.getElementById('btnExport');
+const btnWebcam = document.getElementById('btnWebcam');
+const btnClear = document.getElementById('btnClear');
+const sampleBtn = document.getElementById('motionDrawingSampleBtn');
+const samplePreview = document.getElementById('motionDrawingPreview');
+const sampleName = document.getElementById('motionDrawingName');
+const samplePrevBtn = document.getElementById('motionDrawingPrev');
+const sampleNextBtn = document.getElementById('motionDrawingNext');
+const colorPicker = document.getElementById('colorPicker');
+const controlsPanel = document.getElementById('controls');
+const stackedQuery = window.matchMedia('(max-width: 900px)');
+const layoutGap = 24;
+
+let srcMat, gray, prevGray, p0, p1, status, err;
+let tracking = false;
+let needInitFeatures = true;
+let useWebcam = false;
+let stream = null;
+let rafId = null;
+let lineColor = "#ffffff";
+
+const sampleCarousel = window.SampleMedia?.createCarousel({
+  type: 'videos',
+  previewEl: samplePreview,
+  nameEl: sampleName,
+  prevBtn: samplePrevBtn,
+  nextBtn: sampleNextBtn,
+  emptyMessage: 'Add sample clips to sampleMedia.js'
+});
+
+if(!sampleCarousel?.hasSamples){
+  sampleBtn?.setAttribute('disabled', 'true');
+}
+
+// === Parameters ===
+const MAX_CORNERS = 200;
+const QUALITY_LEVEL = 0.01;
+const MIN_DISTANCE = 7;
+const LK_WIN_SIZE = 15;
+
+// Resize canvas to fill remaining space
+function calculateStageSize() {
+  const parentWidth = canvasTrails.parentElement ? canvasTrails.parentElement.getBoundingClientRect().width : window.innerWidth;
+  const controlsWidth = controlsPanel ? controlsPanel.getBoundingClientRect().width : 0;
+  const headerHeight = document.querySelector('header')?.offsetHeight || 0;
+  const controlsHeight = controlsPanel ? controlsPanel.offsetHeight : 0;
+  const viewportHeight = window.innerHeight - headerHeight - 24;
+  const isStacked = stackedQuery.matches;
+  const width = isStacked ? parentWidth : Math.max(320, parentWidth - controlsWidth - layoutGap);
+  const height = Math.max(320, isStacked ? viewportHeight - controlsHeight : viewportHeight);
+  return { width: Math.round(width), height: Math.round(height) };
+}
+
+function resizeCanvas() {
+  const { width, height } = calculateStageSize();
+  if (canvasTrails.width === width && canvasTrails.height === height) return;
+  canvasTrails.width = width;
+  canvasTrails.height = height;
+  clearTrails();
+}
+
+window.addEventListener('resize', resizeCanvas);
+if (stackedQuery.addEventListener) {
+  stackedQuery.addEventListener('change', resizeCanvas);
+} else if (stackedQuery.addListener) {
+  stackedQuery.addListener(resizeCanvas);
+}
+resizeCanvas();
+window.addEventListener('load', resizeCanvas);
+
+// UI events
+colorPicker.addEventListener('input', e => { lineColor = e.target.value; });
+
+function loadVideoSource(src, { revokeUrl = false } = {}) {
+  stopWebcam();
+  video.srcObject = null;
+  video.src = src;
+  video.load();
+  useWebcam = false;
+  needInitFeatures = true;
+  clearTrails();
+  if (revokeUrl) {
+    video.addEventListener('loadeddata', () => URL.revokeObjectURL(src), { once: true });
+  }
+}
+
+fileInput.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  loadVideoSource(url, { revokeUrl: true });
+});
+
+async function loadSampleVideo(path){
+  if(!path) throw new Error('Missing sample path.');
+  try{
+    const response = await fetch(path);
+    if(!response.ok) throw new Error('Failed to fetch sample clip.');
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    loadVideoSource(objectUrl, { revokeUrl: true });
+  } catch(err){
+    console.warn('Sample fetch failed, falling back to direct URL.', err);
+    loadVideoSource(path);
+  }
+}
+
+sampleBtn?.addEventListener('click', async () => {
+  const sample = sampleCarousel?.getCurrentSample?.();
+  if (!sample?.src) return;
+  try{
+    await loadSampleVideo(sample.src);
+  } catch(err){
+    alert(err.message || 'Unable to load sample video.');
+  }
+});
+
+btnWebcam.addEventListener('click', async () => {
+  stopWebcam();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+    video.play();
+    useWebcam = true;
+    needInitFeatures = true;
+    clearTrails();
+    video.classList.remove('webcam-hidden');
+    startTracking();
+  } catch (err) {
+  }
+});
+
+btnPlay.addEventListener('click', () => {
+  if (!useWebcam && !video.src) {
+    alert('Select a video or enable webcam first.');
+    return;
+  }
+  video.play();
+  startTracking();
+});
+
+btnStop.addEventListener('click', () => {
+  video.pause();
+  tracking = false;
+  cancelAnimationFrame(rafId);
+});
+
+btnExport.addEventListener('click', () => {
+  const url = canvasTrails.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'motion_trails.png';
+  a.click();
+});
+
+btnClear.addEventListener('click', clearTrails);
+
+function clearTrails() {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvasTrails.width, canvasTrails.height);
+}
+
+function stopWebcam() {
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
+  }
+  video.srcObject = null;
+  video.classList.add('webcam-hidden');
+}
+
+function startTracking() {
+  if (typeof cv === 'undefined' || !cv.Mat) {
+    alert('Wait until OpenCV.js is fully loaded.');
+    return;
+  }
+
+  srcMat = new cv.Mat(video.videoHeight || 480, video.videoWidth || 640, cv.CV_8UC4);
+  gray = new cv.Mat();
+  prevGray = new cv.Mat();
+  needInitFeatures = true;
+  tracking = true;
+  tick();
+}
+
+function tick() {
+  if (!tracking) return;
+
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = video.videoWidth;
+  tempCanvas.height = video.videoHeight;
+  const tempCtx = tempCanvas.getContext('2d');
+  tempCtx.drawImage(video, 0, 0);
+  const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+  srcMat.data.set(imageData.data);
+  cv.cvtColor(srcMat, gray, cv.COLOR_RGBA2GRAY);
+
+  if (needInitFeatures) {
+    p0 && p0.delete && p0.delete();
+    p0 = new cv.Mat();
+    let mask = new cv.Mat();
+    cv.goodFeaturesToTrack(gray, p0, MAX_CORNERS, QUALITY_LEVEL, MIN_DISTANCE, mask);
+    mask.delete();
+    gray.copyTo(prevGray);
+    needInitFeatures = false;
+  } else {
+    p1 && p1.delete && p1.delete();
+    status && status.delete && status.delete();
+    err && err.delete && err.delete();
+    p1 = new cv.Mat();
+    status = new cv.Mat();
+    err = new cv.Mat();
+    const winSize = new cv.Size(LK_WIN_SIZE, LK_WIN_SIZE);
+    cv.calcOpticalFlowPyrLK(prevGray, gray, p0, p1, status, err, winSize, 3);
+
+    const good_new = [], good_old = [];
+    for (let i = 0; i < status.rows; i++) {
+      if (status.data[i] === 1) {
+        const nx = p1.data32F[i * 2];
+        const ny = p1.data32F[i * 2 + 1];
+        const ox = p0.data32F[i * 2];
+        const oy = p0.data32F[i * 2 + 1];
+        good_new.push({ x: nx, y: ny });
+        good_old.push({ x: ox, y: oy });
+      }
+    }
+
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 2.8;
+    ctx.globalAlpha = 0.18;
+    for (let i = 0; i < good_new.length; i++) {
+      const n = good_new[i], o = good_old[i];
+      const scaleX = canvasTrails.width / video.videoWidth;
+      const scaleY = canvasTrails.height / video.videoHeight;
+      ctx.beginPath();
+      ctx.moveTo(o.x * scaleX, o.y * scaleY);
+      ctx.lineTo(n.x * scaleX, n.y * scaleY);
+      ctx.stroke();
+    }
+
+    p0.delete();
+    p0 = new cv.Mat();
+    if (good_new.length > 0) {
+      p0.create(good_new.length, 1, cv.CV_32FC2);
+      for (let i = 0; i < good_new.length; i++) {
+        p0.data32F[i * 2] = good_new[i].x;
+        p0.data32F[i * 2 + 1] = good_new[i].y;
+      }
+    } else {
+      needInitFeatures = true;
+    }
+    gray.copyTo(prevGray);
+  }
+
+  if (useWebcam || (!video.paused && !video.ended)) {
+    rafId = requestAnimationFrame(tick);
+  } else {
+    tracking = false;
+  }
+}
+</script>
+<div class="app-year">2025 Accidental Graphics</div>
+</body>
+</html>

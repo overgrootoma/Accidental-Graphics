@@ -1,0 +1,1934 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accidental Graphics</title>
+  <meta name="description" content="Tool to make accidental graphics">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/nav.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
+  <script defer src="../scripts/navConfig.js"></script>
+  <script defer src="../scripts/navMenu.js"></script>
+</head>
+
+<body class="buttonedit-page">
+  <div id="main" class="buttonedit">
+    <section id="controls" class="buttonedit-controls">
+      <h1>ButtonEdit</h1>
+      <p class="app-description">Tape glowing buttons around your canvas, randomize their forces, and bend imported artwork into new neon layouts.</p>
+
+      <div class="button-row">
+        <button id="importBtn" class="primary" type="button">Import</button>
+        <button id="resetBtn" class="secondary" type="button">Reset</button>
+        <button id="exportBtn" class="ghost" type="button">Export</button>
+      </div>
+
+      <div class="control-block">
+        <label for="randomEffectCount">Random effects <span id="randomCountDisplay">3</span></label>
+        <input type="range" id="randomEffectCount" min="1" max="10" step="1" value="3">
+      </div>
+
+      <div class="button-row">
+        <button id="randomEffectsBtn" type="button">Select Random Effects</button>
+      </div>
+
+      <input type="file" id="fileInput" accept="image/*" hidden>
+
+      <p class="button-lab__indicator">Active toggles:<strong id="activeCount">0</strong></p>
+      <p class="button-lab__helper">
+        Load an image, toggle effects, and tweak the sliders under each button to dial intensity.
+      </p>
+    </section>
+
+    <section class="buttonedit-stage">
+      <div class="buttonedit-arena" id="buttonArena">
+        <aside class="effect-panel effect-panel--left">
+          <div class="effects-grid" id="effectsGridLeft"></div>
+        </aside>
+        <div class="canvas-core">
+          <div class="canvas-caption" id="statusText">Import an image to begin.</div>
+          <canvas id="mainCanvas" width="720" height="720"></canvas>
+        </div>
+        <aside class="effect-panel effect-panel--right">
+          <div class="effects-grid" id="effectsGridRight"></div>
+        </aside>
+      </div>
+    </section>
+  </div>
+
+  <div class="app-year">2025 Accidental Graphics</div>
+
+  <script>
+    (() => {
+      const CANVAS_SIZE = 720;
+      const canvas = document.getElementById('mainCanvas');
+      const ctx = canvas.getContext('2d');
+      const fileInput = document.getElementById('fileInput');
+      const importBtn = document.getElementById('importBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const exportBtn = document.getElementById('exportBtn');
+      const randomEffectsBtn = document.getElementById('randomEffectsBtn');
+      const randomEffectCount = document.getElementById('randomEffectCount');
+      const randomCountDisplay = document.getElementById('randomCountDisplay');
+      const activeCount = document.getElementById('activeCount');
+      const arena = document.getElementById('buttonArena');
+      const effectsColumns = [
+        document.getElementById('effectsGridLeft'),
+        document.getElementById('effectsGridRight'),
+      ].filter(Boolean);
+
+      const baseCanvas = document.createElement('canvas');
+      const baseCtx = baseCanvas.getContext('2d');
+      const workCanvas = document.createElement('canvas');
+      const workCtx = workCanvas.getContext('2d');
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+
+      const resizeCanvases = (width, height) => {
+        [canvas, baseCanvas, workCanvas, tempCanvas].forEach((element) => {
+          if (element.width !== width) element.width = width;
+          if (element.height !== height) element.height = height;
+        });
+      };
+      resizeCanvases(CANVAS_SIZE, CANVAS_SIZE);
+
+      const helpers = {
+        tempCanvas,
+        tempCtx,
+        copySnapshot(ctxRef) {
+          const { width, height } = ctxRef.canvas;
+          if (tempCanvas.width !== width) tempCanvas.width = width;
+          if (tempCanvas.height !== height) tempCanvas.height = height;
+          tempCtx.clearRect(0, 0, width, height);
+          tempCtx.drawImage(ctxRef.canvas, 0, 0, width, height);
+        },
+        random(min, max) {
+          return Math.random() * (max - min) + min;
+        },
+      };
+
+      const state = {
+        activeEffects: new Set(),
+        buttons: new Map(),
+        cards: new Map(),
+        sliders: new Map(),
+        effectValues: new Map(),
+        imageReady: false,
+      };
+
+      const clamp = (value, min = 0, max = 255) => Math.min(max, Math.max(min, value));
+
+      arena?.classList.remove('arena-unwrapped', 'arena-muted');
+
+      const distributeCards = (cards) => {
+        if (!effectsColumns.length || !cards.length) return;
+        effectsColumns.forEach((col) => (col.innerHTML = ''));
+        cards.forEach((card, index) => {
+          const target = effectsColumns[index % effectsColumns.length];
+          target.appendChild(card);
+        });
+      };
+
+      const formatSliderValue = (effect, value) =>
+        effect.control && typeof effect.control.format === 'function'
+          ? effect.control.format(value)
+          : value;
+
+      const getEffectValue = (effect) => {
+        if (!effect.control) return undefined;
+        if (!state.effectValues.has(effect.id)) {
+          state.effectValues.set(effect.id, effect.control.defaultValue);
+        }
+        return state.effectValues.get(effect.id);
+      };
+
+      const processPixels = (context, fn, options = {}) => {
+        const { width, height } = context.canvas;
+        const imageData = context.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        const source = options.useCopy ? new Uint8ClampedArray(data) : data;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const idx = i / 4;
+          const x = idx % width;
+          const y = Math.floor(idx / width);
+          const result = fn({
+            r: data[i],
+            g: data[i + 1],
+            b: data[i + 2],
+            a: data[i + 3],
+            x,
+            y,
+            idx,
+            width,
+            height,
+            source,
+          });
+          if (result) {
+            data[i] = clamp(result[0]);
+            data[i + 1] = clamp(result[1]);
+            data[i + 2] = clamp(result[2]);
+            data[i + 3] = clamp(result[3] ?? 255);
+          }
+        }
+
+        context.putImageData(imageData, 0, 0);
+      };
+
+      const samplePixel = (buffer, width, height, x, y) => {
+        const clampedX = Math.max(0, Math.min(width - 1, Math.round(x)));
+        const clampedY = Math.max(0, Math.min(height - 1, Math.round(y)));
+        const index = (clampedY * width + clampedX) * 4;
+        return [
+          buffer[index],
+          buffer[index + 1],
+          buffer[index + 2],
+          buffer[index + 3],
+        ];
+      };
+
+      const applyConvolution = (context, kernel, divisor = 1, bias = 0) => {
+        const { width, height } = context.canvas;
+        const imageData = context.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        const source = new Uint8ClampedArray(data);
+        const size = Math.sqrt(kernel.length);
+        const half = Math.floor(size / 2);
+
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            let r = 0;
+            let g = 0;
+            let b = 0;
+            for (let ky = 0; ky < size; ky += 1) {
+              for (let kx = 0; kx < size; kx += 1) {
+                const weight = kernel[ky * size + kx];
+                const [sr, sg, sb] = samplePixel(
+                  source,
+                  width,
+                  height,
+                  x + kx - half,
+                  y + ky - half
+                );
+                r += sr * weight;
+                g += sg * weight;
+                b += sb * weight;
+              }
+            }
+            const index = (y * width + x) * 4;
+            data[index] = clamp(r / divisor + bias);
+            data[index + 1] = clamp(g / divisor + bias);
+            data[index + 2] = clamp(b / divisor + bias);
+          }
+        }
+
+        context.putImageData(imageData, 0, 0);
+      };
+
+      const pixelate = (context, blockSize) => {
+        const { width, height } = context.canvas;
+        const tiny = document.createElement('canvas');
+        tiny.width = Math.max(1, Math.floor(width / blockSize));
+        tiny.height = Math.max(1, Math.floor(height / blockSize));
+        const tinyCtx = tiny.getContext('2d');
+        tinyCtx.imageSmoothingEnabled = false;
+        tinyCtx.drawImage(context.canvas, 0, 0, tiny.width, tiny.height);
+        context.imageSmoothingEnabled = false;
+        context.clearRect(0, 0, width, height);
+        context.drawImage(tiny, 0, 0, width, height);
+        context.imageSmoothingEnabled = true;
+      };
+
+      const gradientSample = (stops, t) => {
+        const clamped = Math.min(1, Math.max(0, t));
+        for (let i = 0; i < stops.length - 1; i += 1) {
+          const current = stops[i];
+          const next = stops[i + 1];
+          if (clamped >= current.pos && clamped <= next.pos) {
+            const local = (clamped - current.pos) / (next.pos - current.pos);
+            return [
+              current.color[0] + (next.color[0] - current.color[0]) * local,
+              current.color[1] + (next.color[1] - current.color[1]) * local,
+              current.color[2] + (next.color[2] - current.color[2]) * local,
+            ];
+          }
+        }
+        return stops.at(-1).color;
+      };
+
+      const saturateColor = (r, g, b, amount) => {
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        return [
+          clamp(gray + (r - gray) * amount),
+          clamp(gray + (g - gray) * amount),
+          clamp(gray + (b - gray) * amount),
+        ];
+      };
+
+      const thermalStops = [
+        { pos: 0, color: [5, 10, 80] },
+        { pos: 0.25, color: [31, 124, 201] },
+        { pos: 0.5, color: [243, 188, 66] },
+        { pos: 0.75, color: [255, 80, 46] },
+        { pos: 1, color: [255, 248, 236] },
+      ];
+
+      const magmaStops = [
+        { pos: 0, color: [12, 0, 0] },
+        { pos: 0.35, color: [164, 32, 24] },
+        { pos: 0.65, color: [255, 122, 26] },
+        { pos: 1, color: [255, 238, 180] },
+      ];
+
+      const effectDefinitions = [
+        {
+          id: 'invertFlux',
+          label: 'Invert Flux',
+          description: 'Flip every photon to its negative twin.',
+          apply: (context) =>
+            processPixels(context, ({ r, g, b, a }) => [255 - r, 255 - g, 255 - b, a]),
+        },
+        {
+          id: 'monoFog',
+          label: 'Mono Fog',
+          description: 'Drain all hue into silver fog.',
+          apply: (context) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+              return [lum, lum, lum, a];
+            }),
+        },
+        {
+          id: 'sepiaRush',
+          label: 'Sepia Rush',
+          description: 'Copper bath vintage.',
+          apply: (context) =>
+            processPixels(context, ({ r, g, b, a }) => [
+              clamp(0.393 * r + 0.769 * g + 0.189 * b),
+              clamp(0.349 * r + 0.686 * g + 0.168 * b),
+              clamp(0.272 * r + 0.534 * g + 0.131 * b),
+              a,
+            ]),
+        },
+        {
+          id: 'pixelStorm',
+          label: 'Pixel Storm',
+          description: 'Chunk the world into big voxels.',
+          control: { label: 'Block', min: 4, max: 72, step: 1, defaultValue: 18 },
+          apply: (context, helpers, value = 18) => pixelate(context, Math.max(2, value)),
+        },
+        {
+          id: 'nanoPixel',
+          label: 'Nano Pixel',
+          description: 'Micro mosaics everywhere.',
+          control: { label: 'Block', min: 2, max: 24, step: 1, defaultValue: 7 },
+          apply: (context, helpers, value = 7) => pixelate(context, Math.max(1, value)),
+        },
+        {
+          id: 'posterPunch',
+          label: 'Poster Punch',
+          description: 'Clamp to five screaming levels.',
+          control: {
+            label: 'Levels',
+            min: 3,
+            max: 12,
+            step: 1,
+            defaultValue: 5,
+            format: (value) => Math.round(value),
+          },
+          apply: (context, helpers, value = 5) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const levels = Math.max(2, Math.round(value));
+              const step = 255 / Math.max(1, levels - 1);
+              const quant = (channel) => Math.round(channel / step) * step;
+              return [quant(r), quant(g), quant(b), a];
+            }),
+        },
+        {
+          id: 'binaryGate',
+          label: 'Binary Gate',
+          description: 'Hard threshold—on/off only.',
+          apply: (context) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+              const value = lum > 138 ? 255 : 0;
+              return [value, value, value, a];
+            }),
+        },
+        {
+          id: 'noiseBath',
+          label: 'Noise Bath',
+          description: 'Static fizz overlays everything.',
+          control: {
+            label: 'Intensity',
+            min: 0,
+            max: 180,
+            step: 5,
+            defaultValue: 80,
+            format: (value) => `${value}`,
+          },
+          apply: (context, helpers, value = 80) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const jitter = (Math.random() - 0.5) * value;
+              return [r + jitter, g + jitter, b + jitter, a];
+            }),
+        },
+        {
+          id: 'scanlineWeave',
+          label: 'Scanline Weave',
+          description: 'Retro CRT ribbons.',
+          control: {
+            label: 'Strength',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 50,
+            format: (value) => `${value}%`,
+          },
+          apply: (context, helpers, value = 50) =>
+            processPixels(context, ({ r, g, b, y, a }) => {
+              const depth = 0.2 + (value / 100) * 0.8;
+              const stripe = y % 8 < 4 ? 1 - depth : 1 + depth;
+              return [r * stripe, g * stripe, b * stripe, a];
+            }),
+        },
+        {
+          id: 'thermalBloom',
+          label: 'Thermal Bloom',
+          description: 'Map luminance to heat gradients.',
+          apply: (context) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+              const [nr, ng, nb] = gradientSample(thermalStops, lum);
+              return [nr, ng, nb, a];
+            }),
+        },
+        {
+          id: 'glitchSlices',
+          label: 'Glitch Slices',
+          description: 'Jittered scanline teleportation.',
+          control: {
+            label: 'Slices',
+            min: 0,
+            max: 60,
+            step: 2,
+            defaultValue: 26,
+          },
+          apply: (context, helpers, value = 26) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            context.drawImage(helpers.tempCanvas, 0, 0, width, height);
+            const loops = Math.max(0, Math.round(value));
+            const offsetRange = width * (0.05 + value / 300);
+            for (let i = 0; i < loops; i += 1) {
+              const sliceHeight = helpers.random(4, 36);
+              const y = helpers.random(0, height - sliceHeight);
+              const offset = helpers.random(-offsetRange, offsetRange);
+              context.drawImage(
+                helpers.tempCanvas,
+                0,
+                y,
+                width,
+                sliceHeight,
+                offset,
+                y,
+                width,
+                sliceHeight
+              );
+            }
+          },
+        },
+        {
+          id: 'rgbOrbit',
+          label: 'RGB Orbit',
+          description: 'Split channels into drifting orbits.',
+          control: {
+            label: 'Orbit',
+            min: 0,
+            max: 20,
+            step: 1,
+            defaultValue: 4,
+          },
+          apply: (context, helpers, value = 4) =>
+            processPixels(
+              context,
+              ({ x, y, width, height, source, a }) => {
+                const shift = Math.max(0, value);
+                const [nr] = samplePixel(source, width, height, x + shift, y);
+                const [, ng] = samplePixel(source, width, height, x - shift * 0.8, y + shift * 0.3);
+                const [, , nb] = samplePixel(source, width, height, x, y - shift);
+                return [nr, ng, nb, a];
+              },
+              { useCopy: true }
+            ),
+        },
+        {
+          id: 'ghostEcho',
+          label: 'Ghost Echo',
+          description: 'Layered afterimage echoes.',
+          control: {
+            label: 'Drift',
+            min: 0,
+            max: 40,
+            step: 1,
+            defaultValue: 18,
+          },
+          apply: (context, helpers, value = 18) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            context.globalAlpha = 0.95;
+            context.drawImage(helpers.tempCanvas, 0, 0, width, height);
+            context.globalAlpha = 0.35;
+            context.drawImage(helpers.tempCanvas, value, -value * 0.6, width, height);
+            context.globalAlpha = 0.3;
+            context.drawImage(helpers.tempCanvas, -value * 0.8, value, width, height);
+            context.globalAlpha = 1;
+          },
+        },
+        {
+          id: 'neonEdges',
+          label: 'Neon Edges',
+          description: 'Edge halos and glowing outlines.',
+          apply: (context) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            applyConvolution(context, [-1, -1, -1, -1, 8, -1, -1, -1, -1], 1, 128);
+            context.globalCompositeOperation = 'screen';
+            context.globalAlpha = 0.6;
+            context.drawImage(helpers.tempCanvas, 0, 0, width, height);
+            context.globalAlpha = 1;
+            context.globalCompositeOperation = 'source-over';
+          },
+        },
+        {
+          id: 'softBloom',
+          label: 'Soft Bloom',
+          description: 'Blurred light bleeds outward.',
+          control: {
+            label: 'Strength',
+            min: 0,
+            max: 30,
+            step: 1,
+            defaultValue: 8,
+            format: (value) => `${value}px`,
+          },
+          apply: (context, helpers, value = 8) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.save();
+            const blur = Math.max(0, value);
+            context.filter = `blur(${blur}px)`;
+            context.globalAlpha = Math.min(1, 0.35 + blur / 30);
+            context.globalCompositeOperation = 'screen';
+            context.drawImage(helpers.tempCanvas, 0, 0, width, height);
+            context.restore();
+            context.globalCompositeOperation = 'source-over';
+          },
+        },
+        {
+          id: 'kaleidoFlux',
+          label: 'Kaleido Flux',
+          description: 'Radial mirrors spin the scene.',
+          control: {
+            label: 'Slices',
+            min: 3,
+            max: 12,
+            step: 1,
+            defaultValue: 6,
+          },
+          apply: (context, helpers, value = 6) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            const slices = Math.max(2, Math.round(value));
+            for (let i = 0; i < slices; i += 1) {
+              context.save();
+              context.translate(width / 2, height / 2);
+              context.rotate(((Math.PI * 2) / slices) * i);
+              context.scale(i % 2 ? -1 : 1, 1);
+              context.globalAlpha = 0.42;
+              context.drawImage(helpers.tempCanvas, -width / 2, -height / 2, width, height);
+              context.restore();
+            }
+            context.globalAlpha = 1;
+          },
+        },
+        {
+          id: 'mirrorTwin',
+          label: 'Mirror Twin',
+          description: 'Fold the image over itself.',
+          apply: (context) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            context.globalAlpha = 0.6;
+            context.drawImage(helpers.tempCanvas, 0, 0, width, height);
+            context.save();
+            context.scale(-1, 1);
+            context.drawImage(helpers.tempCanvas, -width, 0, width, height);
+            context.restore();
+            context.globalAlpha = 1;
+          },
+        },
+        {
+          id: 'ripplePool',
+          label: 'Ripple Pool',
+          description: 'Sinusoidal horizontal ripples.',
+          control: {
+            label: 'Amplitude',
+            min: 0,
+            max: 40,
+            step: 1,
+            defaultValue: 15,
+          },
+          apply: (context, helpers, value = 15) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            const band = 2;
+            for (let y = 0; y < height; y += band) {
+              const offset = Math.sin((y / height) * Math.PI * 4) * value;
+              context.drawImage(
+                helpers.tempCanvas,
+                0,
+                y,
+                width,
+                band,
+                offset,
+                y,
+                width,
+                band
+              );
+            }
+          },
+        },
+        {
+          id: 'datamosh',
+          label: 'Data Mosh',
+          description: 'Drag random strips sideways.',
+          control: {
+            label: 'Slices',
+            min: 0,
+            max: 60,
+            step: 2,
+            defaultValue: 30,
+          },
+          apply: (context, helpers, value = 30) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            context.drawImage(helpers.tempCanvas, 0, 0, width, height);
+            const loops = Math.max(0, Math.round(value));
+            const offsetRange = width * (0.05 + value / 300);
+            for (let i = 0; i < loops; i += 1) {
+              const h = helpers.random(8, 60);
+              const y = helpers.random(0, height - h);
+              const offset = helpers.random(-offsetRange, offsetRange);
+              const drift = helpers.random(-10, 10);
+              context.drawImage(
+                helpers.tempCanvas,
+                0,
+                y,
+                width,
+                h,
+                offset,
+                y + drift,
+                width,
+                h
+              );
+            }
+          },
+        },
+        {
+          id: 'duotonePulse',
+          label: 'Duotone Pulse',
+          description: 'Ping-pong between cyan & magenta.',
+          control: {
+            label: 'Balance',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 50,
+            format: (value) => `${value}%`,
+          },
+          apply: (context, helpers, value = 50) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const lum = (0.3 * r + 0.59 * g + 0.11 * b) / 255;
+              const bias = 0.6 + (value / 100) * 0.8;
+              const remapped = Math.pow(lum, bias);
+              const start = [24, 255, 211];
+              const end = [255, 0, 110];
+              return [
+                start[0] + (end[0] - start[0]) * remapped,
+                start[1] + (end[1] - start[1]) * remapped,
+                start[2] + (end[2] - start[2]) * remapped,
+                a,
+              ];
+            }),
+        },
+        {
+          id: 'vaporGlow',
+          label: 'Vapor Glow',
+          description: 'Soft pink/teal bloom overlay.',
+          control: {
+            label: 'Glow',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 60,
+            format: (value) => `${value}%`,
+          },
+          apply: (context, helpers, value = 60) => {
+            const glow = value / 100;
+            processPixels(context, ({ r, g, b, y, height, a }) => {
+              const gradient = y / height;
+              return [
+                r * (0.7 + glow * 0.3) + 40 * glow,
+                g * (0.5 + glow * 0.4) + gradient * 60 * glow + 20,
+                b * (1 + glow * 0.4) + 60 * glow,
+                a,
+              ];
+            });
+            const { width, height } = context.canvas;
+            const gradient = context.createLinearGradient(0, 0, width, height);
+            const alpha = 0.15 + glow * 0.35;
+            gradient.addColorStop(0, `rgba(255, 0, 128, ${alpha})`);
+            gradient.addColorStop(1, `rgba(0, 255, 255, ${alpha})`);
+            context.save();
+            context.globalAlpha = 0.2 + glow * 0.4;
+            context.globalCompositeOperation = 'screen';
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, width, height);
+            context.restore();
+            context.globalCompositeOperation = 'source-over';
+          },
+        },
+        {
+          id: 'primarySnap',
+          label: 'Primary Snap',
+          description: 'Force every pixel to RGB primaries.',
+          apply: (context) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const max = Math.max(r, g, b);
+              if (max === r) return [255, 0, 0, a];
+              if (max === g) return [0, 255, 0, a];
+              return [0, 0, 255, a];
+            }),
+        },
+        {
+          id: 'bitmapCrunch',
+          label: 'Bitmap Crunch',
+          description: '1-bit brutalism.',
+          control: {
+            label: 'Threshold',
+            min: 0,
+            max: 255,
+            step: 5,
+            defaultValue: 120,
+          },
+          apply: (context, helpers, value = 120) =>
+            processPixels(context, ({ r, g, b, a }) => [
+              r > value ? 255 : 0,
+              g > value ? 255 : 0,
+              b > value ? 255 : 0,
+              a,
+            ]),
+        },
+        {
+          id: 'solarFlare',
+          label: 'Solar Flare',
+          description: 'Solarize highlights, burn shadows.',
+          control: {
+            label: 'Threshold',
+            min: 50,
+            max: 220,
+            step: 5,
+            defaultValue: 150,
+          },
+          apply: (context, helpers, value = 150) =>
+            processPixels(context, ({ r, g, b, a }) => [
+              r > value ? 255 - r : r * 0.9,
+              g > value ? 255 - g : g * 0.9,
+              b > value ? 255 - b : b * 0.9,
+              a,
+            ]),
+        },
+        {
+          id: 'edgeTrace',
+          label: 'Edge Trace',
+          description: 'High-pass lines only.',
+          apply: (context) => {
+            applyConvolution(context, [-1, -1, -1, -1, 8, -1, -1, -1, -1]);
+            processPixels(context, ({ r, g, b, a }) => {
+              const lum = (r + g + b) / 3;
+              return [lum, lum, lum, a];
+            });
+          },
+        },
+        {
+          id: 'embossRise',
+          label: 'Emboss Rise',
+          description: 'Engrave as if it were clay.',
+          apply: (context) =>
+            applyConvolution(context, [-2, -1, 0, -1, 1, 1, 0, 1, 2], 1, 128),
+        },
+        {
+          id: 'colorPop',
+          label: 'Color Pop',
+          description: 'Over-saturate everything.',
+          control: {
+            label: 'Saturation',
+            min: 80,
+            max: 260,
+            step: 10,
+            defaultValue: 160,
+            format: (value) => `${(value / 100).toFixed(1)}×`,
+          },
+          apply: (context, helpers, value = 160) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const amount = value / 100;
+              const [nr, ng, nb] = saturateColor(r, g, b, amount);
+              return [nr, ng, nb, a];
+            }),
+        },
+        {
+          id: 'midnightOil',
+          label: 'Midnight Oil',
+          description: 'Cool blues & deep shadows.',
+          control: {
+            label: 'Cool',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 50,
+            format: (value) => `${value}%`,
+          },
+          apply: (context, helpers, value = 50) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const cool = value / 100;
+              return [
+                r * (0.5 + (1 - cool) * 0.3),
+                g * (0.6 + cool * 0.4) + cool * 20,
+                b * (1 + cool * 0.6) + 20 + cool * 40,
+                a,
+              ];
+            }),
+        },
+        {
+          id: 'magmaPulse',
+          label: 'Magma Pulse',
+          description: 'Molten oranges surge outward.',
+          control: {
+            label: 'Heat',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 60,
+            format: (value) => `${value}%`,
+          },
+          apply: (context, helpers, value = 60) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const lum = (0.3 * r + 0.59 * g + 0.11 * b) / 255;
+              const bias = 0.5 + (value / 100) * 0.8;
+              const remapped = Math.pow(lum, bias);
+              const [nr, ng, nb] = gradientSample(magmaStops, remapped);
+              return [nr, ng, nb, a];
+            }),
+        },
+        {
+          id: 'prismShift',
+          label: 'Prism Shift',
+          description: 'Rows shift channels with sine waves.',
+          control: {
+            label: 'Wave',
+            min: 0,
+            max: 20,
+            step: 1,
+            defaultValue: 4,
+          },
+          apply: (context, helpers, value = 4) =>
+            processPixels(
+              context,
+              ({ x, y, width, height, source, a }) => {
+                const offset = Math.sin((y / height) * Math.PI * 3) * value;
+                const [nr] = samplePixel(source, width, height, x + offset, y);
+                const [, ng] = samplePixel(source, width, height, x - offset, y);
+                const [, , nb] = samplePixel(source, width, height, x, y - offset);
+                return [nr, ng, nb, a];
+              },
+              { useCopy: true }
+            ),
+        },
+        {
+          id: 'neutronVortex',
+          label: 'Neutron Vortex',
+          description: 'Spirals the scene like a collapsing star.',
+          control: {
+            label: 'Spin',
+            min: -30,
+            max: 30,
+            step: 1,
+            defaultValue: 12,
+          },
+          apply: (context, helpers, value = 12) => {
+            const { width, height } = context.canvas;
+            const cx = width / 2;
+            const cy = height / 2;
+            const twist = (value / 100) * Math.PI * 4;
+            processPixels(
+              context,
+              ({ x, y, width, height, source, a }) => {
+                const dx = x - cx;
+                const dy = y - cy;
+                const dist = Math.hypot(dx, dy);
+                const pct = dist / Math.max(width, height);
+                const angle = Math.atan2(dy, dx) + twist * pct;
+                const radius = dist;
+                const [nr, ng, nb] = samplePixel(
+                  source,
+                  width,
+                  height,
+                  cx + radius * Math.cos(angle),
+                  cy + radius * Math.sin(angle)
+                );
+                return [nr, ng, nb, a];
+              },
+              { useCopy: true }
+            );
+          },
+        },
+        {
+          id: 'pinchPortal',
+          label: 'Pinch Portal',
+          description: 'Sucks pixels through a dimensional pinhole.',
+          control: {
+            label: 'Gravity',
+            min: -80,
+            max: 80,
+            step: 5,
+            defaultValue: 25,
+          },
+          apply: (context, helpers, value = 25) => {
+            const { width, height } = context.canvas;
+            const cx = width / 2;
+            const cy = height / 2;
+            const maxRadius = Math.hypot(width, height) / 2;
+            const gravity = value / 100;
+            processPixels(
+              context,
+              ({ x, y, width, height, source, a }) => {
+                const dx = x - cx;
+                const dy = y - cy;
+                const dist = Math.hypot(dx, dy);
+                if (dist === 0) {
+                  const [nr, ng, nb] = samplePixel(source, width, height, x, y);
+                  return [nr, ng, nb, a];
+                }
+                const pct = dist / maxRadius;
+                const warped = Math.pow(pct, 1 + gravity);
+                const newDist = warped * maxRadius;
+                const ratio = newDist / dist;
+                const [nr, ng, nb] = samplePixel(source, width, height, cx + dx * ratio, cy + dy * ratio);
+                return [nr, ng, nb, a];
+              },
+              { useCopy: true }
+            );
+          },
+        },
+        {
+          id: 'spectralRibbons',
+          label: 'Spectral Ribbons',
+          description: 'Sine waves of color ripple across the frame.',
+          control: {
+            label: 'Spread',
+            min: 10,
+            max: 120,
+            step: 5,
+            defaultValue: 45,
+          },
+          apply: (context, helpers, value = 45) =>
+            processPixels(context, ({ x, y, width, height, r, g, b, a }) => {
+              const waveX = Math.sin((x / width) * Math.PI * 6);
+              const waveY = Math.cos((y / height) * Math.PI * 4);
+              const spread = value / 255;
+              const tint = (waveX + waveY) * spread * 140;
+              return [r + tint, g - tint * 0.4, b + tint * 0.8, a];
+            }),
+        },
+        {
+          id: 'duneWeave',
+          label: 'Dune Weave',
+          description: 'Alternating bands of gold and midnight.',
+          control: {
+            label: 'Frequency',
+            min: 2,
+            max: 14,
+            step: 1,
+            defaultValue: 6,
+          },
+          apply: (context, helpers, value = 6) =>
+            processPixels(context, ({ y, height, r, g, b, a }) => {
+              const wave = (Math.sin((y / height) * Math.PI * value) + 1) / 2;
+              const gold = [228, 160, 62];
+              const blue = [28, 54, 94];
+              return [
+                r * 0.4 + gold[0] * wave,
+                g * 0.4 + gold[1] * wave + blue[1] * (1 - wave),
+                b * 0.4 + blue[2] * (1 - wave),
+                a,
+              ];
+            }),
+        },
+        {
+          id: 'auroraFuse',
+          label: 'Aurora Fuse',
+          description: 'Northern lights leak across the canvas.',
+          control: {
+            label: 'Wash',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 60,
+          },
+          apply: (context, helpers, value = 60) => {
+            const strength = value / 100;
+            const { width, height } = context.canvas;
+            const gradient = context.createLinearGradient(0, 0, width, height);
+            gradient.addColorStop(0, `rgba(72, 255, 214, ${0.35 * strength})`);
+            gradient.addColorStop(1, `rgba(255, 62, 178, ${0.45 * strength})`);
+            processPixels(context, ({ r, g, b, a }) => [
+              r * (0.8 + strength * 0.4),
+              g * (0.85 + strength * 0.3),
+              b * (0.9 + strength * 0.5),
+              a,
+            ]);
+            context.save();
+            context.globalCompositeOperation = 'screen';
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, width, height);
+            context.restore();
+            context.globalCompositeOperation = 'source-over';
+          },
+        },
+        {
+          id: 'causticVeil',
+          label: 'Caustic Veil',
+          description: 'Water caustics shimmer over everything.',
+          control: {
+            label: 'Drift',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 40,
+          },
+          apply: (context, helpers, value = 40) =>
+            processPixels(context, ({ x, y, width, height, r, g, b, a }) => {
+              const wave =
+                Math.sin((x / width) * Math.PI * 8 + y * 0.02) +
+                Math.cos((y / height) * Math.PI * 6 + x * 0.015);
+              const caustic = ((wave + 2) / 4) * (value / 100);
+              return [r + caustic * 80, g + caustic * 120, b + caustic * 160, a];
+            }),
+        },
+        {
+          id: 'chronoRipple',
+          label: 'Chrono Ripple',
+          description: 'Concentric ripples warp the photo.',
+          control: {
+            label: 'Depth',
+            min: 0,
+            max: 40,
+            step: 1,
+            defaultValue: 14,
+          },
+          apply: (context, helpers, value = 14) => {
+            const { width, height } = context.canvas;
+            const cx = width / 2;
+            const cy = height / 2;
+            const depth = value / 100;
+            processPixels(
+              context,
+              ({ x, y, width, height, source, a }) => {
+                const dx = x - cx;
+                const dy = y - cy;
+                const dist = Math.hypot(dx, dy);
+                const ripple = Math.sin(dist * 0.02) * depth * 40;
+                const [nr, ng, nb] = samplePixel(source, width, height, x + ripple, y + ripple);
+                return [nr, ng, nb, a];
+              },
+              { useCopy: true }
+            );
+          },
+        },
+        {
+          id: 'vaporTrail',
+          label: 'Vapor Trail',
+          description: 'Layered offsets leave misty trails.',
+          control: {
+            label: 'Trail',
+            min: 0,
+            max: 80,
+            step: 5,
+            defaultValue: 30,
+          },
+          apply: (context, helpers, value = 30) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            const offsets = [
+              [0, 0, 0.5],
+              [value * 0.2, -value * 0.3, 0.35],
+              [-value * 0.3, value * 0.2, 0.3],
+            ];
+            offsets.forEach(([ox, oy, alpha], index) => {
+              context.globalAlpha = alpha;
+              context.drawImage(helpers.tempCanvas, ox, oy, width, height);
+            });
+            context.globalAlpha = 1;
+          },
+        },
+        {
+          id: 'neonCrush',
+          label: 'Neon Crush',
+          description: 'Crush blacks and floodlights neon edges.',
+          control: {
+            label: 'Intensity',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 65,
+          },
+          apply: (context, helpers, value = 65) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const crush = value / 100;
+              const neon = Math.max(r, g, b);
+              return [
+                Math.min(255, neon + crush * 120),
+                g * (0.5 + crush * 0.3) + crush * 50,
+                b * (0.5 + crush * 0.5) + crush * 80,
+                a,
+              ];
+            }),
+        },
+        {
+          id: 'obsidianFade',
+          label: 'Obsidian Fade',
+          description: 'Calcifies shadows while cyanizing highlights.',
+          control: {
+            label: 'Fade',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 45,
+          },
+          apply: (context, helpers, value = 45) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const lum = 0.21 * r + 0.72 * g + 0.07 * b;
+              const fade = value / 100;
+              if (lum < 120) {
+                return [r * (0.3 + fade * 0.2), g * (0.2 + fade * 0.2), b * (0.2 + fade * 0.3), a];
+              }
+              return [r * 0.7 + 40, g * 0.9 + 60, b + 90 * fade, a];
+            }),
+        },
+        {
+          id: 'glitchGarden',
+          label: 'Glitch Garden',
+          description: 'Stutters random columns into neon Bloom.',
+          control: {
+            label: 'Chaos',
+            min: 0,
+            max: 60,
+            step: 2,
+            defaultValue: 18,
+          },
+          apply: (context, helpers, value = 18) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            const slices = Math.max(3, Math.round(value));
+            const sliceWidth = Math.max(2, Math.floor(width / slices));
+            for (let i = 0; i < slices; i += 1) {
+              const x = i * sliceWidth;
+              const drift = helpers.random(-40, 40);
+              context.save();
+              context.globalCompositeOperation = 'screen';
+              context.globalAlpha = 0.4;
+              context.filter = `hue-rotate(${helpers.random(-40, 40)}deg)`;
+              context.drawImage(helpers.tempCanvas, x, 0, sliceWidth, height, x + drift, 0, sliceWidth, height);
+              context.restore();
+            }
+            context.filter = 'none';
+            context.globalCompositeOperation = 'source-over';
+            context.drawImage(helpers.tempCanvas, 0, 0);
+          },
+        },
+        {
+          id: 'pixelOrbit',
+          label: 'Pixel Orbit',
+          description: 'Channels orbit at different radii.',
+          control: {
+            label: 'Orbit',
+            min: 0,
+            max: 30,
+            step: 1,
+            defaultValue: 12,
+          },
+          apply: (context, helpers, value = 12) =>
+            processPixels(
+              context,
+              ({ x, y, width, height, source, a }) => {
+                const orbit = value;
+                const [nr] = samplePixel(source, width, height, x + orbit, y - orbit * 0.3);
+                const [, ng] = samplePixel(source, width, height, x - orbit * 0.4, y + orbit * 0.6);
+                const [, , nb] = samplePixel(source, width, height, x + Math.sin(y * 0.02) * orbit, y);
+                return [nr, ng, nb, a];
+              },
+              { useCopy: true }
+            ),
+        },
+        {
+          id: 'cometTail',
+          label: 'Comet Tail',
+          description: 'Stacks trailing shadows like meteor streaks.',
+          control: {
+            label: 'Length',
+            min: 0,
+            max: 80,
+            step: 5,
+            defaultValue: 35,
+          },
+          apply: (context, helpers, value = 35) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            const passes = 6;
+            for (let i = 0; i < passes; i += 1) {
+              const offset = (value / passes) * (i + 1);
+              context.globalAlpha = 0.15 + (passes - i) * 0.08;
+              context.drawImage(helpers.tempCanvas, offset, -offset * 0.6, width, height);
+            }
+            context.globalAlpha = 1;
+          },
+        },
+        {
+          id: 'phantomMesh',
+          label: 'Phantom Mesh',
+          description: 'Overlay a ghosted hex mesh.',
+          control: {
+            label: 'Scale',
+            min: 20,
+            max: 120,
+            step: 5,
+            defaultValue: 60,
+          },
+          apply: (context, helpers, value = 60) => {
+            const { width, height } = context.canvas;
+            processPixels(context, ({ r, g, b, a }) => [r * 0.92, g * 0.92, b * 0.92, a]);
+            context.save();
+            context.globalAlpha = 0.25;
+            context.strokeStyle = 'rgba(255,255,255,0.4)';
+            context.lineWidth = 1;
+            const size = Math.max(8, value);
+            for (let y = 0; y < height + size; y += size * 0.86) {
+              for (let x = 0; x < width + size; x += size) {
+                context.beginPath();
+                for (let i = 0; i < 6; i += 1) {
+                  const angle = (Math.PI / 3) * i;
+                  const px = x + (Math.cos(angle) * size) / 2;
+                  const py = y + (Math.sin(angle) * size) / 2;
+                  if (i === 0) context.moveTo(px, py);
+                  else context.lineTo(px, py);
+                }
+                context.closePath();
+                context.stroke();
+              }
+            }
+            context.restore();
+          },
+        },
+        {
+          id: 'polaroidGhost',
+          label: 'Polaroid Ghost',
+          description: 'Washes highlights and fogs edges.',
+          control: {
+            label: 'Wash',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 55,
+          },
+          apply: (context, helpers, value = 55) => {
+            const { width, height } = context.canvas;
+            const wash = value / 100;
+            processPixels(context, ({ r, g, b, a }) => {
+              const lum = 0.3 * r + 0.59 * g + 0.11 * b;
+              return [
+                r * (0.7 + wash * 0.2) + lum * wash * 0.4,
+                g * (0.7 + wash * 0.2) + lum * wash * 0.5,
+                b * (0.7 + wash * 0.2) + lum * wash * 0.7,
+                a,
+              ];
+            });
+            context.save();
+            context.strokeStyle = `rgba(255,255,255,${0.5 * wash})`;
+            context.lineWidth = 30;
+            context.strokeRect(15, 15, width - 30, height - 30);
+            context.restore();
+          },
+        },
+        {
+          id: 'xenonFlash',
+          label: 'Xenon Flash',
+          description: 'Harsh specular flash turns whites radioactive.',
+          control: {
+            label: 'Flash',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 50,
+          },
+          apply: (context, helpers, value = 50) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const flash = value / 100;
+              const lum = Math.max(r, g, b);
+              if (lum < 180) return [r * (0.7 + flash * 0.1), g * (0.7 + flash * 0.1), b * (0.7 + flash * 0.1), a];
+              return [255, Math.min(255, g + flash * 120), Math.min(255, b + flash * 180), a];
+            }),
+        },
+        {
+          id: 'ribbonNoise',
+          label: 'Ribbon Noise',
+          description: 'Horizontal ribbons jitter with noise.',
+          control: {
+            label: 'Density',
+            min: 2,
+            max: 20,
+            step: 1,
+            defaultValue: 8,
+          },
+          apply: (context, helpers, value = 8) =>
+            processPixels(context, ({ y, height, r, g, b, a }) => {
+              const band = Math.floor((y / height) * value);
+              const jitter = (Math.random() - 0.5) * 40;
+              if (band % 2 === 0) return [r + jitter, g + jitter * 0.6, b + jitter * 0.2, a];
+              return [r - jitter * 0.4, g - jitter * 0.6, b - jitter, a];
+            }),
+        },
+        {
+          id: 'etherLattice',
+          label: 'Ether Lattice',
+          description: 'Sin/Cos interference paints interference lattices.',
+          control: {
+            label: 'Phase',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 45,
+          },
+          apply: (context, helpers, value = 45) =>
+            processPixels(context, ({ x, y, width, height, r, g, b, a }) => {
+              const phase = value / 100;
+              const pattern = Math.sin((x / width) * Math.PI * 8 + phase) + Math.cos((y / height) * Math.PI * 8 - phase);
+              const boost = (pattern + 2) * 0.25;
+              return [r * boost, g * (0.6 + boost * 0.4), b * (0.5 + boost * 0.5), a];
+            }),
+        },
+        {
+          id: 'ghostContours',
+          label: 'Ghost Contours',
+          description: 'Outlines float as glowing ghosts.',
+          control: {
+            label: 'Glow',
+            min: 0,
+            max: 60,
+            step: 5,
+            defaultValue: 30,
+          },
+          apply: (context, helpers, value = 30) => {
+            helpers.copySnapshot(context);
+            applyConvolution(context, [-1, -1, -1, -1, 8, -1, -1, -1, -1]);
+            processPixels(context, ({ r, g, b, a }) => [r + value * 2, g + value * 4, b + value * 6, a]);
+            context.globalCompositeOperation = 'screen';
+            context.globalAlpha = 0.5;
+            context.drawImage(helpers.tempCanvas, 0, 0);
+            context.globalAlpha = 1;
+            context.globalCompositeOperation = 'source-over';
+          },
+        },
+        {
+          id: 'plasmaTunnel',
+          label: 'Plasma Tunnel',
+          description: 'Pipes the image through a plasma color tunnel.',
+          control: {
+            label: 'Pulse',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 50,
+          },
+          apply: (context, helpers, value = 50) =>
+            processPixels(context, ({ x, y, width, height, r, g, b, a }) => {
+              const pulse = value / 100;
+              const theta = Math.atan2(y - height / 2, x - width / 2);
+              const radius = Math.hypot(x - width / 2, y - height / 2);
+              const mix = (Math.sin(theta * 3 + radius * 0.02) + 1) / 2;
+              return [
+                r * (0.5 + pulse * 0.4) + mix * 200 * pulse,
+                g * (0.4 + pulse * 0.5) + (1 - mix) * 180 * pulse,
+                b * (0.6 + pulse * 0.3) + Math.abs(0.5 - mix) * 120 * pulse,
+                a,
+              ];
+            }),
+        },
+        {
+          id: 'vectorSpray',
+          label: 'Vector Spray',
+          description: 'Sprays vector streaks diagonally.',
+          control: {
+            label: 'Spray',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 35,
+          },
+          apply: (context, helpers, value = 35) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            context.drawImage(helpers.tempCanvas, 0, 0);
+            const strokes = Math.max(10, value);
+            context.save();
+            context.globalCompositeOperation = 'screen';
+            for (let i = 0; i < strokes; i += 1) {
+              context.globalAlpha = 0.2;
+              context.strokeStyle = `hsla(${helpers.random(0, 360)},90%,60%,0.25)`;
+              context.lineWidth = helpers.random(2, 8);
+              context.beginPath();
+              const x = helpers.random(0, width);
+              const y = helpers.random(0, height);
+              context.moveTo(x, y);
+              context.lineTo(x + helpers.random(-120, 120), y - helpers.random(60, 180));
+              context.stroke();
+            }
+            context.restore();
+            context.globalCompositeOperation = 'source-over';
+          },
+        },
+        {
+          id: 'solarIris',
+          label: 'Solar Iris',
+          description: 'Concentric halos of color radiate outward.',
+          control: {
+            label: 'Rings',
+            min: 1,
+            max: 12,
+            step: 1,
+            defaultValue: 6,
+          },
+          apply: (context, helpers, value = 6) =>
+            processPixels(context, ({ x, y, width, height, r, g, b, a }) => {
+              const cx = width / 2;
+              const cy = height / 2;
+              const radius = Math.hypot(x - cx, y - cy);
+              const ring = Math.sin(radius / 12) * 0.5 + 0.5;
+              const mix = (ring * value) % 1;
+              return [r + mix * 120, g + (1 - mix) * 80, b + Math.abs(0.5 - mix) * 200, a];
+            }),
+        },
+        {
+          id: 'lavaNet',
+          label: 'Lava Net',
+          description: 'Draws molten grids over the art.',
+          control: {
+            label: 'Heat',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 70,
+          },
+          apply: (context, helpers, value = 70) => {
+            const heat = value / 100;
+            const { width, height } = context.canvas;
+            processPixels(context, ({ r, g, b, a }) => [
+              r * (0.7 + heat * 0.4) + 80 * heat,
+              g * (0.5 + heat * 0.2) + 30 * heat,
+              b * 0.3,
+              a,
+            ]);
+            context.save();
+            context.globalCompositeOperation = 'screen';
+            context.strokeStyle = `rgba(255, 120, 0, ${0.2 + heat * 0.3})`;
+            context.lineWidth = 3;
+            const spacing = 40;
+            for (let x = 0; x < width; x += spacing) {
+              context.beginPath();
+              context.moveTo(x, 0);
+              context.lineTo(x + helpers.random(-spacing * 0.4, spacing * 0.4), height);
+              context.stroke();
+            }
+            for (let y = 0; y < height; y += spacing) {
+              context.beginPath();
+              context.moveTo(0, y);
+              context.lineTo(width, y + helpers.random(-spacing * 0.4, spacing * 0.4));
+              context.stroke();
+            }
+            context.restore();
+            context.globalCompositeOperation = 'source-over';
+          },
+        },
+        {
+          id: 'glitchFlare',
+          label: 'Glitch Flare',
+          description: 'Flares random rectangles with color.',
+          control: {
+            label: 'Flares',
+            min: 0,
+            max: 60,
+            step: 5,
+            defaultValue: 20,
+          },
+          apply: (context, helpers, value = 20) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.drawImage(helpers.tempCanvas, 0, 0);
+            const bursts = Math.max(5, value);
+            context.save();
+            context.globalCompositeOperation = 'screen';
+            for (let i = 0; i < bursts; i += 1) {
+              const w = helpers.random(40, 160);
+              const h = helpers.random(30, 140);
+              const x = helpers.random(0, width - w);
+              const y = helpers.random(0, height - h);
+              context.fillStyle = `hsla(${helpers.random(0, 360)}, 90%, 60%, ${helpers.random(0.15, 0.4)})`;
+              context.fillRect(x, y, w, h);
+            }
+            context.restore();
+            context.globalCompositeOperation = 'source-over';
+          },
+        },
+        {
+          id: 'noiseMelt',
+          label: 'Noise Melt',
+          description: 'Melts the scene downward with noisy streaks.',
+          control: {
+            label: 'Melt',
+            min: 0,
+            max: 80,
+            step: 5,
+            defaultValue: 35,
+          },
+          apply: (context, helpers, value = 35) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            const steps = Math.max(1, Math.round(value));
+            for (let x = 0; x < width; x += steps) {
+              const sliceWidth = Math.min(steps, width - x);
+              const drift = (Math.random() - 0.5) * value * 4;
+              context.drawImage(helpers.tempCanvas, x, 0, sliceWidth, height, x + drift, 0, sliceWidth, height);
+            }
+          },
+        },
+        {
+          id: 'rippleBloom',
+          label: 'Ripple Bloom',
+          description: 'Adds sine-based bloom pulses.',
+          control: {
+            label: 'Pulse',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 40,
+          },
+          apply: (context, helpers, value = 40) =>
+            processPixels(context, ({ x, y, width, height, r, g, b, a }) => {
+              const pulse = (Math.sin((x + y) * 0.02) + 1) / 2;
+              const bloom = pulse * (value / 100) * 150;
+              return [r + bloom, g + bloom * 0.7, b + bloom * 1.1, a];
+            }),
+        },
+        {
+          id: 'echoSteps',
+          label: 'Echo Steps',
+          description: 'Three successive echo copies stair-step away.',
+          control: {
+            label: 'Steps',
+            min: 0,
+            max: 60,
+            step: 5,
+            defaultValue: 25,
+          },
+          apply: (context, helpers, value = 25) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.clearRect(0, 0, width, height);
+            const step = Math.max(4, value);
+            for (let i = 0; i < 4; i += 1) {
+              context.globalAlpha = 0.25;
+              context.drawImage(helpers.tempCanvas, i * step, -i * step * 0.5, width, height);
+            }
+            context.globalAlpha = 1;
+          },
+        },
+        {
+          id: 'chromaLattice',
+          label: 'Chroma Lattice',
+          description: 'Chromatic checkerboard modulation.',
+          control: {
+            label: 'Cells',
+            min: 4,
+            max: 32,
+            step: 1,
+            defaultValue: 12,
+          },
+          apply: (context, helpers, value = 12) =>
+            processPixels(context, ({ x, y, width, height, r, g, b, a }) => {
+              const cellX = Math.floor((x / width) * value);
+              const cellY = Math.floor((y / height) * value);
+              const parity = (cellX + cellY) % 3;
+              if (parity === 0) return [r + 60, g - 20, b - 20, a];
+              if (parity === 1) return [r - 30, g + 50, b + 20, a];
+              return [r + 10, g - 20, b + 80, a];
+            }),
+        },
+        {
+          id: 'mirageBloom',
+          label: 'Mirage Bloom',
+          description: 'Ghosted mirage duplicates shimmer on top.',
+          control: {
+            label: 'Offset',
+            min: 0,
+            max: 60,
+            step: 5,
+            defaultValue: 25,
+          },
+          apply: (context, helpers, value = 25) => {
+            const { width, height } = context.canvas;
+            helpers.copySnapshot(context);
+            context.drawImage(helpers.tempCanvas, 0, 0);
+            context.globalAlpha = 0.35;
+            context.globalCompositeOperation = 'screen';
+            context.drawImage(helpers.tempCanvas, value * 0.6, -value * 0.4, width, height);
+            context.drawImage(helpers.tempCanvas, -value * 0.4, value * 0.2, width, height);
+            context.globalAlpha = 1;
+            context.globalCompositeOperation = 'source-over';
+          },
+        },
+        {
+          id: 'prismDust',
+          label: 'Prism Dust',
+          description: 'Sprinkles colored dust speckles everywhere.',
+          control: {
+            label: 'Dust',
+            min: 0,
+            max: 100,
+            step: 5,
+            defaultValue: 50,
+          },
+          apply: (context, helpers, value = 50) =>
+            processPixels(context, ({ r, g, b, a }) => {
+              const dustChance = value / 100;
+              if (Math.random() > dustChance) return [r, g, b, a];
+              const hue = Math.random() * 360;
+              const saturation = 0.6 + Math.random() * 0.4;
+              const light = 0.5 + Math.random() * 0.5;
+              const chroma = saturation * light;
+              const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+              let nr = 0;
+              let ng = 0;
+              let nb = 0;
+              if (hue < 60) [nr, ng, nb] = [chroma, x, 0];
+              else if (hue < 120) [nr, ng, nb] = [x, chroma, 0];
+              else if (hue < 180) [nr, ng, nb] = [0, chroma, x];
+              else if (hue < 240) [nr, ng, nb] = [0, x, chroma];
+              else if (hue < 300) [nr, ng, nb] = [x, 0, chroma];
+              else [nr, ng, nb] = [chroma, 0, x];
+              const m = light - chroma / 2;
+              return [nr * 255 + m * 255, ng * 255 + m * 255, nb * 255 + m * 255, a];
+            }),
+        },
+      ];
+
+      const effectMap = new Map(effectDefinitions.map((effect) => [effect.id, effect]));
+      const randomEffectLimit = () => Math.max(1, effectDefinitions.length);
+
+      const getRandomEffectTarget = () => {
+        if (!randomEffectCount) return 0;
+        const limit = randomEffectLimit();
+        const rawValue = Number(randomEffectCount.value) || 1;
+        return Math.min(limit, Math.max(1, rawValue));
+      };
+
+      const syncRandomEffectSlider = () => {
+        if (!randomEffectCount) return;
+        const targetValue = getRandomEffectTarget();
+        randomEffectCount.max = randomEffectLimit();
+        randomEffectCount.value = targetValue;
+        if (randomCountDisplay) {
+          randomCountDisplay.textContent = targetValue;
+        }
+      };
+
+      if (randomEffectCount) {
+        randomEffectCount.addEventListener('input', syncRandomEffectSlider);
+        syncRandomEffectSlider();
+      }
+
+      const updateActiveCount = () => {
+        activeCount.textContent = state.activeEffects.size;
+      };
+
+      const createSliderControl = (effect) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'effect-slider';
+        const meta = document.createElement('div');
+        meta.className = 'effect-slider__meta';
+        const label = document.createElement('span');
+        label.textContent = effect.control.label || 'Adjust';
+        const valueLabel = document.createElement('span');
+        valueLabel.className = 'effect-slider__value';
+        meta.append(label, valueLabel);
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = effect.control.min;
+        slider.max = effect.control.max;
+        slider.step = effect.control.step ?? 1;
+        slider.value = effect.control.defaultValue;
+        state.effectValues.set(effect.id, effect.control.defaultValue);
+        valueLabel.textContent = formatSliderValue(effect, effect.control.defaultValue);
+        slider.addEventListener('input', () => {
+          const val = Number(slider.value);
+          state.effectValues.set(effect.id, val);
+          valueLabel.textContent = formatSliderValue(effect, val);
+          if (state.activeEffects.has(effect.id)) {
+            render();
+          }
+        });
+        wrapper.append(meta, slider);
+        state.sliders.set(effect.id, { input: slider, valueLabel, control: effect.control, effect });
+        return wrapper;
+      };
+
+      const reflectEffectState = (id, enabled) => {
+        const button = state.buttons.get(id);
+        const card = state.cards.get(id);
+        if (button) {
+          button.classList.toggle('is-active', enabled);
+        }
+        if (card) {
+          card.classList.toggle('is-active', enabled);
+        }
+      };
+
+      const setStatus = (message) => {
+        statusText.textContent = message;
+      };
+
+      const applyRandomEffects = () => {
+        if (!randomEffectCount) return;
+        const target = getRandomEffectTarget();
+        if (!target) return;
+        const ids = effectDefinitions.map((effect) => effect.id);
+        for (let i = ids.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [ids[i], ids[j]] = [ids[j], ids[i]];
+        }
+        state.activeEffects.clear();
+        state.buttons.forEach((_, key) => reflectEffectState(key, false));
+        ids.slice(0, target).forEach((id) => {
+          state.activeEffects.add(id);
+          reflectEffectState(id, true);
+        });
+        updateActiveCount();
+        if (state.imageReady) {
+          render();
+          setStatus(`Randomized ${target} effect${target === 1 ? '' : 's'}.`);
+        } else {
+          renderPlaceholder();
+          setStatus(`Queued ${target} random effect${target === 1 ? '' : 's'}. Import an image to apply.`);
+        }
+      };
+
+      const renderPlaceholder = () => {
+        const { width, height } = canvas;
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#05060a';
+        ctx.fillRect(0, 0, width, height);
+        setStatus('Import an image to begin.');
+      };
+
+      const render = () => {
+        if (!state.imageReady) {
+          renderPlaceholder();
+          return;
+        }
+
+        const width = baseCanvas.width;
+        const height = baseCanvas.height;
+        workCtx.clearRect(0, 0, width, height);
+        workCtx.drawImage(baseCanvas, 0, 0, width, height);
+
+        state.activeEffects.forEach((id) => {
+          const effect = effectMap.get(id);
+          if (effect && typeof effect.apply === 'function') {
+            try {
+              effect.apply(workCtx, helpers, getEffectValue(effect));
+            } catch (err) {
+              console.error(`Effect "${id}" failed`, err);
+            }
+          }
+        });
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(workCanvas, 0, 0, width, height);
+        setStatus(
+          state.activeEffects.size
+            ? `${state.activeEffects.size} effect(s) bending reality.`
+            : 'Image loaded. Flip switches to mutate it.'
+        );
+      };
+
+      const toggleEffect = (id) => {
+        if (state.activeEffects.has(id)) {
+          state.activeEffects.delete(id);
+          reflectEffectState(id, false);
+        } else {
+          state.activeEffects.add(id);
+          reflectEffectState(id, true);
+        }
+        updateActiveCount();
+        render();
+      };
+
+      const buildEffectButtons = () => {
+        state.sliders.clear();
+        const pool = [];
+        effectDefinitions.forEach((effect) => {
+          const card = document.createElement('div');
+          card.className = 'effect-card';
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'effect-btn';
+          button.dataset.effect = effect.id;
+          button.innerHTML = `<strong>${effect.label}</strong><small>${effect.description}</small>`;
+          card.appendChild(button);
+          pool.push(card);
+          if (effect.control) {
+            const slider = createSliderControl(effect);
+            pool.push(slider);
+          }
+          state.buttons.set(effect.id, button);
+          state.cards.set(effect.id, card);
+          button.addEventListener('click', () => toggleEffect(effect.id));
+        });
+        distributeCards(pool);
+      };
+
+      const drawBaseImage = (img) => {
+        const maxSize = CANVAS_SIZE;
+        let targetWidth = maxSize;
+        let targetHeight = maxSize;
+        if (img.width >= img.height) {
+          targetHeight = Math.max(1, Math.round((img.height / img.width) * maxSize));
+        } else {
+          targetWidth = Math.max(1, Math.round((img.width / img.height) * maxSize));
+        }
+        resizeCanvases(targetWidth, targetHeight);
+        baseCtx.clearRect(0, 0, targetWidth, targetHeight);
+        baseCtx.fillStyle = '#05060a';
+        baseCtx.fillRect(0, 0, targetWidth, targetHeight);
+        const scale = Math.min(targetWidth / img.width, targetHeight / img.height, 1);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const x = (targetWidth - w) / 2;
+        const y = (targetHeight - h) / 2;
+        baseCtx.drawImage(img, x, y, w, h);
+      };
+
+      const handleFiles = (files) => {
+        if (!files.length) return;
+        const [file] = files;
+        if (!file.type.startsWith('image/')) {
+          setStatus('Please import an image file.');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            drawBaseImage(img);
+            state.imageReady = true;
+            render();
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      };
+
+      importBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (event) => handleFiles(event.target.files));
+
+      resetBtn.addEventListener('click', () => {
+        state.activeEffects.clear();
+        state.buttons.forEach((_, id) => reflectEffectState(id, false));
+        state.effectValues.clear();
+        state.sliders.forEach(({ input, valueLabel, control, effect }, id) => {
+          input.value = control.defaultValue;
+          valueLabel.textContent = formatSliderValue(effect, control.defaultValue);
+          state.effectValues.set(id, control.defaultValue);
+        });
+        updateActiveCount();
+        if (state.imageReady) {
+          render();
+          setStatus('Clean slate. Stack effects again.');
+        } else {
+          renderPlaceholder();
+        }
+      });
+
+      if (randomEffectsBtn) {
+        randomEffectsBtn.addEventListener('click', applyRandomEffects);
+      }
+
+      exportBtn.addEventListener('click', () => {
+        if (!state.imageReady) {
+          setStatus('Import something before exporting.');
+          return;
+        }
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/png');
+        link.download = `drawer-spauwer-${Date.now()}.png`;
+        link.click();
+        setStatus('Exported PNG dropped to your downloads.');
+      });
+
+      canvas.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        setStatus('Drop an image to load it.');
+      });
+
+      canvas.addEventListener('dragleave', (event) => {
+        event.preventDefault();
+        if (!state.imageReady) setStatus('Import an image to begin.');
+      });
+
+      canvas.addEventListener('drop', (event) => {
+        event.preventDefault();
+        handleFiles(event.dataTransfer.files);
+      });
+
+      buildEffectButtons();
+      renderPlaceholder();
+      updateActiveCount();
+    })();
+  
+  </script>
+</body>
+</html>

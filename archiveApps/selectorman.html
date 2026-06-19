@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Selectorman · Accidental Graphics</title>
+  <meta name="description" content="Selectorman lets you carve living fragments from any imported image.">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/nav.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
+  <script defer src="../scripts/navConfig.js"></script>
+  <script defer src="../scripts/navMenu.js"></script>
+  <style>
+    #canvasWrapper {
+      flex: 1;
+      min-height: min(75vh, 860px);
+      width: 100%;
+      border-radius: 0;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      position: relative;
+      background: radial-gradient(circle at 20% 20%, rgba(41, 151, 255, 0.08), transparent 45%),
+        radial-gradient(circle at 80% 0%, rgba(255, 255, 255, 0.08), transparent 40%),
+        #050505;
+      overflow: hidden;
+      box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.45);
+    }
+
+    #selectCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .selection-hint {
+      position: absolute;
+      top: 18px;
+      right: 24px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.75);
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .controls-inline {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .controls-inline > label {
+      flex: 1;
+    }
+
+    .selection-pill {
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.6);
+      margin-top: 8px;
+    }
+
+    .selection-list {
+      width: 100%;
+      flex: 1 1 auto;
+      height: min(520px, 60vh);
+      min-height: 360px;
+      overflow-y: auto;
+      border-radius: 22px;
+      padding: 18px;
+      background: rgba(8, 8, 8, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: inset 0 0 35px rgba(0, 0, 0, 0.45);
+      font-size: 0.85rem;
+      line-height: 1.4;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-sizing: border-box;
+      align-self: stretch;
+    }
+
+    .selection-item {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      padding: 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .selection-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .selection-item span {
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.95);
+    }
+
+    .selection-item select,
+    .selection-item input[type="range"] {
+      width: 100%;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      padding: 4px 10px;
+    }
+
+    .selection-item input[type="range"] {
+      cursor: ew-resize;
+      accent-color: var(--blue-accent, #2997ff);
+      padding: 0;
+      height: 6px;
+    }
+
+    .intensity-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .selection-item button {
+      width: auto;
+      align-self: flex-start;
+      min-width: 120px;
+    }
+
+    .intensity-label {
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .direction-block {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .direction-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .direction-buttons button {
+      min-width: 44px;
+      padding: 6px 10px;
+    }
+  </style>
+</head>
+
+<body class="app-page">
+  <div id="main">
+    <div id="controls">
+      <h1>Selectorman</h1>
+      <p class="app-description">Drop a still, carve living fragments, and let each selection bend, pulse, or spin inside
+        its own boundary. Export at any time before the glitches escape.</p>
+
+      <div class="sample-loader sample-loader--carousel">
+        <label>Use a sample image</label>
+        <div class="sample-carousel-controls">
+          <button type="button" id="selectormanSamplePrev" aria-label="Previous sample">&#8592;</button>
+          <span class="sample-carousel-name" id="selectormanSampleName">Sample 01</span>
+          <button type="button" id="selectormanSampleNext" aria-label="Next sample">&#8594;</button>
+        </div>
+        <div class="sample-preview" id="selectormanSamplePreview"></div>
+        <div class="sample-loader__actions">
+          <button type="button" id="selectormanSampleBtn">Load sample</button>
+        </div>
+      </div>
+      <label class="file-button file-button--full">Import Image
+        <input type="file" id="imageInput" accept="image/*">
+      </label>
+
+      <div class="controls-inline">
+        <label>Selection Tool
+          <select id="selectionTool">
+            <option value="polygon" selected>Polygon Sketch</option>
+            <option value="lasso">Lasso Freehand</option>
+            <option value="rectangle">Rectangle Sweep</option>
+            <option value="ellipse">Ellipse Drift</option>
+            <option value="object">Object Select (trace)</option>
+          </select>
+        </label>
+        <label>Animation Style
+          <select id="animationStyle">
+            <option value="pulse">Pulse Bloom</option>
+            <option value="orbit">Orbit Drift</option>
+            <option value="tilt">Tilt Swing</option>
+            <option value="swell">Swell Bloom</option>
+            <option value="spiral">Spiral Echo</option>
+            <option value="slideDir">Endless Slide</option>
+            <option value="copyMarch">Copy &amp; Move</option>
+            <option value="stretch">Pixel Stretch</option>
+            <option value="mirror">Mirror Flux</option>
+            <option value="pendulum">Pendulum Arc</option>
+            <option value="twist">Twist Ribbon</option>
+            <option value="bounce">Bounce Bloom</option>
+            <option value="drift">Drift Field</option>
+            <option value="spin">Gyro Spin</option>
+          </select>
+        </label>
+      </div>
+
+      <label>Effect Intensity
+        <input type="range" class="slider" id="effectIntensity" min="0.3" max="1.6" step="0.05" value="1">
+        <span class="intensity-label" id="effectIntensityLabel">100%</span>
+      </label>
+
+      <button id="closePolygon" disabled>Close current polygon (Enter)</button>
+      <button id="clearSelections">Clear selections</button>
+      <button id="exportArtwork">Export artwork</button>
+
+      <div class="selection-list" id="selectionList">
+        <div class="selection-pill">Selections appear here after you finish drawing them.</div>
+      </div>
+    </div>
+
+    <div id="canvasWrapper">
+      <canvas id="selectCanvas"></canvas>
+      <div class="selection-hint" id="selectionHint">Import an image to begin</div>
+    </div>
+  </div>
+
+  <div class="app-year">2025 Accidental Graphics</div>
+
+  <script src="../scripts/sampleMedia.js"></script>
+  <script>
+    (function () {
+      const canvas = document.getElementById('selectCanvas');
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const imageInput = document.getElementById('imageInput');
+      const selectionTool = document.getElementById('selectionTool');
+      const animationStyle = document.getElementById('animationStyle');
+      const effectIntensityInput = document.getElementById('effectIntensity');
+      const effectIntensityLabel = document.getElementById('effectIntensityLabel');
+      const closePolygonBtn = document.getElementById('closePolygon');
+      const clearBtn = document.getElementById('clearSelections');
+      const exportBtn = document.getElementById('exportArtwork');
+      const selectionList = document.getElementById('selectionList');
+      const hint = document.getElementById('selectionHint');
+      const sampleBtn = document.getElementById('selectormanSampleBtn');
+      const samplePreview = document.getElementById('selectormanSamplePreview');
+      const sampleName = document.getElementById('selectormanSampleName');
+      const samplePrevBtn = document.getElementById('selectormanSamplePrev');
+      const sampleNextBtn = document.getElementById('selectormanSampleNext');
+      selectionTool.value = 'polygon';
+
+      const animationOptions = Array.from(animationStyle.options).map(option => ({
+        value: option.value,
+        label: option.textContent
+      }));
+
+      let canvasWidth = 0;
+      let canvasHeight = 0;
+      let imageElement = null;
+      let imageLoaded = false;
+      let cachedFit = null;
+      let drawingShape = false;
+      let pendingShape = null;
+      let polygonPoints = [];
+      let freehandPoints = [];
+      let pointerPos = { x: 0, y: 0 };
+      let dragDistance = 0;
+      let lastDragPos = null;
+      const selections = [];
+      let selectionIdSeed = 1;
+      let defaultIntensity = Number(effectIntensityInput?.value) || 1;
+      const analysisCanvas = document.createElement('canvas');
+      const analysisCtx = analysisCanvas.getContext('2d');
+
+      const effectSettingsConfig = {
+        slideDir: {
+          direction: { type: 'angle', label: 'Direction', min: 0, max: 360, step: 1, default: 0 },
+          speed: { type: 'range', label: 'Speed', min: 60, max: 360, step: 10, default: 200 }
+        },
+        copyMarch: {
+          direction: { type: 'angle', label: 'Direction', min: 0, max: 360, step: 1, default: 45 },
+          distance: { type: 'range', label: 'Spacing', min: 24, max: 360, step: 8, default: 120 },
+          speed: { type: 'range', label: 'Speed', min: 40, max: 360, step: 10, default: 140 },
+          copies: { type: 'int', label: 'Copies', min: 2, max: 6, step: 1, default: 3 }
+        },
+        stretch: {
+          direction: { type: 'angle', label: 'Direction', min: 0, max: 360, step: 1, default: 90 },
+          length: { type: 'range', label: 'Stretch Length', min: 10, max: 480, step: 10, default: 160 },
+          softness: { type: 'range', label: 'Feather', min: 0, max: 1, step: 0.05, default: 0.2 }
+        },
+        drift: {
+          direction: { type: 'angle', label: 'Direction', min: 0, max: 360, step: 1, default: 30 },
+          amplitude: { type: 'range', label: 'Amplitude', min: 40, max: 400, step: 10, default: 180 },
+          speed: { type: 'range', label: 'Speed', min: 20, max: 240, step: 5, default: 80 }
+        },
+        pendulum: {
+          direction: { type: 'angle', label: 'Swing Direction', min: 0, max: 360, step: 1, default: 90 },
+          speed: { type: 'range', label: 'Speed', min: 0.4, max: 3, step: 0.05, default: 1.3 }
+        },
+        spin: {
+          speed: { type: 'range', label: 'Speed', min: 0.3, max: 3, step: 0.05, default: 1.2 }
+        },
+        mirror: {
+          direction: { type: 'angle', label: 'Flip Axis', min: 0, max: 360, step: 1, default: 0 }
+        }
+      };
+
+      const sampleCarousel = window.SampleMedia?.createCarousel({
+        type: 'images',
+        previewEl: samplePreview,
+        nameEl: sampleName,
+        prevBtn: samplePrevBtn,
+        nextBtn: sampleNextBtn,
+        emptyMessage: 'Add sample stills in sampleMedia.js'
+      });
+
+      function applyLoadedImage(img) {
+        imageElement = img;
+        imageLoaded = true;
+        cachedFit = null;
+        selections.length = 0;
+        selectionIdSeed = 1;
+        polygonPoints = [];
+        pendingShape = null;
+        closePolygonBtn.disabled = true;
+        updateSelectionList();
+        updateHint();
+      }
+
+      function loadImageFromSource(src, { revokeUrl = false } = {}) {
+        const img = new Image();
+        img.onload = () => {
+          applyLoadedImage(img);
+          if (revokeUrl) URL.revokeObjectURL(src);
+        };
+        img.onerror = () => {
+          alert('Could not load that image. Try another file.');
+          if (revokeUrl) URL.revokeObjectURL(src);
+        };
+        img.src = src;
+      }
+
+      function updateIntensityLabel(value) {
+        if (!effectIntensityLabel) return;
+        effectIntensityLabel.textContent = `${Math.round(value * 100)}%`;
+      }
+      updateIntensityLabel(defaultIntensity);
+
+      function getEffectDefaults(mode) {
+        const cfg = effectSettingsConfig[mode];
+        if (!cfg) return {};
+        const settings = {};
+        Object.keys(cfg).forEach(key => {
+          settings[key] = cfg[key].default;
+        });
+        return settings;
+      }
+
+      function applyEffectDefaults(sel, mode) {
+        sel.mode = mode;
+        if (effectSettingsConfig[mode]) {
+          sel.settings = Object.assign({}, getEffectDefaults(mode));
+        } else {
+          sel.settings = {};
+        }
+        if (mode === 'spin' && sel.settings && sel.settings.directionSign === undefined) {
+          sel.settings.directionSign = 1;
+        }
+        if (mode === 'mirror' && sel.settings && sel.settings.direction === undefined) {
+          sel.settings.direction = 0;
+        }
+      }
+
+      function applyDirectionControl(sel, dir, modeSelect, rebuildSettings) {
+        const dirMap = { left: 180, right: 0, up: 270, down: 90 };
+        if (sel.mode === 'spin') {
+          if (!sel.settings) sel.settings = {};
+          sel.settings.directionSign = (dir === 'ccw' || dir === 'left' || dir === 'up') ? -1 : 1;
+          if (modeSelect) modeSelect.value = sel.mode;
+          rebuildSettings?.();
+          return;
+        }
+        if (sel.mode === 'mirror') {
+          if (!sel.settings) sel.settings = {};
+          sel.settings.direction = (dir === 'up' || dir === 'down') ? 90 : 0;
+          if (modeSelect) modeSelect.value = sel.mode;
+          rebuildSettings?.();
+          return;
+        }
+        const cfg = effectSettingsConfig[sel.mode];
+        if (cfg && Object.prototype.hasOwnProperty.call(cfg, 'direction')) {
+          const angle = dirMap[dir];
+          if (angle === undefined) return;
+          if (!sel.settings) sel.settings = {};
+          sel.settings.direction = angle;
+          rebuildSettings?.();
+        }
+      }
+
+      function normalizeSelectionMode(sel) {
+        if (!sel) return;
+        if (sel.mode === 'slideX') {
+          applyEffectDefaults(sel, 'slideDir');
+          sel.settings.direction = 180;
+        } else if (sel.mode === 'slideY') {
+          applyEffectDefaults(sel, 'slideDir');
+          sel.settings.direction = 90;
+        } else if (sel.mode === 'flipX') {
+          applyEffectDefaults(sel, 'mirror');
+          sel.settings.direction = 0;
+        } else if (sel.mode === 'flipY') {
+          applyEffectDefaults(sel, 'mirror');
+          sel.settings.direction = 90;
+        } else if (sel.mode === 'spinCW') {
+          applyEffectDefaults(sel, 'spin');
+          sel.settings.directionSign = 1;
+        } else if (sel.mode === 'spinCCW') {
+          applyEffectDefaults(sel, 'spin');
+          sel.settings.directionSign = -1;
+        } else if (sel.mode === 'stretch' && !sel.settings) {
+          sel.settings = getEffectDefaults('stretch');
+        } else if (!effectMap[sel.mode]) {
+          sel.mode = animationOptions[0]?.value || 'pulse';
+          sel.settings = getEffectDefaults(sel.mode);
+        } else {
+          if (effectSettingsConfig[sel.mode] && !sel.settings) {
+            sel.settings = getEffectDefaults(sel.mode);
+          }
+          if (sel.mode === 'spin' && sel.settings.directionSign === undefined) {
+            sel.settings.directionSign = 1;
+          }
+          if (sel.mode === 'mirror' && sel.settings.direction === undefined) {
+            sel.settings.direction = 0;
+          }
+        }
+      }
+
+      function buildSelectionFromRegion(region) {
+        if (!region) return null;
+        const selection = {
+          id: selectionIdSeed++,
+          type: region.polygon?.length >= 3 ? 'polygon' : 'rect',
+          mode: animationStyle.value,
+          intensity: defaultIntensity,
+          seed: Math.random() * 10,
+          settings: getEffectDefaults(animationStyle.value)
+        };
+        if (selection.type === 'polygon') {
+          selection.points = simplifyPath(region.polygon.map(pt => ({ x: pt.x, y: pt.y })), 1.8);
+          selection.bounds = boundsFromPoints(selection.points);
+        } else {
+          selection.x = region.bbox.x;
+          selection.y = region.bbox.y;
+          selection.width = region.bbox.width;
+          selection.height = region.bbox.height;
+        }
+        return selection;
+      }
+
+      function modeSupportsDirection(mode) {
+        if (mode === 'spin' || mode === 'mirror') return true;
+        return Boolean(effectSettingsConfig[mode]?.direction !== undefined);
+      }
+
+      function resizeCanvas() {
+        const parent = canvas.parentElement;
+        if (!parent) return;
+        const bounds = parent.getBoundingClientRect();
+        const width = Math.max(320, bounds.width);
+        const height = Math.max(320, bounds.height);
+        const scaleX = canvasWidth ? width / canvasWidth : 1;
+        const scaleY = canvasHeight ? height / canvasHeight : 1;
+        canvasWidth = width;
+        canvasHeight = height;
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        cachedFit = null;
+        if ((scaleX !== 1 || scaleY !== 1) && isFinite(scaleX) && isFinite(scaleY)) {
+          selections.forEach(sel => scaleSelection(sel, scaleX, scaleY));
+          polygonPoints = polygonPoints.map(pt => ({ x: pt.x * scaleX, y: pt.y * scaleY }));
+          if (pendingShape) {
+            pendingShape.startX *= scaleX;
+            pendingShape.startY *= scaleY;
+            pendingShape.width *= scaleX;
+            pendingShape.height *= scaleY;
+          }
+        }
+      }
+
+      function scaleSelection(sel, sx, sy) {
+        if (sel.type === 'rect' || sel.type === 'ellipse') {
+          sel.x *= sx;
+          sel.y *= sy;
+          sel.width *= sx;
+          sel.height *= sy;
+        } else if (sel.type === 'polygon') {
+          sel.points.forEach(pt => {
+            pt.x *= sx;
+            pt.y *= sy;
+          });
+          if (sel.bounds) {
+            sel.bounds.x *= sx;
+            sel.bounds.y *= sy;
+            sel.bounds.width *= sx;
+            sel.bounds.height *= sy;
+          }
+        }
+      }
+
+      function updateHint() {
+        if (!imageLoaded) {
+          hint.textContent = 'Import an image to begin';
+          return;
+        }
+        let toolLabel;
+        switch (selectionTool.value) {
+          case 'rectangle':
+            toolLabel = 'Drag to sweep rectangles';
+            break;
+          case 'ellipse':
+            toolLabel = 'Drag to sculpt ellipses';
+            break;
+          case 'lasso':
+            toolLabel = 'Drag freehand lasso';
+            break;
+          case 'object':
+            toolLabel = 'Trace around an object';
+            break;
+          default:
+            toolLabel = 'Click to drop polygon points';
+        }
+        const animLabel = animationStyle.selectedOptions[0]?.textContent || 'Pulse';
+        hint.textContent = `${toolLabel} · ${animLabel}`;
+      }
+
+      function getPointer(evt) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: ((evt.clientX - rect.left) / rect.width) * canvasWidth,
+          y: ((evt.clientY - rect.top) / rect.height) * canvasHeight
+        };
+      }
+
+      function computeFit() {
+        if (!imageElement || !canvasWidth || !canvasHeight) return null;
+        const imgRatio = imageElement.naturalWidth / imageElement.naturalHeight;
+        const canvasRatio = canvasWidth / canvasHeight;
+        let drawWidth, drawHeight;
+        if (imgRatio > canvasRatio) {
+          drawWidth = canvasWidth;
+          drawHeight = canvasWidth / imgRatio;
+        } else {
+          drawHeight = canvasHeight;
+          drawWidth = canvasHeight * imgRatio;
+        }
+        const dx = (canvasWidth - drawWidth) / 2;
+        const dy = (canvasHeight - drawHeight) / 2;
+        cachedFit = { x: dx, y: dy, width: drawWidth, height: drawHeight };
+        return cachedFit;
+      }
+
+      function stampImage() {
+        if (!imageLoaded) return;
+        const fit = cachedFit || computeFit();
+        if (!fit) return;
+        ctx.drawImage(imageElement, fit.x, fit.y, fit.width, fit.height);
+      }
+
+      function drawImageToContext(targetCtx) {
+        if (!imageLoaded) return;
+        const fit = cachedFit || computeFit();
+        if (!fit) return;
+        targetCtx.drawImage(imageElement, fit.x, fit.y, fit.width, fit.height);
+      }
+
+      function drawImageWithOffset(offsetX = 0, offsetY = 0, bounds = null) {
+        if (!imageLoaded) return;
+        const fit = cachedFit || computeFit();
+        if (!fit) return;
+        const width = fit.width;
+        const height = fit.height;
+        if (!width || !height) {
+          ctx.drawImage(imageElement, fit.x, fit.y, fit.width, fit.height);
+          return;
+        }
+        const normX = offsetX % width;
+        const normY = offsetY % height;
+        const spanX = bounds ? Math.max(1, bounds.width) : canvasWidth;
+        const spanY = bounds ? Math.max(1, bounds.height) : canvasHeight;
+        const tilesX = Math.ceil(spanX / width) + 2;
+        const tilesY = Math.ceil(spanY / height) + 2;
+        for (let ix = -tilesX; ix <= tilesX; ix++) {
+          for (let iy = -tilesY; iy <= tilesY; iy++) {
+            ctx.drawImage(
+              imageElement,
+              fit.x + normX + ix * width,
+              fit.y + normY + iy * height,
+              width,
+              height
+            );
+          }
+        }
+      }
+
+      function getAnalysisData() {
+        if (!imageLoaded || !canvasWidth || !canvasHeight) return null;
+        analysisCanvas.width = canvasWidth;
+        analysisCanvas.height = canvasHeight;
+        analysisCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+        drawImageToContext(analysisCtx);
+        try {
+          return analysisCtx.getImageData(0, 0, canvasWidth, canvasHeight);
+        } catch (err) {
+          console.error('Analysis failed', err);
+          return null;
+        }
+      }
+
+      function drawBaseLayer() {
+        ctx.save();
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        if (imageLoaded) {
+          stampImage();
+        } else {
+          const gradient = ctx.createLinearGradient(0, 0, canvasWidth, canvasHeight);
+          gradient.addColorStop(0, '#0b0b0f');
+          gradient.addColorStop(1, '#111');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+          ctx.fillStyle = 'rgba(255,255,255,0.15)';
+          ctx.font = '600 1.2rem var(--font-ui, system-ui)';
+          ctx.fillText('Drop an image → carve living selections', 24, 48);
+        }
+        ctx.restore();
+      }
+
+      function clipSelection(sel) {
+        ctx.beginPath();
+        if (sel.type === 'rect') {
+          ctx.rect(sel.x, sel.y, sel.width, sel.height);
+        } else if (sel.type === 'ellipse') {
+          const rx = Math.abs(sel.width) / 2;
+          const ry = Math.abs(sel.height) / 2;
+          ctx.ellipse(sel.x + sel.width / 2, sel.y + sel.height / 2, rx, ry, 0, 0, Math.PI * 2);
+        } else if (sel.type === 'polygon' && sel.points.length >= 3) {
+          ctx.moveTo(sel.points[0].x, sel.points[0].y);
+          for (let i = 1; i < sel.points.length; i++) {
+            ctx.lineTo(sel.points[i].x, sel.points[i].y);
+          }
+          ctx.closePath();
+        }
+        ctx.clip();
+      }
+
+      function boundsFromPoints(points) {
+        const xs = points.map(pt => pt.x);
+        const ys = points.map(pt => pt.y);
+        return {
+          x: Math.min(...xs),
+          y: Math.min(...ys),
+          width: Math.max(...xs) - Math.min(...xs),
+          height: Math.max(...ys) - Math.min(...ys)
+        };
+      }
+
+      function selectionBounds(sel) {
+        if (sel.type === 'rect' || sel.type === 'ellipse') {
+          return { x: sel.x, y: sel.y, width: sel.width, height: sel.height };
+        }
+        if (sel.bounds) return sel.bounds;
+        const bounds = boundsFromPoints(sel.points);
+        sel.bounds = bounds;
+        return bounds;
+      }
+
+      function pixelLuma(data, idx) {
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      }
+
+      function pointInPolygon(x, y, pts) {
+        let inside = false;
+        for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+          const xi = pts[i].x, yi = pts[i].y;
+          const xj = pts[j].x, yj = pts[j].y;
+          const intersect = ((yi > y) !== (yj > y)) &&
+            (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-6) + xi);
+          if (intersect) inside = !inside;
+        }
+        return inside;
+      }
+
+      function sampleMaskStats(imageData, points) {
+        if (!points?.length) return null;
+        const bounds = boundsFromPoints(points);
+        const { data, width } = imageData;
+        const step = Math.max(1, Math.floor(Math.min(bounds.width, bounds.height) / 80));
+        let sum = 0;
+        let sumSq = 0;
+        let count = 0;
+        for (let y = bounds.y; y <= bounds.y + bounds.height; y += step) {
+          for (let x = bounds.x; x <= bounds.x + bounds.width; x += step) {
+            if (!pointInPolygon(x, y, points)) continue;
+            const idx = (Math.round(y) * width + Math.round(x)) * 4;
+            const l = pixelLuma(data, idx);
+            sum += l;
+            sumSq += l * l;
+            count++;
+          }
+        }
+        if (!count) return null;
+        const mean = sum / count;
+        const variance = Math.max(0, sumSq / count - mean * mean);
+        const std = Math.sqrt(variance);
+        return { mean, std, bounds };
+      }
+
+      function sampleLocalStats(imageData, x, y, radius = 20) {
+        const { data, width, height } = imageData;
+        const r = Math.max(4, Math.min(radius, Math.min(width, height) / 3));
+        const x0 = Math.max(0, Math.floor(x - r));
+        const y0 = Math.max(0, Math.floor(y - r));
+        const x1 = Math.min(width - 1, Math.ceil(x + r));
+        const y1 = Math.min(height - 1, Math.ceil(y + r));
+        let sum = 0, sumSq = 0, count = 0;
+        for (let yy = y0; yy <= y1; yy += 2) {
+          for (let xx = x0; xx <= x1; xx += 2) {
+            const idx = (yy * width + xx) * 4;
+            const l = pixelLuma(data, idx);
+            sum += l;
+            sumSq += l * l;
+            count++;
+          }
+        }
+        if (!count) return null;
+        const mean = sum / count;
+        const variance = Math.max(0, sumSq / count - mean * mean);
+        return { mean, std: Math.sqrt(variance) };
+      }
+
+      function simplifyPath(points, tolerance = 2.5) {
+        if (points.length < 4) return points;
+        const sqTolerance = tolerance * tolerance;
+        function getSqSegDist(p, p1, p2) {
+          let x = p1.x;
+          let y = p1.y;
+          let dx = p2.x - x;
+          let dy = p2.y - y;
+          if (dx !== 0 || dy !== 0) {
+            const t = ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy);
+            if (t > 1) {
+              x = p2.x;
+              y = p2.y;
+            } else if (t > 0) {
+              x += dx * t;
+              y += dy * t;
+            }
+          }
+          dx = p.x - x;
+          dy = p.y - y;
+          return dx * dx + dy * dy;
+        }
+        function simplifySegment(pts, first, last, simplified) {
+          let maxSqDist = sqTolerance;
+          let index = -1;
+          for (let i = first + 1; i < last; i++) {
+            const sqDist = getSqSegDist(pts[i], pts[first], pts[last]);
+            if (sqDist > maxSqDist) {
+              index = i;
+              maxSqDist = sqDist;
+            }
+          }
+          if (index !== -1) {
+            if (index - first > 1) simplifySegment(pts, first, index, simplified);
+            simplified.push(pts[index]);
+            if (last - index > 1) simplifySegment(pts, index, last, simplified);
+          }
+        }
+        const simplified = [points[0]];
+        simplifySegment(points, 0, points.length - 1, simplified);
+        simplified.push(points[points.length - 1]);
+        return simplified;
+      }
+
+      function floodFillRegion(imageData, startX, startY, tolerance = 26, maxPixels = 500000, mask = null) {
+        const { data, width, height } = imageData;
+        if (startX < 0 || startX >= width || startY < 0 || startY >= height) return null;
+        if (mask && (!mask.points?.length || !pointInPolygon(startX, startY, mask.points))) return null;
+        const startIdx = (Math.floor(startY) * width + Math.floor(startX)) * 4;
+        const base = pixelLuma(data, startIdx);
+        const visited = new Uint8Array(width * height);
+        const inside = new Uint8Array(width * height);
+        const stack = [Math.floor(startY) * width + Math.floor(startX)];
+        const bounds = { x: width, y: height, maxX: 0, maxY: 0 };
+        const boundaryPoints = [];
+        let count = 0;
+        const toProcess = maxPixels;
+        const maskBounds = mask?.bounds;
+        while (stack.length) {
+          const idx = stack.pop();
+          if (visited[idx]) continue;
+          visited[idx] = 1;
+          const x = idx % width;
+          const y = Math.floor(idx / width);
+          if (maskBounds) {
+            if (x < maskBounds.x || x > maskBounds.x + maskBounds.width || y < maskBounds.y || y > maskBounds.y + maskBounds.height) continue;
+          }
+          if (mask && !pointInPolygon(x, y, mask.points)) continue;
+          const dataIdx = idx * 4;
+          const luma = pixelLuma(data, dataIdx);
+          if (Math.abs(luma - base) > tolerance) continue;
+          count++;
+          if (count > toProcess) break;
+          inside[idx] = 1;
+          bounds.x = Math.min(bounds.x, x);
+          bounds.y = Math.min(bounds.y, y);
+          bounds.maxX = Math.max(bounds.maxX, x);
+          bounds.maxY = Math.max(bounds.maxY, y);
+          let isBoundary = false;
+          const neighbors = [
+            idx - width,
+            idx + width,
+            idx - 1,
+            idx + 1
+          ];
+          for (const n of neighbors) {
+            if (n < 0 || n >= width * height) {
+              isBoundary = true;
+              continue;
+            }
+            if (visited[n]) continue;
+            const nx = n % width;
+            const ny = Math.floor(n / width);
+            if (maskBounds) {
+              if (nx < maskBounds.x || nx > maskBounds.x + maskBounds.width || ny < maskBounds.y || ny > maskBounds.y + maskBounds.height) {
+                isBoundary = true;
+                continue;
+              }
+            }
+            if (mask && !pointInPolygon(nx, ny, mask.points)) {
+              isBoundary = true;
+              continue;
+            }
+            const nIdx = n * 4;
+            const nl = pixelLuma(data, nIdx);
+            if (Math.abs(nl - base) <= tolerance) {
+              stack.push(n);
+            } else {
+              isBoundary = true;
+            }
+          }
+          if (isBoundary) {
+            boundaryPoints.push({ x, y });
+          }
+        }
+        if (count < 80) return null;
+        const bbox = {
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.maxX - bounds.x,
+          height: bounds.maxY - bounds.y
+        };
+        const cx = (bounds.x + bounds.maxX) / 2;
+        const cy = (bounds.y + bounds.maxY) / 2;
+        const orderedBoundary = boundaryPoints.sort((a, b) => {
+          const angA = Math.atan2(a.y - cy, a.x - cx);
+          const angB = Math.atan2(b.y - cy, b.x - cx);
+          return angA - angB;
+        });
+        const simplified = simplifyPath(orderedBoundary, 3.5);
+        return { count, bbox, polygon: simplified, mask: inside };
+      }
+
+      function refineObjectSelection(maskPoints) {
+        const imgData = getAnalysisData();
+        if (!imgData) return null;
+        if (!maskPoints?.length) return null;
+        const bounds = boundsFromPoints(maskPoints);
+        const stats = sampleMaskStats(imgData, maskPoints);
+        const mean = stats?.mean ?? 128;
+        const std = stats?.std ?? 30;
+        const tol = Math.max(10, Math.min(48, std * 2.2));
+        let bestSeed = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+        let bestDiff = Infinity;
+        const step = Math.max(1, Math.floor(Math.min(bounds.width, bounds.height) / 50));
+        for (let y = bounds.y; y <= bounds.y + bounds.height; y += step) {
+          for (let x = bounds.x; x <= bounds.x + bounds.width; x += step) {
+            if (!pointInPolygon(x, y, maskPoints)) continue;
+            const idx = (Math.round(y) * imgData.width + Math.round(x)) * 4;
+            const l = pixelLuma(imgData.data, idx);
+            const diff = Math.abs(l - mean);
+            if (diff < bestDiff) {
+              bestDiff = diff;
+              bestSeed = { x, y };
+            }
+          }
+        }
+        const maxPixels = Math.min(bounds.width * bounds.height * 1.6, canvasWidth * canvasHeight * 0.6);
+        const region = floodFillRegion(imgData, Math.round(bestSeed.x), Math.round(bestSeed.y), tol, Math.max(6000, maxPixels), {
+          points: maskPoints,
+          bounds
+        });
+        if (!region) return null;
+        return buildSelectionFromRegion(region);
+      }
+
+      const effectMap = {
+        pulse(sel, t) {
+          const bounds = selectionBounds(sel);
+          const cx = bounds.x + bounds.width / 2;
+          const cy = bounds.y + bounds.height / 2;
+          const intensity = Math.max(0.2, sel.intensity || 1);
+          const scale = 1 + Math.sin(t * 2.1 + sel.seed) * 0.15 * intensity;
+          ctx.translate(cx, cy);
+          ctx.scale(scale, scale);
+          ctx.translate(-cx, -cy);
+          stampImage();
+        },
+        orbit(sel, t) {
+          const bounds = selectionBounds(sel);
+          const cx = bounds.x + bounds.width / 2;
+          const cy = bounds.y + bounds.height / 2;
+          const intensity = Math.max(0.2, sel.intensity || 1);
+          const angle = Math.sin(t * 1.6 + sel.seed) * 0.6 * intensity;
+          const driftX = Math.cos(t * 1.1 + sel.seed) * 18 * intensity;
+          const driftY = Math.sin(t * 1.4 + sel.seed) * 24 * intensity;
+          ctx.translate(cx, cy);
+          ctx.rotate(angle);
+          ctx.translate(-cx + driftX, -cy + driftY);
+          stampImage();
+        },
+        tilt(sel, t) {
+          const bounds = selectionBounds(sel);
+          const cx = bounds.x + bounds.width / 2;
+          const cy = bounds.y + bounds.height / 2;
+          const intensity = Math.max(0.2, sel.intensity || 1);
+          const angle = Math.sin(t * 1.8 + sel.seed) * 0.4 * intensity;
+          const stretch = 1 + Math.cos(t * 2.4 + sel.seed) * 0.1 * intensity;
+          ctx.translate(cx, cy);
+          ctx.rotate(angle);
+          ctx.scale(stretch, 1 / stretch);
+          ctx.translate(-cx, -cy);
+          stampImage();
+        },
+        swell(sel, t) {
+          const bounds = selectionBounds(sel);
+          const cx = bounds.x + bounds.width / 2;
+          const cy = bounds.y + bounds.height / 2;
+          const intensity = Math.max(0.2, sel.intensity || 1);
+          const pulse = 1 + (Math.sin(t * 2.8 + sel.seed) + 1) * 0.08 * intensity;
+          const drift = Math.sin(t * 1.2 + sel.seed) * 10 * intensity;
+          ctx.translate(cx, cy);
+          ctx.scale(pulse, pulse);
+          ctx.translate(-cx + drift, -cy - drift);
+          stampImage();
+        },
+        spiral(sel, t) {
+          const bounds = selectionBounds(sel);
+          const cx = bounds.x + bounds.width / 2;
+          const cy = bounds.y + bounds.height / 2;
+          const intensity = Math.max(0.2, sel.intensity || 1);
+          const angle = (t * 1.2 + sel.seed) * 0.6 * intensity;
+          const scale = 1 + Math.sin(t * 1.5 + sel.seed) * 0.08 * intensity;
+          const swayX = Math.cos(t * 2 + sel.seed) * 14 * intensity;
+          const swayY = Math.sin(t * 2.1 + sel.seed) * 14 * intensity;
+          ctx.translate(cx + swayX, cy + swayY);
+          ctx.rotate(angle);
+          ctx.scale(scale, scale);
+          ctx.translate(-cx, -cy);
+          stampImage();
+        },
+        slideDir(sel, t) {
+          const bounds = selectionBounds(sel);
+          const settings = sel.settings || {};
+          const direction = (settings.direction ?? 0) * (Math.PI / 180);
+          const speed = settings.speed ?? 200;
+          const offset = t * speed * Math.max(0.2, sel.intensity || 1);
+          const dx = Math.cos(direction) * offset;
+          const dy = Math.sin(direction) * offset;
+          drawImageWithOffset(-dx, -dy, bounds);
+        },
+        mirror(sel, t) {
+          const bounds = selectionBounds(sel);
+          const cx = bounds.x + bounds.width / 2;
+          const cy = bounds.y + bounds.height / 2;
+          const settings = sel.settings || {};
+          const axis = ((settings.direction ?? 0) % 180 + 180) % 180;
+          const isVertical = Math.abs(axis - 90) < 45;
+          const intensity = Math.max(0.2, sel.intensity || 1);
+          const angle = Math.sin(t * 2 + sel.seed) * 0.2 * intensity;
+          ctx.translate(cx, cy);
+          if (isVertical) {
+            ctx.scale(1, -1);
+          } else {
+            ctx.scale(-1, 1);
+          }
+          ctx.rotate(angle);
+          ctx.translate(-cx, -cy);
+          stampImage();
+        },
+        pendulum(sel, t) {
+          const bounds = selectionBounds(sel);
+          const anchorX = bounds.x + bounds.width / 2;
+          const anchorY = bounds.y;
+          const settings = sel.settings || {};
+          const baseDir = (settings.direction ?? 90) * (Math.PI / 180);
+          const speed = settings.speed ?? 1.3;
+          const intensity = Math.max(0.2, sel.intensity || 1);
+          const angle = Math.sin(t * speed + sel.seed) * 0.7 * intensity;
+          ctx.translate(anchorX, anchorY);
+          ctx.rotate(baseDir + angle);
+          ctx.translate(-anchorX, -anchorY);
+          stampImage();
+        },
+        twist(sel, t) {
+          const bounds = selectionBounds(sel);
+          const cx = bounds.x + bounds.width / 2;
+          const cy = bounds.y + bounds.height / 2;
+          const intensity = Math.max(0.2, sel.intensity || 1);
+          const shearX = Math.sin(t * 1.1 + sel.seed) * 0.4 * intensity;
+          const shearY = Math.cos(t * 1.6 + sel.seed) * 0.4 * intensity;
+          ctx.translate(cx, cy);
+          ctx.transform(1, shearY, shearX, 1, 0, 0);
+          ctx.translate(-cx, -cy);
+          stampImage();
+        },
+        bounce(sel, t) {
+          const bounds = selectionBounds(sel);
+          const cx = bounds.x + bounds.width / 2;
+          const cy = bounds.y + bounds.height / 2;
+          const intensity = Math.max(0.2, sel.intensity || 1);
+          const squash = 1 + Math.sin(t * 3 + sel.seed) * 0.25 * intensity;
+          ctx.translate(cx, cy);
+          ctx.scale(1 / squash, squash);
+          ctx.translate(-cx, -cy);
+          stampImage();
+        },
+        drift(sel, t) {
+          const bounds = selectionBounds(sel);
+          const settings = sel.settings || {};
+          const direction = (settings.direction ?? 30) * (Math.PI / 180);
+          const amplitude = settings.amplitude ?? 180;
+          const speed = settings.speed ?? 80;
+          const intensity = Math.max(0.2, sel.intensity || 1);
+          const offset = Math.sin(t * (speed / 80) + sel.seed) * amplitude * intensity;
+          const dx = Math.cos(direction) * offset;
+          const dy = Math.sin(direction) * offset;
+          drawImageWithOffset(dx, dy, bounds);
+        },
+        copyMarch(sel, t) {
+          const bounds = selectionBounds(sel);
+          const settings = sel.settings || {};
+          const direction = (settings.direction ?? 45) * (Math.PI / 180);
+          const spacing = settings.distance ?? 120;
+          const speed = settings.speed ?? 140;
+          const copies = Math.max(1, Math.min(6, Math.round(settings.copies ?? 3)));
+          const travel = t * speed * Math.max(0.2, sel.intensity || 1);
+          const tailCopies = copies + 4;
+          for (let i = 0; i < tailCopies; i++) {
+            const dist = i * spacing + travel;
+            const dx = Math.cos(direction) * dist;
+            const dy = Math.sin(direction) * dist;
+            ctx.save();
+            ctx.translate(dx, dy);
+            ctx.globalAlpha = i >= copies ? Math.max(0, 1 - (i - copies + 1) * 0.2) : 1;
+            stampImage();
+            ctx.restore();
+          }
+        },
+        stretch(sel, t) {
+          const bounds = selectionBounds(sel);
+          const settings = sel.settings || {};
+          const direction = (settings.direction ?? 90) * (Math.PI / 180);
+          const length = settings.length ?? 160;
+          const softness = Math.max(0, Math.min(1, settings.softness ?? 0.2));
+          const sampleX = bounds.x + bounds.width / 2;
+          const sampleY = bounds.y + bounds.height / 2;
+          const fit = cachedFit || computeFit();
+          if (!fit) return;
+          ctx.save();
+          const grad = ctx.createLinearGradient(
+            sampleX - Math.cos(direction) * length,
+            sampleY - Math.sin(direction) * length,
+            sampleX + Math.cos(direction) * length,
+            sampleY + Math.sin(direction) * length
+          );
+          grad.addColorStop(0, `rgba(255,255,255,${softness})`);
+          grad.addColorStop(0.5, 'rgba(255,255,255,1)');
+          grad.addColorStop(1, `rgba(255,255,255,${softness})`);
+          ctx.globalCompositeOperation = 'lighter';
+          for (let i = -2; i <= 2; i++) {
+            const offset = i * (length * 0.12);
+            const dx = Math.cos(direction) * offset;
+            const dy = Math.sin(direction) * offset;
+            ctx.save();
+            ctx.translate(dx, dy);
+            ctx.beginPath();
+            ctx.rect(fit.x, fit.y, fit.width, fit.height);
+            ctx.clip();
+            ctx.fillStyle = grad;
+            ctx.fillRect(fit.x - length, fit.y - length, fit.width + length * 2, fit.height + length * 2);
+            ctx.restore();
+          }
+          ctx.restore();
+        },
+        spin(sel, t) {
+          const bounds = selectionBounds(sel);
+          const cx = bounds.x + bounds.width / 2;
+          const cy = bounds.y + bounds.height / 2;
+          const settings = sel.settings || {};
+          const dirSign = settings.directionSign ?? 1;
+          const speed = settings.speed ?? 1.2;
+          const intensity = Math.max(0.2, sel.intensity || 1);
+          const angle = t * speed * dirSign * intensity;
+          ctx.translate(cx, cy);
+          ctx.rotate(angle);
+          ctx.translate(-cx, -cy);
+          stampImage();
+        }
+      };
+
+      function renderSelections(time) {
+        const t = time * 0.001;
+        selections.forEach(sel => {
+          normalizeSelectionMode(sel);
+          ctx.save();
+          clipSelection(sel);
+          const mode = effectMap[sel.mode] ? sel.mode : 'pulse';
+          effectMap[mode](sel, t);
+          ctx.restore();
+        });
+      }
+
+      function drawPending() {
+        ctx.save();
+        ctx.setLineDash([6, 6]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        if (pendingShape) {
+          if (pendingShape.tool === 'lasso' || pendingShape.tool === 'object') {
+            const pts = pendingShape.points || [];
+            if (pts.length) {
+              ctx.beginPath();
+              ctx.moveTo(pts[0].x, pts[0].y);
+              for (let i = 1; i < pts.length; i++) {
+                ctx.lineTo(pts[i].x, pts[i].y);
+              }
+              ctx.stroke();
+            }
+          } else {
+            const x = pendingShape.width < 0 ? pendingShape.startX + pendingShape.width : pendingShape.startX;
+            const y = pendingShape.height < 0 ? pendingShape.startY + pendingShape.height : pendingShape.startY;
+            const w = Math.abs(pendingShape.width);
+            const h = Math.abs(pendingShape.height);
+            if (pendingShape.tool === 'ellipse') {
+              ctx.beginPath();
+              ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+              ctx.stroke();
+            } else {
+              ctx.strokeRect(x, y, w, h);
+            }
+          }
+        } else if (polygonPoints.length) {
+          ctx.beginPath();
+          ctx.moveTo(polygonPoints[0].x, polygonPoints[0].y);
+          for (let i = 1; i < polygonPoints.length; i++) {
+            ctx.lineTo(polygonPoints[i].x, polygonPoints[i].y);
+          }
+          ctx.lineTo(pointerPos.x, pointerPos.y);
+          ctx.stroke();
+          polygonPoints.forEach(pt => {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      function updateSelectionList() {
+        if (!selectionList) return;
+        selectionList.innerHTML = '';
+        if (!selections.length) {
+          const empty = document.createElement('div');
+          empty.className = 'selection-pill';
+          empty.textContent = 'Selections appear here after you finish drawing them. Adjust animation + intensity per layer.';
+          selectionList.appendChild(empty);
+          return;
+        }
+        selections.forEach(sel => {
+          normalizeSelectionMode(sel);
+          if (!sel.settings && effectSettingsConfig[sel.mode]) {
+            sel.settings = getEffectDefaults(sel.mode);
+          }
+          const item = document.createElement('div');
+          item.className = 'selection-item';
+          const label = document.createElement('span');
+          const shapeLabel = sel.type === 'rect' ? 'Rectangle' : sel.type === 'ellipse' ? 'Ellipse' : 'Polygon';
+          label.textContent = `#${sel.id} ${shapeLabel}`;
+
+          const modeSelect = document.createElement('select');
+          modeSelect.setAttribute('aria-label', `Animation mode for selection ${sel.id}`);
+          animationOptions.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            modeSelect.appendChild(option);
+          });
+          if (!animationOptions.some(opt => opt.value === sel.mode)) {
+            sel.mode = animationOptions[0]?.value || 'pulse';
+          }
+          modeSelect.value = sel.mode;
+          modeSelect.addEventListener('change', () => {
+            applyEffectDefaults(sel, modeSelect.value);
+            rebuildSettings();
+            toggleDirectionVisibility();
+          });
+
+          const intensityBlock = document.createElement('div');
+          intensityBlock.className = 'intensity-block';
+          const intensityRange = document.createElement('input');
+          intensityRange.type = 'range';
+          intensityRange.classList.add('slider');
+          intensityRange.min = '0.3';
+          intensityRange.max = '1.6';
+          intensityRange.step = '0.05';
+          intensityRange.value = sel.intensity || 1;
+          intensityRange.setAttribute('aria-label', `Intensity for selection ${sel.id}`);
+          const intensityValue = document.createElement('span');
+          intensityValue.className = 'intensity-label';
+          const updateSelectionIntensityLabel = () => {
+            intensityValue.textContent = `Intensity ${Math.round((sel.intensity || 1) * 100)}%`;
+          };
+          sel.intensity = sel.intensity || 1;
+          updateSelectionIntensityLabel();
+          intensityRange.addEventListener('input', () => {
+            sel.intensity = Number(intensityRange.value) || 1;
+            updateSelectionIntensityLabel();
+          });
+          intensityBlock.appendChild(intensityValue);
+          intensityBlock.appendChild(intensityRange);
+
+          const directionBlock = document.createElement('div');
+          directionBlock.className = 'direction-block';
+          const directionLabel = document.createElement('span');
+          directionLabel.className = 'intensity-label';
+          directionLabel.textContent = 'Direction';
+          const directionButtons = document.createElement('div');
+          directionButtons.className = 'direction-buttons';
+          const dirConfigs = [
+            { label: '←', dir: 'left' },
+            { label: '→', dir: 'right' },
+            { label: '↑', dir: 'up' },
+            { label: '↓', dir: 'down' },
+            { label: '↻', dir: 'cw' },
+            { label: '↺', dir: 'ccw' }
+          ];
+          dirConfigs.forEach(cfg => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = cfg.label;
+            btn.addEventListener('click', () => {
+              applyDirectionControl(sel, cfg.dir, modeSelect, rebuildSettings);
+            });
+            directionButtons.appendChild(btn);
+          });
+          directionBlock.appendChild(directionLabel);
+          directionBlock.appendChild(directionButtons);
+          const toggleDirectionVisibility = () => {
+            directionBlock.style.display = modeSupportsDirection(sel.mode) ? 'flex' : 'none';
+          };
+
+          const settingsBlock = document.createElement('div');
+          settingsBlock.className = 'intensity-block';
+
+          function rebuildSettings() {
+            settingsBlock.innerHTML = '';
+            const cfg = effectSettingsConfig[sel.mode];
+            if (!cfg) return;
+            const header = document.createElement('span');
+            header.className = 'intensity-label';
+            header.textContent = 'Effect settings';
+            settingsBlock.appendChild(header);
+            Object.keys(cfg).forEach(key => {
+              const conf = cfg[key];
+              const label = document.createElement('label');
+              label.className = 'intensity-label';
+              label.style.display = 'block';
+              label.style.marginTop = '6px';
+              label.textContent = `${conf.label || key}`;
+              const input = document.createElement('input');
+              input.type = conf.type === 'angle' ? 'range' : conf.type === 'int' ? 'number' : 'range';
+              input.min = conf.min;
+              input.max = conf.max;
+              input.step = conf.step || 1;
+              input.value = sel.settings?.[key] ?? conf.default;
+              if (conf.type !== 'int') input.classList.add('slider');
+              input.addEventListener('input', () => {
+                const val = conf.type === 'int' ? parseInt(input.value, 10) : parseFloat(input.value);
+                if (!sel.settings) sel.settings = {};
+                sel.settings[key] = isNaN(val) ? conf.default : val;
+              });
+              settingsBlock.appendChild(label);
+              settingsBlock.appendChild(input);
+            });
+          }
+
+          rebuildSettings();
+          toggleDirectionVisibility();
+
+          const remove = document.createElement('button');
+          remove.textContent = 'Remove';
+          remove.setAttribute('aria-label', `Remove selection ${sel.id}`);
+          remove.addEventListener('click', () => {
+            const idx = selections.indexOf(sel);
+            if (idx >= 0) {
+              selections.splice(idx, 1);
+              updateSelectionList();
+            }
+          });
+          item.appendChild(label);
+          item.appendChild(modeSelect);
+          item.appendChild(intensityBlock);
+          item.appendChild(directionBlock);
+          if (settingsBlock.childElementCount) {
+            item.appendChild(settingsBlock);
+          }
+          item.appendChild(remove);
+          selectionList.appendChild(item);
+        });
+      }
+
+      function finalizeDragSelection(cancelOnly = false) {
+        if (!drawingShape) return;
+        drawingShape = false;
+        if (!pendingShape) return;
+        if (cancelOnly) {
+          pendingShape = null;
+          return;
+        }
+        const w = Math.abs(pendingShape.width);
+        const h = Math.abs(pendingShape.height);
+        if (w < 12 || h < 12) {
+          pendingShape = null;
+          return;
+        }
+        const x = pendingShape.width < 0 ? pendingShape.startX + pendingShape.width : pendingShape.startX;
+        const y = pendingShape.height < 0 ? pendingShape.startY + pendingShape.height : pendingShape.startY;
+        const newSelection = {
+          id: selectionIdSeed++,
+          type: pendingShape.tool === 'ellipse' ? 'ellipse' : 'rect',
+          x,
+          y,
+          width: w,
+          height: h,
+          mode: pendingShape.mode || animationStyle.value,
+          intensity: pendingShape.intensity || defaultIntensity,
+          seed: Math.random() * 10,
+          settings: getEffectDefaults(pendingShape.mode || animationStyle.value)
+        };
+        selections.push(newSelection);
+        pendingShape = null;
+        updateSelectionList();
+      }
+
+      function finalizeFreehandSelection(points, toolType) {
+        if (!points || points.length < 5) return;
+        const simplified = simplifyPath(points, 2.4);
+        if (toolType === 'object') {
+          const refined = refineObjectSelection(simplified);
+          if (refined) {
+            selections.push(refined);
+            updateSelectionList();
+            return;
+          }
+        }
+        const selection = {
+          id: selectionIdSeed++,
+          type: 'polygon',
+          points: simplified,
+          bounds: boundsFromPoints(simplified),
+          mode: animationStyle.value,
+          intensity: defaultIntensity,
+          seed: Math.random() * 10,
+          settings: getEffectDefaults(animationStyle.value)
+        };
+        selections.push(selection);
+        updateSelectionList();
+      }
+
+      function autoSelectAtPoint(pos) {
+        const imgData = getAnalysisData();
+        if (!imgData) {
+          alert('Load an image first.');
+          return;
+        }
+        const stats = sampleLocalStats(imgData, pos.x, pos.y, 24);
+        const tol = Math.max(10, Math.min(46, (stats?.std || 24) * 2.4));
+        const maxPixels = Math.max(4000, canvasWidth * canvasHeight * 0.5);
+        const region = floodFillRegion(imgData, Math.round(pos.x), Math.round(pos.y), tol, maxPixels);
+        if (!region) {
+          alert('Could not find a clear object here. Try another spot.');
+          return;
+        }
+        const selection = buildSelectionFromRegion(region);
+        if (selection) {
+          selections.push(selection);
+          updateSelectionList();
+        }
+      }
+
+      function closePolygon() {
+        if (polygonPoints.length < 3) return;
+        const points = polygonPoints.map(pt => ({ x: pt.x, y: pt.y }));
+        const newSelection = {
+          id: selectionIdSeed++,
+          type: 'polygon',
+          points,
+          bounds: boundsFromPoints(points),
+          mode: animationStyle.value,
+          intensity: defaultIntensity,
+          seed: Math.random() * 10,
+          settings: getEffectDefaults(animationStyle.value)
+        };
+        selections.push(newSelection);
+        polygonPoints = [];
+        closePolygonBtn.disabled = true;
+        updateSelectionList();
+      }
+
+      function cancelPending() {
+        pendingShape = null;
+        drawingShape = false;
+        polygonPoints = [];
+        freehandPoints = [];
+        closePolygonBtn.disabled = true;
+      }
+
+      canvas.addEventListener('pointerdown', evt => {
+        if (!imageLoaded) return;
+        try {
+          canvas.setPointerCapture(evt.pointerId);
+        } catch (_) { }
+        const pos = getPointer(evt);
+        pointerPos = pos;
+        const tool = selectionTool.value;
+        if (tool === 'lasso' || tool === 'object') {
+          drawingShape = true;
+          polygonPoints = [];
+          freehandPoints = [pos];
+          dragDistance = 0;
+          lastDragPos = pos;
+          pendingShape = {
+            tool,
+            points: freehandPoints,
+            mode: animationStyle.value,
+            intensity: defaultIntensity
+          };
+          return;
+        }
+        if (tool === 'rectangle' || tool === 'ellipse') {
+          drawingShape = true;
+          pendingShape = {
+            tool,
+            startX: pos.x,
+            startY: pos.y,
+            width: 0,
+            height: 0,
+            mode: animationStyle.value,
+            intensity: defaultIntensity
+          };
+        } else {
+          polygonPoints.push({ x: pos.x, y: pos.y });
+          if (polygonPoints.length >= 3) {
+            closePolygonBtn.disabled = false;
+          }
+        }
+      });
+
+      canvas.addEventListener('pointermove', evt => {
+        pointerPos = getPointer(evt);
+        if (drawingShape && pendingShape) {
+          if (pendingShape.tool === 'lasso' || pendingShape.tool === 'object') {
+            const last = pendingShape.points[pendingShape.points.length - 1] || pointerPos;
+            const dx = pointerPos.x - last.x;
+            const dy = pointerPos.y - last.y;
+            dragDistance += Math.hypot(dx, dy);
+            pendingShape.points.push({ x: pointerPos.x, y: pointerPos.y });
+            lastDragPos = pointerPos;
+          } else {
+            pendingShape.width = pointerPos.x - pendingShape.startX;
+            pendingShape.height = pointerPos.y - pendingShape.startY;
+          }
+        }
+      });
+
+      canvas.addEventListener('pointerup', evt => {
+        try {
+          canvas.releasePointerCapture(evt.pointerId);
+        } catch (_) { }
+        if (!pendingShape) return;
+        if (pendingShape.tool === 'lasso' || pendingShape.tool === 'object') {
+          drawingShape = false;
+          const isClick = dragDistance < 10 && (pendingShape.points?.length || 0) < 5;
+          if (pendingShape.tool === 'object' && isClick) {
+            autoSelectAtPoint(pointerPos);
+          } else {
+            finalizeFreehandSelection(pendingShape.points, pendingShape.tool === 'object' ? 'object' : 'lasso');
+          }
+          pendingShape = null;
+          freehandPoints = [];
+        } else {
+          finalizeDragSelection();
+        }
+      });
+
+      canvas.addEventListener('pointerleave', () => {
+        if (!pendingShape) return;
+        if (pendingShape.tool === 'lasso' || pendingShape.tool === 'object') {
+          cancelPending();
+        } else {
+          finalizeDragSelection(true);
+        }
+      });
+
+      canvas.addEventListener('dblclick', evt => {
+        if (selectionTool.value === 'polygon') {
+          evt.preventDefault();
+          closePolygon();
+        }
+      });
+
+      window.addEventListener('keydown', evt => {
+        if (evt.key === 'Enter' && selectionTool.value === 'polygon') {
+          closePolygon();
+        } else if (evt.key === 'Escape') {
+          cancelPending();
+        }
+      });
+
+      imageInput.addEventListener('change', evt => {
+        const file = evt.target.files?.[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        loadImageFromSource(url, { revokeUrl: true });
+      });
+
+      if(sampleCarousel?.hasSamples){
+        sampleBtn?.addEventListener('click', () => {
+          const sample = sampleCarousel.getCurrentSample?.();
+          if (!sample?.src) return;
+          loadImageFromSource(`${sample.src}?s=${Date.now()}`);
+        });
+      } else {
+        sampleBtn?.setAttribute('disabled','true');
+      }
+
+      closePolygonBtn.addEventListener('click', () => closePolygon());
+
+      selectionTool.addEventListener('change', () => {
+        cancelPending();
+        if (selectionTool.value !== 'polygon') {
+          closePolygonBtn.disabled = true;
+        } else if (polygonPoints.length >= 3) {
+          closePolygonBtn.disabled = false;
+        }
+        updateHint();
+      });
+
+      animationStyle.addEventListener('change', updateHint);
+      effectIntensityInput?.addEventListener('input', e => {
+        defaultIntensity = Number(e.target.value) || 1;
+        updateIntensityLabel(defaultIntensity);
+      });
+
+      clearBtn.addEventListener('click', () => {
+        selections.length = 0;
+        selectionIdSeed = 1;
+        cancelPending();
+        updateSelectionList();
+      });
+
+      exportBtn.addEventListener('click', () => {
+        if (!canvasWidth || !canvasHeight) {
+          alert('Nothing to export yet');
+          return;
+        }
+        canvas.toBlob(blob => {
+          if (!blob) {
+            alert('Export failed. Try again.');
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'Selectorman.png';
+          link.click();
+          URL.revokeObjectURL(url);
+        }, 'image/png');
+      });
+
+      function loop(time) {
+        drawBaseLayer();
+        renderSelections(time);
+        drawPending();
+        requestAnimationFrame(loop);
+      }
+
+      resizeCanvas();
+      updateHint();
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+
+</html>
