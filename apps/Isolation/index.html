@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Isolation</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <aside class="panel" aria-label="controls">
+        <header class="panel-header">
+          <div class="panel-title">
+            <p class="eyebrow">Isolation Grid</p>
+            <h1>Settings</h1>
+          </div>
+          <div class="header-actions">
+            <button id="exportPng" type="button">Export PNG</button>
+            <label class="check">
+              <input id="showImage" type="checkbox" />
+              <span>Show Image</span>
+            </label>
+            <button id="resetAllTop" type="button">Reset All</button>
+          </div>
+        </header>
+
+        <details class="control-group">
+          <summary>Randomize</summary>
+          <div class="group-body">
+          <button id="randomizeAll" type="button">Randomize</button>
+          <label class="check">
+            <input id="randomizeGridSettings" type="checkbox" checked />
+            <span>Grid</span>
+          </label>
+          <label class="check">
+            <input id="randomizeDrawSettings" type="checkbox" checked />
+            <span>Draw</span>
+          </label>
+          <label class="check">
+            <input id="randomizeImageSettings" type="checkbox" checked />
+            <span>Image</span>
+          </label>
+          <label class="check">
+            <input id="randomizeIsolationSettings" type="checkbox" checked />
+            <span>Isolation</span>
+          </label>
+          <label class="check">
+            <input id="randomizeCanvasSettings" type="checkbox" checked />
+            <span>Canvas</span>
+          </label>
+          <label class="check">
+            <input id="randomizeSurfaceSettings" type="checkbox" checked />
+            <span>Surface</span>
+          </label>
+          <label class="check">
+            <input id="randomizeKeepColors" type="checkbox" />
+            <span>Keep Colors</span>
+          </label>
+          </div>
+        </details>
+
+        <details class="control-group">
+          <summary>Grid</summary>
+          <div class="group-body">
+          <label class="check">
+            <input id="showGrid" type="checkbox" />
+            <span>Show Grid Lines</span>
+          </label>
+          <div class="control">
+            <label for="gridSize">Size</label>
+            <input id="gridSize" type="range" min="9" max="201" step="2" value="25" />
+            <output id="gridSizeValue">25</output>
+          </div>
+          </div>
+        </details>
+
+        <details class="control-group">
+          <summary>Draw</summary>
+          <div class="group-body">
+          <div class="control">
+            <label for="reaction">Reaction</label>
+            <input id="reaction" type="range" min="0" max="100" step="1" value="78" />
+            <output id="reactionValue">78</output>
+          </div>
+          <label class="check">
+            <input id="drawFill" type="checkbox" checked />
+            <span>Fill</span>
+          </label>
+          <div class="color-row">
+            <label for="lineFillColor">Fill Color</label>
+            <input id="lineFillColor" type="color" value="#ffffff" />
+          </div>
+          <div class="control">
+            <label for="fillWeight">Fill Size</label>
+            <input id="fillWeight" type="range" min="1" max="80" step="1" value="16" />
+            <output id="fillWeightValue">16</output>
+          </div>
+          <label class="check">
+            <input id="drawStroke" type="checkbox" checked />
+            <span>Outline</span>
+          </label>
+          <div class="color-row">
+            <label for="lineColor">Outline Color</label>
+            <input id="lineColor" type="color" value="#000000" />
+          </div>
+          <div class="control">
+            <label for="strokeWeight">Outline</label>
+            <input id="strokeWeight" type="range" min="0.2" max="24" step="0.1" value="1.2" />
+            <output id="strokeWeightValue">1.2</output>
+          </div>
+          <div class="split">
+            <div class="field">
+              <label for="lineCap">Ends</label>
+              <select id="lineCap">
+                <option value="butt">Flat</option>
+                <option value="square">Square</option>
+                <option value="round" selected>Round</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="lineJoin">Corners</label>
+              <select id="lineJoin">
+                <option value="miter">Sharp</option>
+                <option value="bevel">Bevel</option>
+                <option value="round" selected>Round</option>
+              </select>
+            </div>
+          </div>
+          <div class="control">
+            <label for="randomLineCount">Random</label>
+            <input id="randomLineCount" type="range" min="4" max="80" step="1" value="28" />
+            <output id="randomLineCountValue">28</output>
+          </div>
+          <div class="control">
+            <label for="randomLineLength">Length</label>
+            <input id="randomLineLength" type="range" min="2" max="40" step="1" value="10" />
+            <output id="randomLineLengthValue">10</output>
+          </div>
+          <div class="button-row">
+            <button id="undoLine" type="button">Undo Line</button>
+            <button id="clearLines" type="button">Clear Lines</button>
+          </div>
+          <button id="randomizeDrawing" type="button">Random Lines</button>
+          </div>
+        </details>
+
+        <details class="control-group">
+          <summary>Image</summary>
+          <div class="group-body">
+          <div class="file-row">
+            <label for="imageImport">Image</label>
+            <input id="imageImport" type="file" accept="image/*" />
+          </div>
+          <div class="image-line-options" role="group" aria-label="Image lines">
+            <p class="image-line-title">Image Lines</p>
+            <label class="check">
+              <input id="imageLinesHorizontal" type="checkbox" checked />
+              <span>Horizontal</span>
+            </label>
+            <label class="check">
+              <input id="imageLinesVertical" type="checkbox" checked />
+              <span>Vertical</span>
+            </label>
+            <label class="check">
+              <input id="imageLinesDiagonal" type="checkbox" checked />
+              <span>Diagonal</span>
+            </label>
+          </div>
+          <div class="control">
+            <label for="imageThreshold">Threshold</label>
+            <input id="imageThreshold" type="range" min="0" max="255" step="1" value="128" />
+            <output id="imageThresholdValue">128</output>
+          </div>
+          <div class="control">
+            <label for="imageDetail">Detail</label>
+            <input id="imageDetail" type="range" min="2" max="8" step="1" value="5" />
+            <output id="imageDetailValue">5</output>
+          </div>
+          <div class="control">
+            <label for="imageScale">Scale</label>
+            <input id="imageScale" type="range" min="10" max="250" step="1" value="100" />
+            <output id="imageScaleValue">100</output>
+          </div>
+          <div class="control">
+            <label for="imageOffsetX">X</label>
+            <input id="imageOffsetX" type="range" min="-50" max="50" step="1" value="0" />
+            <output id="imageOffsetXValue">0</output>
+          </div>
+          <div class="control">
+            <label for="imageOffsetY">Y</label>
+            <input id="imageOffsetY" type="range" min="-50" max="50" step="1" value="0" />
+            <output id="imageOffsetYValue">0</output>
+          </div>
+          <div class="control">
+            <label for="imageBrightness">Bright</label>
+            <input id="imageBrightness" type="range" min="-100" max="100" step="1" value="0" />
+            <output id="imageBrightnessValue">0</output>
+          </div>
+          <div class="control">
+            <label for="imageContrast">Contrast</label>
+            <input id="imageContrast" type="range" min="-100" max="100" step="1" value="0" />
+            <output id="imageContrastValue">0</output>
+          </div>
+          <label class="check">
+            <input id="imageInvert" type="checkbox" />
+            <span>Invert Image</span>
+          </label>
+          <button id="clearImage" type="button">Clear Image</button>
+          <p id="imageStatus" class="meter">No image</p>
+          </div>
+        </details>
+
+        <details class="control-group">
+          <summary>Isolation</summary>
+          <div class="group-body">
+          <div class="field">
+            <label for="isolationSelect">Object</label>
+            <select id="isolationSelect"></select>
+          </div>
+          <label class="check">
+            <input id="isolationEnabled" type="checkbox" checked />
+            <span>Enabled</span>
+          </label>
+          <label class="check">
+            <input id="isolationOutline" type="checkbox" checked />
+            <span>Outline</span>
+          </label>
+          <div class="button-row">
+            <button id="addIsolation" type="button">Add</button>
+            <button id="removeIsolation" type="button">Remove</button>
+          </div>
+          <div class="field">
+            <label for="isolationShape">Shape</label>
+            <select id="isolationShape">
+              <option value="block">Block</option>
+              <option value="circle" selected>Circle</option>
+              <option value="diamond">Diamond</option>
+              <option value="triangle">Triangle</option>
+              <option value="hexagon">Hexagon</option>
+              <option value="hourglass">Hourglass</option>
+              <option value="wedge">Wedge</option>
+              <option value="cross">Cross</option>
+              <option value="star">Star</option>
+              <option value="blob">Blob</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="button-row">
+            <button id="drawIsolationShape" type="button">Draw Shape</button>
+            <button id="clearIsolationShape" type="button">Clear Shape</button>
+          </div>
+          <p id="isolationDrawStatus" class="meter">Object ready</p>
+          <div class="split">
+            <div class="field">
+              <label for="isolationX">X</label>
+              <input id="isolationX" type="number" min="0" max="100" step="0.1" value="50" />
+            </div>
+            <div class="field">
+              <label for="isolationY">Y</label>
+              <input id="isolationY" type="number" min="0" max="100" step="0.1" value="50" />
+            </div>
+          </div>
+          <div class="control">
+            <label for="isolationWidth">Width</label>
+            <input id="isolationWidth" type="range" min="3" max="60" step="0.5" value="17" />
+            <output id="isolationWidthValue">17</output>
+          </div>
+          <div class="control">
+            <label for="isolationHeight">Height</label>
+            <input id="isolationHeight" type="range" min="3" max="60" step="0.5" value="17" />
+            <output id="isolationHeightValue">17</output>
+          </div>
+          <div class="split">
+            <div class="field">
+              <label for="isolationWidthNumber">Width %</label>
+              <input id="isolationWidthNumber" type="number" min="3" max="60" step="0.1" value="17" />
+            </div>
+            <div class="field">
+              <label for="isolationHeightNumber">Height %</label>
+              <input id="isolationHeightNumber" type="number" min="3" max="60" step="0.1" value="17" />
+            </div>
+          </div>
+          <label class="check">
+            <input id="isolationLockAspect" type="checkbox" />
+            <span>Lock Ratio</span>
+          </label>
+          <div class="field">
+            <label for="isolationRatioNumber">Ratio</label>
+            <input id="isolationRatioNumber" type="number" min="0.05" max="20" step="0.01" value="1" />
+          </div>
+          <div class="control">
+            <label for="isolationRotation">Rotate</label>
+            <input id="isolationRotation" type="range" min="-180" max="180" step="1" value="0" />
+            <output id="isolationRotationValue">0</output>
+          </div>
+          <div class="control">
+            <label for="isolationForce">Force</label>
+            <input id="isolationForce" type="range" min="0" max="500" step="1" value="100" />
+            <output id="isolationForceValue">100</output>
+          </div>
+          <div class="control">
+            <label for="isolationGap">Silence</label>
+            <input id="isolationGap" type="range" min="0" max="35" step="0.5" value="10" />
+            <output id="isolationGapValue">10</output>
+          </div>
+          <label class="check">
+            <input id="isolationFill" type="checkbox" checked />
+            <span>Fill</span>
+          </label>
+          <div class="color-row">
+            <label for="isolationFillColor">Fill Color</label>
+            <input id="isolationFillColor" type="color" value="#00ff00" />
+          </div>
+          <div class="color-row">
+            <label for="isolationStrokeColor">Stroke Color</label>
+            <input id="isolationStrokeColor" type="color" value="#00ff00" />
+          </div>
+          <div class="control">
+            <label for="isolationStrokeWidth">Stroke</label>
+            <input id="isolationStrokeWidth" type="range" min="0.2" max="24" step="0.1" value="1.2" />
+            <output id="isolationStrokeWidthValue">1.2</output>
+          </div>
+          <div class="button-row">
+            <button id="centerIsolation" type="button">Center</button>
+            <button id="randomIsolation" type="button">Shuffle Object</button>
+          </div>
+          </div>
+        </details>
+
+        <details class="control-group">
+          <summary>Canvas</summary>
+          <div class="group-body">
+          <div class="split">
+            <div class="field">
+              <label for="widthCm">Width cm</label>
+              <input id="widthCm" type="number" min="1" max="120" step="0.1" value="25" />
+            </div>
+            <div class="field">
+              <label for="heightCm">Height cm</label>
+              <input id="heightCm" type="number" min="1" max="120" step="0.1" value="25" />
+            </div>
+          </div>
+          <div class="split">
+            <div class="field">
+              <label for="dpi">DPI</label>
+              <input id="dpi" type="number" min="72" max="600" step="1" value="300" />
+            </div>
+            <div class="field">
+              <label for="viewScale">View</label>
+              <select id="viewScale">
+                <option value="contain">Fit</option>
+                <option value="0.25">25%</option>
+                <option value="0.5">50%</option>
+                <option value="1">100%</option>
+              </select>
+            </div>
+          </div>
+          <button id="applySize" type="button">Apply Size</button>
+          <p id="pixelSize" class="meter">2953 x 2953 px</p>
+          </div>
+        </details>
+
+        <details class="control-group">
+          <summary>Surface</summary>
+          <div class="group-body">
+          <div class="color-row">
+            <label for="paperColor">Paper</label>
+            <input id="paperColor" type="color" value="#ffffff" />
+          </div>
+          <label class="check">
+            <input id="transparentPaper" type="checkbox" />
+            <span>Transparent Paper</span>
+          </label>
+          <label class="check">
+            <input id="transparentDrawing" type="checkbox" />
+            <span>Transparent Drawing</span>
+          </label>
+          </div>
+        </details>
+      </aside>
+
+      <section class="stage" aria-label="drawing area">
+        <div class="canvas-shell">
+          <canvas id="workCanvas" width="2953" height="2953"></canvas>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
