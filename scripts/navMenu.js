@@ -24,7 +24,15 @@ document.addEventListener("DOMContentLoaded", () => {
   // Hamburger button
   const menuBtn = document.createElement("div");
   menuBtn.id = "hamburgerMenu";
-  menuBtn.innerHTML = "&#9776;"; // ☰ symbol
+  menuBtn.setAttribute("role", "button");
+  menuBtn.setAttribute("tabindex", "0");
+  menuBtn.setAttribute("aria-label", "Open navigation menu");
+  menuBtn.setAttribute("aria-controls", "menuDropdown");
+  menuBtn.setAttribute("aria-expanded", "false");
+  const menuIcon = document.createElement("span");
+  menuIcon.className = "hamburger-icon";
+  menuIcon.textContent = "☰";
+  menuBtn.appendChild(menuIcon);
 
   // Dropdown menu
   const dropdown = document.createElement("div");
@@ -59,14 +67,44 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Toggle dropdown visibility
+  let menuPinnedOpen = false;
+
+  const setMenuOpen = (isOpen, pinned = menuPinnedOpen) => {
+    menuPinnedOpen = pinned;
+    dropdown.classList.toggle("is-open", isOpen);
+    menuBtn.classList.toggle("is-open", menuPinnedOpen);
+    menuBtn.setAttribute("aria-expanded", String(isOpen));
+    menuBtn.setAttribute("aria-label", menuPinnedOpen ? "Close navigation menu" : "Open navigation menu");
+    menuIcon.textContent = menuPinnedOpen ? "×" : "☰";
+  };
+
+  // Preview on hover; pin the menu open on click.
+  menuBtn.addEventListener("pointerenter", () => {
+    if (!menuPinnedOpen) setMenuOpen(true, false);
+  });
+
+  header.addEventListener("pointerleave", () => {
+    if (!menuPinnedOpen) setMenuOpen(false, false);
+  });
+
   menuBtn.addEventListener("click", () => {
-    dropdown.style.display = dropdown.style.display === "none" ? "flex" : "none";
+    setMenuOpen(!menuPinnedOpen, !menuPinnedOpen);
+  });
+
+  menuBtn.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      menuBtn.click();
+    }
   });
 
   // Close dropdown when clicking outside
   document.addEventListener("click", e => {
-    if (!header.contains(e.target)) dropdown.style.display = "none";
+    if (!header.contains(e.target)) setMenuOpen(false, false);
+  });
+
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") setMenuOpen(false, false);
   });
 
   // Append elements to header
@@ -77,13 +115,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Add header to body
   document.body.prepend(header);
 
-  const stretchTargetSelector = [
-    "button",
-    ".file-button",
-    ".gallery-action",
-    ".home-gallery-link",
-    ".site-nav a"
-  ].join(",");
+  const stretchTargetSelector = ".site-nav a";
 
   const wrapStretchLabels = root => {
     const targets = [];
@@ -105,14 +137,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  wrapStretchLabels(document.body);
+  wrapStretchLabels(header);
   const stretchLabelObserver = new MutationObserver(mutations => {
     mutations.forEach(mutation => {
       wrapStretchLabels(mutation.target);
       mutation.addedNodes.forEach(wrapStretchLabels);
     });
   });
-  stretchLabelObserver.observe(document.body, { childList: true, subtree: true });
+  stretchLabelObserver.observe(header, { childList: true, subtree: true });
 });
 
 

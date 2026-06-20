@@ -20,23 +20,30 @@
 
 
 <style>
-    /* Image as button */
-    .image-button {
-      border: none;
-      background: none;
+    .creator-link {
+      color: var(--blue-accent);
+      text-decoration: none;
+    }
+
+    .creator-link .stretch-text {
+      display: inline-block;
+      transform: scaleY(1);
+      transform-origin: center;
+      transition: transform 160ms steps(2, end);
+    }
+
+    .creator-link:hover .stretch-text,
+    .creator-link:focus-visible .stretch-text {
+      transform: scaleY(5);
+    }
+
+    .about-links {
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      margin: 30px 0 0;
       padding: 0;
-      cursor: pointer;
-    }
-
-    .image-button img {
-      display: block;
-      width: 50px;
-      height: auto;
-      transition: transform 0.2s;
-    }
-
-    .image-button img:hover {
-      transform: scale(1.05);
+      list-style: none;
     }
 
     #drawPrompt {
@@ -73,16 +80,11 @@
     <div class="text-block">Here, graphics aren’t designed on rules, but rather grow accidentally.</div>
     <div class="text-block">Through errors, code, and unexpected interactions, new forms emerge.</div>
     <div class="text-block">The goal is not perfection but exploration.</div>
-    <div class="text-block">Created by Jorne Scholiers</div>
-    <div style="display:flex; gap:18px; align-items:center; justify-content:center; margin-top:30px;">
-     
-      <a href="https://jornescholiers.cargo.site" target="_blank" class="image-button" aria-label="Portfolio">
-        <img src="images/icon_Blue.png" alt="Portfolio" style="width:46px; height:auto;">
-      </a>
-      <a href="https://www.instagram.com/byjorne?igsh=N3M1dWQ1Nm1hbjN4&utm_source=qr" target="_blank" class="image-button" aria-label="Instagram">
-        <img src="images/insta.png" alt="Instagram" style="width:36px; height:auto;">
-      </a>
-    </div>
+    <div class="text-block">Created by <a href="https://jornescholiers.be" target="_blank" rel="noopener noreferrer" class="creator-link"><span class="stretch-text">Jorne Scholiers</span></a></div>
+    <ul class="about-links" aria-label="Jorne Scholiers links">
+      <li><a href="https://jornescholiers.be" target="_blank" rel="noopener noreferrer" class="creator-link"><span class="stretch-text">Portfolio</span></a></li>
+      <li><a href="https://www.instagram.com/byjorne?igsh=N3M1dWQ1Nm1hbjN4&utm_source=qr" target="_blank" rel="noopener noreferrer" class="creator-link"><span class="stretch-text">Instagram</span></a></li>
+    </ul>
   </div>
 
   <!-- Right canvas -->
@@ -146,6 +148,6 @@ canvas.addEventListener('mousemove', (e) => {
 });
 </script>
 
-<div class="app-year">2025 Accidental Graphics</div>
+<div class="app-year">2026 Accidental Graphics</div>
 </body>
 </html>

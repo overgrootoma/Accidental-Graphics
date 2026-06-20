@@ -119,6 +119,17 @@
   border-left: 1px solid #fff;
 }
 
+#hamburgerMenu .hamburger-icon {
+  display: inline-block;
+  line-height: 1;
+  transition: transform 160ms steps(2, end);
+}
+
+#hamburgerMenu:hover .hamburger-icon,
+#hamburgerMenu:focus-visible .hamburger-icon {
+  transform: scale(0.65);
+}
+
 #hamburgerMenu:hover,
 #hamburgerMenu:focus-visible {
   background: #2997ff;
@@ -167,21 +178,13 @@
   background: #2997ff;
 }
 
-.stretch-text {
+.site-nav .stretch-text {
   display: inline-block;
   transform: scaleY(1);
   transform-origin: center;
   transition: transform 160ms steps(2, end);
 }
 
-button:hover .stretch-text,
-button:focus-visible .stretch-text,
-.file-button:hover .stretch-text,
-.file-button:focus-visible .stretch-text,
-.gallery-action:hover .stretch-text,
-.gallery-action:focus-visible .stretch-text,
-.home-gallery-link:hover .stretch-text,
-.home-gallery-link:focus-visible .stretch-text,
 .site-nav a:hover .stretch-text,
 .site-nav a:focus-visible .stretch-text {
   transform: scaleY(5);
