@@ -22,6 +22,7 @@ body {
 body {
   background: var(--paper);
   color: var(--ink);
+  padding-top: 72px;
 }
 
 button,
@@ -74,7 +75,7 @@ input[type="range"] {
 .app {
   display: grid;
   grid-template-columns: 390px minmax(0, 1fr);
-  height: 100vh;
+  height: calc(100vh - 72px);
   min-height: 0;
   border-top: 1px solid var(--rule);
 }

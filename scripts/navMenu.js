@@ -1,7 +1,10 @@
+const navMenuScript = document.currentScript;
+
 document.addEventListener("DOMContentLoaded", () => {
-  const isNested = window.location.pathname.includes('/apps/') || window.location.pathname.includes('/archiveApps/');
-  const basePath = isNested ? '../' : '';
-  const resolvePath = path => `${basePath}${path}`;
+  const siteRoot = navMenuScript?.src
+    ? new URL("../", navMenuScript.src)
+    : new URL("./", document.baseURI);
+  const resolvePath = path => new URL(path, siteRoot).href;
   // Create header
   const header = document.createElement("header");
   header.classList.add("site-nav");
@@ -73,37 +76,76 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Add header to body
   document.body.prepend(header);
-});
 
+  const stretchTargetSelector = [
+    "button",
+    ".file-button",
+    ".gallery-action",
+    ".home-gallery-link",
+    ".site-nav a"
+  ].join(",");
 
+  const wrapStretchLabels = root => {
+    const targets = [];
+    if (root.nodeType === Node.ELEMENT_NODE && root.matches(stretchTargetSelector)) {
+      targets.push(root);
+    }
+    if (root.querySelectorAll) {
+      targets.push(...root.querySelectorAll(stretchTargetSelector));
+    }
 
+    targets.forEach(target => {
+      [...target.childNodes].forEach(node => {
+        if (node.nodeType !== Node.TEXT_NODE || !node.textContent.trim()) return;
+        const label = document.createElement("span");
+        label.className = "stretch-text";
+        label.textContent = node.textContent;
+        node.replaceWith(label);
+      });
+    });
+  };
 
-
-
-
-
-
-// Number of trail elements
-const trailCount = 10;
-const trailElements = [];
-
-// Create trail elements
-for (let i = 0; i < trailCount; i++) {
-  const div = document.createElement('div');
-  div.classList.add('cursor-trail');
-  document.body.appendChild(div);
-  trailElements.push({ el: div, x: 0, y: 0 });
-}
-
-// Track mouse
-document.addEventListener('mousemove', e => {
-  let x = e.clientX;
-  let y = e.clientY;
-
-  trailElements.forEach((trail, i) => {
-    setTimeout(() => {
-      trail.el.style.transform = `translate(${x}px, ${y}px)`;
-      trail.el.style.opacity = `${1 - i / trailCount}`; // fade out
-    }, i * 30); // stagger delay for trailing effect
+  wrapStretchLabels(document.body);
+  const stretchLabelObserver = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      wrapStretchLabels(mutation.target);
+      mutation.addedNodes.forEach(wrapStretchLabels);
+    });
   });
+  stretchLabelObserver.observe(document.body, { childList: true, subtree: true });
 });
+
+
+
+
+
+
+
+
+
+if (!document.body.classList.contains("isolation-page")) {
+  // Number of trail elements
+  const trailCount = 10;
+  const trailElements = [];
+
+  // Create trail elements
+  for (let i = 0; i < trailCount; i++) {
+    const div = document.createElement('div');
+    div.classList.add('cursor-trail');
+    document.body.appendChild(div);
+    trailElements.push({ el: div, x: 0, y: 0 });
+  }
+
+  // Track mouse
+  document.addEventListener('mousemove', e => {
+    const x = e.clientX;
+    const y = e.clientY;
+
+    trailElements.forEach((trail, i) => {
+      setTimeout(() => {
+        trail.el.style.transform = `translate(${x}px, ${y}px)`;
+        trail.el.style.opacity = `${1 - i / trailCount}`; // fade out
+      }, i * 30); // stagger delay for trailing effect
+    });
+  });
+}

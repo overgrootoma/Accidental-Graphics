@@ -2000,3 +2000,20 @@ small {
   font-style: normal;
   font-variation-settings: "ROND" 0;
 }
+
+/* Shared anti-design control language: square, tall, and typographically expanded. */
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+.file-button,
+.gallery-action,
+.home-gallery-link {
+  min-height: 48px !important;
+  border-radius: 0 !important;
+  font-family: var(--font-ui) !important;
+  font-variation-settings: "ROND" 0 !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+  text-transform: uppercase;
+}
