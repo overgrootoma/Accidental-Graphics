@@ -22,10 +22,9 @@ document.addEventListener("DOMContentLoaded", () => {
   nav.appendChild(navList);
 
   // Hamburger button
-  const menuBtn = document.createElement("div");
+  const menuBtn = document.createElement("button");
   menuBtn.id = "hamburgerMenu";
-  menuBtn.setAttribute("role", "button");
-  menuBtn.setAttribute("tabindex", "0");
+  menuBtn.type = "button";
   menuBtn.setAttribute("aria-label", "Open navigation menu");
   menuBtn.setAttribute("aria-controls", "menuDropdown");
   menuBtn.setAttribute("aria-expanded", "false");
@@ -37,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Dropdown menu
   const dropdown = document.createElement("div");
   dropdown.id = "menuDropdown";
+  dropdown.setAttribute("aria-label", "Site navigation");
 
   // Default static links
   const staticLinks = [
@@ -91,20 +91,17 @@ document.addEventListener("DOMContentLoaded", () => {
     setMenuOpen(!menuPinnedOpen, !menuPinnedOpen);
   });
 
-  menuBtn.addEventListener("keydown", event => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      menuBtn.click();
-    }
-  });
-
   // Close dropdown when clicking outside
   document.addEventListener("click", e => {
     if (!header.contains(e.target)) setMenuOpen(false, false);
   });
 
   document.addEventListener("keydown", event => {
-    if (event.key === "Escape") setMenuOpen(false, false);
+    if (event.key === "Escape") {
+      const wasOpen = dropdown.classList.contains("is-open");
+      setMenuOpen(false, false);
+      if (wasOpen) menuBtn.focus();
+    }
   });
 
   // Append elements to header
@@ -155,7 +152,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-if (!document.body.classList.contains("isolation-page")) {
+if (
+  !document.body.classList.contains("isolation-page") &&
+  window.matchMedia("(pointer: fine)").matches &&
+  !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+) {
   // Number of trail elements
   const trailCount = 10;
   const trailElements = [];
@@ -168,16 +169,30 @@ if (!document.body.classList.contains("isolation-page")) {
     trailElements.push({ el: div, x: 0, y: 0 });
   }
 
-  // Track mouse
-  document.addEventListener('mousemove', e => {
-    const x = e.clientX;
-    const y = e.clientY;
+  let targetX = 0;
+  let targetY = 0;
+  let trailFrame = 0;
 
+  const renderTrail = () => {
+    let previousX = targetX;
+    let previousY = targetY;
+    let stillMoving = false;
     trailElements.forEach((trail, i) => {
-      setTimeout(() => {
-        trail.el.style.transform = `translate(${x}px, ${y}px)`;
-        trail.el.style.opacity = `${1 - i / trailCount}`; // fade out
-      }, i * 30); // stagger delay for trailing effect
+      const follow = i === 0 ? 0.42 : 0.3;
+      trail.x += (previousX - trail.x) * follow;
+      trail.y += (previousY - trail.y) * follow;
+      if (Math.abs(previousX - trail.x) > 0.1 || Math.abs(previousY - trail.y) > 0.1) stillMoving = true;
+      previousX = trail.x;
+      previousY = trail.y;
+      trail.el.style.transform = `translate3d(${trail.x}px, ${trail.y}px, 0)`;
+      trail.el.style.opacity = `${1 - i / trailCount}`;
     });
-  });
+    trailFrame = stillMoving ? requestAnimationFrame(renderTrail) : 0;
+  };
+
+  document.addEventListener('mousemove', e => {
+    targetX = e.clientX;
+    targetY = e.clientY;
+    if (!trailFrame) trailFrame = requestAnimationFrame(renderTrail);
+  }, { passive: true });
 }

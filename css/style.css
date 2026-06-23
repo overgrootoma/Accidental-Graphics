@@ -67,6 +67,13 @@ body.app-page #main {
   overflow: hidden;
 }
 
+button:disabled,
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 body.buttonedit-page {
   overflow-x: hidden;
   overflow-y: auto;
@@ -137,6 +144,18 @@ body.buttonedit-page .buttonedit-stage canvas {
   overflow: hidden;
 }
 @media (max-width: 900px) {
+  body.app-page {
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
+
+  body.app-page #main {
+    height: auto;
+    min-height: calc(100dvh - 72px);
+    overflow: visible;
+  }
+
   #main {
     flex-direction: column;
     padding: 0 16px 24px;
@@ -218,6 +237,12 @@ body.buttonedit-page .buttonedit-stage canvas {
     box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
     overflow: visible;
     height: auto;
+  }
+
+  .canvas-stage,
+  body.app-page #main > canvas {
+    flex: none;
+    min-height: min(70dvh, 640px);
   }
 }
 
@@ -415,6 +440,8 @@ body.buttonedit-page .buttonedit-stage canvas {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  max-height: calc(100dvh - 40px);
+  overflow: hidden;
 }
 
 .sample-dialog__head {
@@ -430,6 +457,8 @@ body.buttonedit-page .buttonedit-stage canvas {
   gap: 12px;
   width: 100%;
   max-height: 60vh;
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
 }
 
@@ -477,6 +506,12 @@ body.buttonedit-page .buttonedit-stage canvas {
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.sample-dialog button:focus-visible,
+.sample-tile:focus-visible {
+  outline: 3px solid var(--blue-accent);
+  outline-offset: 2px;
 }
 
 .sample-preview {
@@ -1029,7 +1064,65 @@ input[type=range],
 
 input[type=range]:focus-visible,
 .slider:focus-visible {
-  outline: none;
+  outline: 3px solid rgba(41, 151, 255, 0.65);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+@media (max-width: 480px) {
+  body {
+    padding-top: 60px;
+  }
+
+  body.app-page #main {
+    min-height: calc(100dvh - 60px);
+  }
+
+  #main {
+    gap: 16px;
+    padding-inline: 10px;
+  }
+
+  #controls {
+    padding: 14px;
+  }
+
+  .button-row,
+  .dual-upload {
+    flex-wrap: wrap;
+  }
+
+  .button-row > *,
+  .dual-upload > * {
+    flex: 1 1 140px;
+  }
+
+  .mode-buttons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sample-modal {
+    padding: 10px;
+  }
+
+  .sample-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+
+  button:hover,
+  input[type=file]:hover,
+  input[type=number]:hover,
+  #ui button:hover {
+    animation: none;
+  }
 }
 
 input[type=range]::-webkit-slider-runnable-track,

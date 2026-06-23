@@ -4,8 +4,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Accidental Graphics</title>
-  <meta name="description" content="Tool to make accidental graphics">
+  <title>Swing · Accidental Graphics</title>
+  <meta name="description" content="Paint with a responsive pendulum brush and export the canvas.">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
   <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
@@ -15,6 +15,11 @@
     #c {
       background-color: #111;
       display: block;
+      position: fixed;
+      inset: 72px 0 0;
+      width: 100%;
+      height: calc(100dvh - 72px);
+      touch-action: none;
     }
     #ui {
       position: fixed;
@@ -154,25 +159,23 @@
     }
     @media (max-width: 768px) {
       #ui {
-        position: static;
-        width: 100%;
+        position: fixed;
+        top: auto;
+        bottom: 12px;
+        left: 10px;
+        width: calc(100% - 20px);
         max-width: none;
-        margin: 16px auto;
-        max-height: none;
-        overflow: visible;
+        margin: 0;
+        max-height: min(48dvh, 430px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
       #ui button {
         width: 100%;
       }
-      .toggle-row {
-        flex-direction: column;
-      }
-      .toggle-row button {
-        width: 100%;
-      }
       .slider-row {
-        flex-direction: column;
-        align-items: stretch;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
       }
       .slider-row label,
       .slider-row .value-label {
@@ -182,11 +185,16 @@
         width: 100%;
       }
       .action-row {
-        flex-direction: column;
-        align-items: center;
+        align-items: stretch;
       }
       .action-row button {
         width: auto;
+      }
+    }
+    @media (max-width: 480px) {
+      #c {
+        inset: 60px 0 0;
+        height: calc(100dvh - 60px);
       }
     }
   </style>
@@ -223,8 +231,10 @@
     <input type="range" id="strokeWidth" min="0" max="40" value="0" class="slider">
     <span class="value-label" id="strokeWidthLabel">0 px</span>
   </div>
-  Segments: <input type="range" id="segments" min="1" max="6" value="1" class="slider"> <span id="segmentsLabel">1</span><br>
-  Length: <input type="range" id="length" min="40" max="800" value="200" class="slider"> <span id="lengthLabel">200 px</span><br>
+  <label for="segments">Segments: <span id="segmentsLabel">1</span></label>
+  <input type="range" id="segments" min="1" max="6" value="1" class="slider">
+  <label for="length">Length: <span id="lengthLabel">200 px</span></label>
+  <input type="range" id="length" min="40" max="800" value="200" class="slider">
   <div class="toggle-row">
     <button id="stretchBtn" class="toggle-btn">Stretch: Off</button>
   </div>
@@ -255,7 +265,8 @@ const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 let W,H;
 function resize(){
-  W=window.innerWidth; H=window.innerHeight;
+  const headerHeight = document.querySelector('.site-nav')?.offsetHeight || (window.innerWidth <= 480 ? 60 : 72);
+  W=window.innerWidth; H=Math.max(1, window.innerHeight - headerHeight);
   canvas.width=W; canvas.height=H;
 }
 window.addEventListener('resize',resize); resize();
@@ -265,6 +276,7 @@ function clearCanvas(){
 clearCanvas();
 // Keyboard shortcuts
 window.addEventListener('keydown', e => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
   if (e.key.toLowerCase() === 'r') {
     // Reset canvas
     clearCanvas();
@@ -335,6 +347,7 @@ lengthInput.addEventListener('input', e=>{
 function syncToggle(btn, state, label){
   btn.textContent = `${label}: ${state ? 'On' : 'Off'}`;
   btn.classList.toggle('active', state);
+  btn.setAttribute('aria-pressed', String(state));
 }
 syncToggle(stretchBtn, stretchMode, 'Stretch');
 syncToggle(ballBtn, showBall, 'Ball');
@@ -385,7 +398,9 @@ updateSizePreview(paintSize);
 function setBallShape(shape){
   ballShape = shape;
   shapeButtons.forEach(btn=>{
-    btn.classList.toggle('active', btn.dataset.shape === shape);
+    const active = btn.dataset.shape === shape;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
   });
 }
 
@@ -438,12 +453,9 @@ function updateMousePosition(clientX, clientY){
   mouse.x = clientX - rect.left;
   mouse.y = clientY - rect.top;
 }
-window.addEventListener('mousemove', e=>{
+window.addEventListener('pointermove', e=>{
   updateMousePosition(e.clientX, e.clientY);
 });
-window.addEventListener('touchmove', e=>{
-  if(e.touches[0]){updateMousePosition(e.touches[0].clientX, e.touches[0].clientY);}
-}, {passive:true});
 
 // slinger massa's
 const gravity = 0.5;

@@ -4,8 +4,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Accidental Graphics</title>
-  <meta name="description" content="Tool to make accidental graphics">
+  <title>MotionStills · Accidental Graphics</title>
+  <meta name="description" content="Paint motion trails from video and export the combined artwork.">
   <link rel="stylesheet" href="../css/style.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -56,23 +56,24 @@
         <button id="export">Export</button>
         <button id="exportPaintOnly">Export Paint</button>
       </div>
+      <button id="exportVideo" type="button">Export Process Video</button>
       
-      <label>Motion threshold: <span id="thVal">20</span></label>
+      <label for="threshold">Motion threshold: <span id="thVal">20</span></label>
       <input id="threshold" type="range" min="1" max="100" value="100" class="slider">
 
-      <label>Brush radius (px): <span id="brushVal">28</span></label>
+      <label for="brush">Brush radius (px): <span id="brushVal">28</span></label>
       <input id="brush" type="range" min="2" max="200" value="50" class="slider">
 
-      <label>Smear length (px): <span id="smearVal">60</span></label>
+      <label for="smear">Smear length (px): <span id="smearVal">60</span></label>
       <input id="smear" type="range" min="0" max="300" value="60" class="slider">
 
-      <label>Paint intensity (alpha): <span id="alphaVal">0.7</span></label>
+      <label for="alpha">Paint intensity (alpha): <span id="alphaVal">0.7</span></label>
       <input id="alpha" type="range" min="0" max="1" step="0.01" value="0.7" class="slider">
 
-      <label>Fade per frame: <span id="fadeVal">0.985</span></label>
+      <label for="fade">Fade per frame: <span id="fadeVal">0.985</span></label>
       <input id="fade" type="range" min="0.90" max="1" step="0.0005" value="1" class="slider">
 
-      <label>Max blobs to track: <span id="countVal">5</span></label>
+      <label for="maxBlobs">Max blobs to track: <span id="countVal">5</span></label>
       <input id="maxBlobs" type="range" min="1" max="20" value="15" class="slider">
     </div>
 
@@ -123,6 +124,7 @@ const confirmVideoSampleBtn = document.getElementById('confirmVideoSampleBtn');
 const cancelVideoSampleBtn = document.getElementById('cancelVideoSampleBtn');
 const closeVideoSampleModalBtn = document.getElementById('closeVideoSampleModalBtn');
 const exportPaintOnlyBtn = document.getElementById('exportPaintOnly');
+const exportVideoBtn = document.getElementById('exportVideo');
 const controlsPanel = document.getElementById('controls');
 const stackedQuery = window.matchMedia ? window.matchMedia('(max-width: 900px)') : {matches: false};
 
@@ -155,6 +157,7 @@ let rafId = null;
 let prevBlobs = [];
 let currentVideoSource = null;
 let baseVideoLoaded = false;
+let isVideoExporting = false;
 
 // processing canvases (lower res for speed)
 const procCanvas = document.createElement('canvas');
@@ -188,6 +191,7 @@ if (!sampleVideoData.length) {
 }
 let selectedVideoSrc = null;
 let sampleAction = 'base';
+let sampleModalReturnFocus = null;
 
 function buildVideoSampleGrid() {
   if (!videoSampleGrid || videoSampleGrid.childElementCount) return;
@@ -202,6 +206,7 @@ function buildVideoSampleGrid() {
     const tile = document.createElement('button');
     tile.type = 'button';
     tile.className = 'sample-tile';
+    tile.setAttribute('aria-pressed', 'false');
     tile.dataset.src = item.src;
     const preview = document.createElement('video');
     preview.src = item.preview || item.src;
@@ -217,8 +222,12 @@ function buildVideoSampleGrid() {
     tile.appendChild(label);
     tile.addEventListener('click', () => {
       selectedVideoSrc = item.src;
-      videoSampleGrid.querySelectorAll('.sample-tile').forEach(btn => btn.classList.remove('is-selected'));
+      videoSampleGrid.querySelectorAll('.sample-tile').forEach(btn => {
+        btn.classList.remove('is-selected');
+        btn.setAttribute('aria-pressed', 'false');
+      });
       tile.classList.add('is-selected');
+      tile.setAttribute('aria-pressed', 'true');
     });
     videoSampleGrid.appendChild(tile);
   });
@@ -230,16 +239,23 @@ function openVideoSampleModal(action = 'base') {
     return;
   }
   sampleAction = action;
+  sampleModalReturnFocus = document.activeElement;
   selectedVideoSrc = null;
-  videoSampleGrid?.querySelectorAll('.sample-tile').forEach(btn => btn.classList.remove('is-selected'));
+  videoSampleGrid?.querySelectorAll('.sample-tile').forEach(btn => {
+    btn.classList.remove('is-selected');
+    btn.setAttribute('aria-pressed', 'false');
+  });
   buildVideoSampleGrid();
   videoSampleModal?.classList.add('is-open');
   videoSampleModal?.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => videoSampleGrid?.querySelector('button')?.focus());
 }
 
 function closeVideoSampleModal() {
   videoSampleModal?.classList.remove('is-open');
   videoSampleModal?.setAttribute('aria-hidden', 'true');
+  sampleModalReturnFocus?.focus?.();
+  sampleModalReturnFocus = null;
 }
 
 let playPromptVisible = true;
@@ -789,13 +805,164 @@ function processLoop(){
   rafId = requestAnimationFrame(processLoop);
 }
 
+function waitForVideoStart(){
+  if(video.currentTime <= 0.01){
+    return new Promise(resolve => requestAnimationFrame(resolve));
+  }
+  return new Promise((resolve, reject) => {
+    const onSeeked = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('Could not rewind the video.'));
+    };
+    const cleanup = () => {
+      video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener('error', onError);
+    };
+    video.addEventListener('seeked', onSeeked, {once: true});
+    video.addEventListener('error', onError, {once: true});
+    video.currentTime = 0;
+  });
+}
+
+function getRecordingType(){
+  if(typeof MediaRecorder === 'undefined') return '';
+  const types = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+    'video/mp4'
+  ];
+  return types.find(type => MediaRecorder.isTypeSupported(type)) || '';
+}
+
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function exportProcessVideo(){
+  if(isVideoExporting) return;
+  if(!baseVideoLoaded || !video.src){
+    alert('Load a video first.');
+    return;
+  }
+  if(!Number.isFinite(video.duration) || video.duration <= 0){
+    alert('The loaded video does not have a valid duration.');
+    return;
+  }
+  if(typeof canvas.captureStream !== 'function' || typeof MediaRecorder === 'undefined'){
+    alert('Video export is not supported by this browser. Try a current version of Chrome, Edge, Firefox, or Safari.');
+    return;
+  }
+
+  const mimeType = getRecordingType();
+  if(!mimeType){
+    alert('This browser cannot create a supported video file.');
+    return;
+  }
+
+  const controls = Array.from(controlsPanel.querySelectorAll('button, input, select'));
+  const previousDisabled = controls.map(control => control.disabled);
+  let recorder = null;
+  let progressHandler = null;
+  isVideoExporting = true;
+  controls.forEach(control => { control.disabled = true; });
+  exportVideoBtn.disabled = true;
+  exportVideoBtn.textContent = 'Preparing Video…';
+
+  try{
+    video.pause();
+    await waitForVideoStart();
+    resetProcessingState({clearPaint: true});
+    dispCtx.clearRect(0, 0, canvasW, canvasH);
+    dispCtx.drawImage(video, 0, 0, canvasW, canvasH);
+
+    const stream = canvas.captureStream(30);
+    const chunks = [];
+    let recorderError = null;
+    recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: 8_000_000
+    });
+    const recordingComplete = new Promise(resolve => {
+      recorder.addEventListener('dataavailable', event => {
+        if(event.data?.size) chunks.push(event.data);
+      });
+      recorder.addEventListener('stop', resolve, {once: true});
+      recorder.addEventListener('error', event => {
+        recorderError = event.error || new Error('Video recording failed.');
+      }, {once: true});
+    });
+    const playbackComplete = new Promise((resolve, reject) => {
+      const onEnded = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error('Video playback failed during export.'));
+      };
+      const cleanup = () => {
+        video.removeEventListener('ended', onEnded);
+        video.removeEventListener('error', onError);
+      };
+      video.addEventListener('ended', onEnded, {once: true});
+      video.addEventListener('error', onError, {once: true});
+    });
+
+    progressHandler = () => {
+      const progress = Math.min(100, Math.round((video.currentTime / video.duration) * 100));
+      exportVideoBtn.textContent = `Exporting Video ${progress}%`;
+    };
+    video.addEventListener('timeupdate', progressHandler);
+    exportVideoBtn.textContent = 'Exporting Video 0%';
+    recorder.start(1000);
+    await video.play();
+    playBtn.setAttribute('aria-pressed', 'true');
+    if(!rafId) processLoop();
+    await playbackComplete;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    recorder.stop();
+    await recordingComplete;
+    if(recorderError) throw recorderError;
+
+    const blob = new Blob(chunks, {type: mimeType});
+    if(!blob.size) throw new Error('The exported video was empty.');
+    const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+    downloadBlob(blob, `MotionStills-process.${extension}`);
+  } catch(error){
+    console.error(error);
+    if(recorder?.state === 'recording') recorder.stop();
+    alert(error.message || 'Unable to export the process video.');
+  } finally {
+    video.pause();
+    playBtn.setAttribute('aria-pressed', 'false');
+    if(progressHandler) video.removeEventListener('timeupdate', progressHandler);
+    controls.forEach((control, index) => { control.disabled = previousDisabled[index]; });
+    exportVideoBtn.textContent = 'Export Process Video';
+    isVideoExporting = false;
+  }
+}
+
 // controls
 playBtn.addEventListener('click', ()=>{
   if(!video.src) return alert('Load a video first');
   video.play();
+  playBtn.setAttribute('aria-pressed', 'true');
   if(!rafId) processLoop();
 });
-pauseBtn.addEventListener('click', ()=>{ video.pause(); });
+pauseBtn.addEventListener('click', ()=>{
+  video.pause();
+  playBtn.setAttribute('aria-pressed', 'false');
+});
 clearBtn.addEventListener('click', ()=>{ paintCtx.clearRect(0,0,paintCanvas.width, paintCanvas.height); });
 exportBtn.addEventListener('click', ()=>{
   if(!canvas.width || !canvas.height){
@@ -833,6 +1000,7 @@ exportPaintOnlyBtn.addEventListener('click', ()=>{
     URL.revokeObjectURL(url);
   }, 'image/png');
 });
+exportVideoBtn.addEventListener('click', exportProcessVideo);
 
 // keep canvas sized nicely on window resize
 window.addEventListener('resize', ()=> {

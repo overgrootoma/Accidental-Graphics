@@ -4,8 +4,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Accidental Graphics</title>
-  <meta name="description" content="Tool to make accidental graphics">
+  <title>IMAGEine · Accidental Graphics</title>
+  <meta name="description" content="Build and export live ASCII mosaics from images and webcam video.">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -342,9 +342,12 @@ function generateAsciiSymbolDataURL(char){
 gridInput.addEventListener('input', ()=>{ gridSize = parseInt(gridInput.value,10); });
 
 let webcamStream = null;
+toggleCamBtn?.setAttribute('aria-pressed', 'false');
 function updatePreviewToggleLabel(){
   if(!videoToggleBtn || !videoPreviewWrapper) return;
-  if(videoPreviewWrapper.classList.contains('is-hidden') || videoPreviewWrapper.classList.contains('collapsed')){
+  const hidden = videoPreviewWrapper.classList.contains('is-hidden') || videoPreviewWrapper.classList.contains('collapsed');
+  videoToggleBtn.setAttribute('aria-pressed', String(!hidden));
+  if(hidden){
     videoToggleBtn.textContent = 'Show Preview';
   } else {
     videoToggleBtn.textContent = 'Hide Preview';
@@ -360,6 +363,7 @@ async function startWebcamPreview(){
     videoPreviewWrapper?.classList.remove('is-hidden');
     videoPreviewWrapper?.classList.remove('collapsed');
     if(toggleCamBtn) toggleCamBtn.textContent = 'Stop Webcam';
+    toggleCamBtn?.setAttribute('aria-pressed', 'true');
     hideWebcamPrompt();
     updatePreviewToggleLabel();
   } catch(e){
@@ -375,6 +379,7 @@ function stopWebcamPreview(){
   video.classList.add('webcam-hidden');
   videoPreviewWrapper?.classList.add('is-hidden');
   if(toggleCamBtn) toggleCamBtn.textContent = 'Start Webcam';
+  toggleCamBtn?.setAttribute('aria-pressed', 'false');
   showWebcamPrompt();
   updatePreviewToggleLabel();
 }
@@ -394,8 +399,12 @@ videoToggleBtn?.addEventListener('click', ()=>{
 toggleBaseBtn?.addEventListener('click', ()=>{
   showVideoBase = !showVideoBase;
   if(toggleBaseBtn) toggleBaseBtn.textContent = `Webcam Layer: ${showVideoBase ? 'On' : 'Off'}`;
+  toggleBaseBtn?.setAttribute('aria-pressed', String(showVideoBase));
 });
-if(toggleBaseBtn) toggleBaseBtn.textContent = `Webcam Layer: ${showVideoBase ? 'On' : 'Off'}`;
+if(toggleBaseBtn){
+  toggleBaseBtn.textContent = `Webcam Layer: ${showVideoBase ? 'On' : 'Off'}`;
+  toggleBaseBtn.setAttribute('aria-pressed', String(showVideoBase));
+}
 blendModeSelect?.addEventListener('change', ()=>{
   blendMode = blendModeSelect.value || 'source-over';
 });

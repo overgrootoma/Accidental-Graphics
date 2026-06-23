@@ -309,6 +309,7 @@
       let viewWidth = 920;
       let viewHeight = 580;
       const selectedSamples = new Set();
+      let sampleModalReturnFocus = null;
 
       function testImageLoad(src) {
         return new Promise((resolve, reject) => {
@@ -608,6 +609,7 @@
       function updatePickMode(on) {
         pickMode = on;
         pickColorBtn?.classList.toggle('is-active', pickMode);
+        pickColorBtn?.setAttribute('aria-pressed', String(pickMode));
         pickHint?.classList.toggle('is-visible', pickMode);
       }
 
@@ -633,6 +635,7 @@
           const visibilityBtn = document.createElement('button');
           visibilityBtn.type = 'button';
           visibilityBtn.textContent = layer.visible ? 'Visible' : 'Hidden';
+          visibilityBtn.setAttribute('aria-pressed', String(layer.visible));
           visibilityBtn.addEventListener('click', () => {
             layer.visible = !layer.visible;
             renderLayerList();
@@ -667,6 +670,7 @@
           const collapseBtn = document.createElement('button');
           collapseBtn.type = 'button';
           collapseBtn.textContent = layer.collapsed ? 'Expand' : 'Collapse';
+          collapseBtn.setAttribute('aria-expanded', String(!layer.collapsed));
           collapseBtn.addEventListener('click', () => {
             layer.collapsed = !layer.collapsed;
             renderLayerList();
@@ -841,6 +845,7 @@
           const tile = document.createElement('button');
           tile.type = 'button';
           tile.className = 'sample-tile';
+          tile.setAttribute('aria-pressed', 'false');
           tile.dataset.src = item.src;
           tile.dataset.label = item.label || `Sample ${index + 1}`;
           const img = document.createElement('img');
@@ -856,9 +861,11 @@
             if (selectedSamples.has(key)) {
               selectedSamples.delete(key);
               tile.classList.remove('is-selected');
+              tile.setAttribute('aria-pressed', 'false');
             } else {
               selectedSamples.add(key);
               tile.classList.add('is-selected');
+              tile.setAttribute('aria-pressed', 'true');
             }
           });
           sampleGrid.appendChild(tile);
@@ -871,17 +878,24 @@
           return;
         }
         selectedSamples.clear();
-        sampleGrid?.querySelectorAll('.sample-tile').forEach((tile) => tile.classList.remove('is-selected'));
+        sampleModalReturnFocus = document.activeElement;
+        sampleGrid?.querySelectorAll('.sample-tile').forEach((tile) => {
+          tile.classList.remove('is-selected');
+          tile.setAttribute('aria-pressed', 'false');
+        });
         buildSampleGrid();
         sampleModal?.classList.add('is-open');
         sampleModal?.setAttribute('aria-hidden', 'false');
         document.body.classList.add('modal-open');
+        requestAnimationFrame(() => sampleGrid?.querySelector('button')?.focus());
       }
 
       function closeSampleModal() {
         sampleModal?.classList.remove('is-open');
         sampleModal?.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('modal-open');
+        sampleModalReturnFocus?.focus?.();
+        sampleModalReturnFocus = null;
       }
 
       fileInput?.addEventListener('change', (e) => {

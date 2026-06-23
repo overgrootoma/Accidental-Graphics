@@ -4,8 +4,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Accidental Graphics</title>
-  <meta name="description" content="Tool to make accidental graphics">
+  <title>PhotoGrid · Accidental Graphics</title>
+  <meta name="description" content="Warp a photo into animated grids and export the result.">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,25 +41,25 @@
       <input type="file" id="imageInput" accept="image/*">
     </label>
 
-    <label>Grid Resolution</label>
+    <label for="gridRes">Grid Resolution</label>
     <input type="range" id="gridRes" min="5" max="25" value="15" class="slider">
 
-    <label>Distortion</label>
+    <label for="distortion">Distortion</label>
     <input type="range" id="distortion" min="0" max="1" step="0.01" value="0.3" class="slider">
 
-    <label>Animation Speed</label>
+    <label for="speed">Animation Speed</label>
     <input type="range" id="speed" min="0" max="5" step="0.1" value="1" class="slider">
 
     <div class="button-row">
       <button type="button" id="pauseBtn">Pause Animation</button>
     </div>
 
-    <label>Animation Phase</label>
+    <label for="timeScrub">Animation Phase</label>
     <input type="range" id="timeScrub" min="0" max="1" step="0.001" value="0" class="slider">
 
-    <label>Animation Mode</label>
-    <div class="mode-buttons">
-      <button type="button" data-mode="wave" class="mode-btn is-active">Wave</button>
+    <label id="animationModeLabel">Animation Mode</label>
+    <div class="mode-buttons" role="group" aria-labelledby="animationModeLabel">
+      <button type="button" data-mode="wave" class="mode-btn is-active" aria-pressed="true">Wave</button>
       <button type="button" data-mode="chaotic" class="mode-btn">Chaos</button>
       <button type="button" data-mode="tide" class="mode-btn">Tide</button>
       <button type="button" data-mode="spiral" class="mode-btn">Spiral</button>
@@ -73,7 +73,7 @@
       <button type="button" data-mode="drift" class="mode-btn">Drift</button>
     </div>
 
-    <label>Grid Line Thickness</label>
+    <label for="lineThickness">Grid Line Thickness</label>
     <input type="range" id="lineThickness" min="0" max="5" step="0.1" value="1" class="slider">
 
     <div class="button-row">
@@ -125,7 +125,9 @@ let isPaused = false;
 let isScrubbing = false;
 if(toggleGridBtn){
   toggleGridBtn.textContent = showGrid ? 'Hide Grid' : 'Show Grid';
+  toggleGridBtn.setAttribute('aria-pressed', String(!showGrid));
 }
+pauseBtn?.setAttribute('aria-pressed', 'false');
 
 let points = [];
 let mouse = {x:0, y:0};
@@ -197,7 +199,7 @@ if(sampleCarousel?.hasSamples){
   sampleBtn?.setAttribute('disabled','true');
 }
 
-canvas.addEventListener('mousemove', e=>{
+canvas.addEventListener('pointermove', e=>{
   const rect = canvas.getBoundingClientRect();
   mouse.x = e.clientX - rect.left;
   mouse.y = e.clientY - rect.top;
@@ -434,9 +436,14 @@ gridResSlider.oninput = ()=>{gridRes = +gridResSlider.value; buildGrid();};
 distortionSlider.oninput = ()=>distortion = +distortionSlider.value;
 speedSlider.oninput = ()=>speed = +speedSlider.value;
 modeButtons.forEach((btn)=>{
+  if(!btn.hasAttribute('aria-pressed')) btn.setAttribute('aria-pressed', 'false');
   btn.addEventListener('click', ()=>{
     mode = btn.dataset.mode;
-    modeButtons.forEach((b)=>b.classList.toggle('is-active', b === btn));
+    modeButtons.forEach((b)=>{
+      const active = b === btn;
+      b.classList.toggle('is-active', active);
+      b.setAttribute('aria-pressed', String(active));
+    });
   });
 });
 lineThicknessSlider.oninput = ()=>lineThickness = +lineThicknessSlider.value;
@@ -444,6 +451,7 @@ lineThicknessSlider.oninput = ()=>lineThickness = +lineThicknessSlider.value;
 pauseBtn?.addEventListener('click', ()=>{
   isPaused = !isPaused;
   pauseBtn.textContent = isPaused ? 'Resume Animation' : 'Pause Animation';
+  pauseBtn.setAttribute('aria-pressed', String(isPaused));
 });
 
 const PHASE_RANGE = Math.PI * 4;
@@ -468,6 +476,7 @@ exportBtn?.addEventListener('click', ()=>{
 toggleGridBtn?.addEventListener('click', ()=>{
   showGrid = !showGrid;
   toggleGridBtn.textContent = showGrid ? 'Hide Grid' : 'Show Grid';
+  toggleGridBtn.setAttribute('aria-pressed', String(!showGrid));
 });
 
 animate();
