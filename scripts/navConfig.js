@@ -1,7 +1,7 @@
 // navConfig.js
 const ACTIVE_APPS = [
   { name: "Isolation", url: "apps/Isolation/index.html", year: 2026 },
-  { name: "Color Range Lab", url: "apps/ColorRangeLab.html", year: 2025 },
+  { name: "Color Range", url: "apps/ColorRangeLab.html", year: 2025 },
   { name: "MotionStills", url: "apps/MotionStills.html", year: 2025 },
   { name: "Swing", url: "apps/Swing.html", year: 2025 },
   { name: "IMAGEine", url: "apps/IMAGEine.html", year: 2025 },

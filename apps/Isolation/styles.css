@@ -74,7 +74,7 @@ input[type="range"] {
 
 .app {
   display: grid;
-  grid-template-columns: 390px minmax(0, 1fr);
+  grid-template-columns: 420px minmax(0, 1fr);
   height: calc(100dvh - 72px);
   min-height: 0;
   border-top: 1px solid var(--rule);

@@ -16,70 +16,88 @@
   <script defer src="../scripts/navMenu.js"></script>
 </head>
 
-<body class="app-page">
+<body class="app-page panel-ui-page">
 
   <!-- Main layout: sidebar links + canvas rechts -->
 <div id="main">
   <!-- Controls / sidebar -->
   <div id="controls">
-    <h1>PhotoGrid</h1>
-    <p class="app-description">Warp a loaded photo into animated rectangles, tweaking grids, distortion and rhythm for rhythmic compositions.</p>
-    <div class="sample-loader sample-loader--carousel">
-      <label>Use a sample image</label>
-      <div class="sample-carousel-controls">
-        <button type="button" id="photoGridSamplePrev" aria-label="Previous sample">&#8592;</button>
-        <span class="sample-carousel-name" id="photoGridSampleName">Sample 01</span>
-        <button type="button" id="photoGridSampleNext" aria-label="Next sample">&#8594;</button>
+    <div class="panel-ui-header">
+      <div>
+        <p class="motion-eyebrow">PhotoGrid</p>
+        <h1>Settings</h1>
       </div>
-      <div class="sample-preview" id="photoGridSamplePreview"></div>
-      <div class="sample-loader__actions">
-        <button type="button" id="photoGridSampleBtn">Load sample</button>
+      <label class="file-button file-button--full">
+        Upload Image
+        <input type="file" id="imageInput" accept="image/*">
+      </label>
+      <div class="motion-primary-actions" aria-label="Main actions">
+        <button type="button" id="pauseBtn">Pause Animation</button>
+        <button type="button" id="exportBtn">Export PNG</button>
       </div>
     </div>
-    <label class="file-button file-button--full">
-      Upload Image
-      <input type="file" id="imageInput" accept="image/*">
-    </label>
 
-    <label for="gridRes">Grid Resolution</label>
-    <input type="range" id="gridRes" min="5" max="25" value="15" class="slider">
+    <details class="motion-group">
+      <summary>Samples</summary>
+      <div class="motion-group-body">
+        <div class="sample-loader sample-loader--carousel">
+          <label>Use a sample image</label>
+          <div class="sample-carousel-controls">
+            <button type="button" id="photoGridSamplePrev" aria-label="Previous sample">&#8592;</button>
+            <span class="sample-carousel-name" id="photoGridSampleName">Sample 01</span>
+            <button type="button" id="photoGridSampleNext" aria-label="Next sample">&#8594;</button>
+          </div>
+          <div class="sample-preview" id="photoGridSamplePreview"></div>
+          <div class="sample-loader__actions">
+            <button type="button" id="photoGridSampleBtn">Load sample</button>
+          </div>
+        </div>
+      </div>
+    </details>
 
-    <label for="distortion">Distortion</label>
-    <input type="range" id="distortion" min="0" max="1" step="0.01" value="0.3" class="slider">
+    <details class="motion-group">
+      <summary>Grid</summary>
+      <div class="motion-group-body">
+        <label for="gridRes">Grid Resolution</label>
+        <input type="range" id="gridRes" min="5" max="25" value="15" class="slider">
+        <label for="lineThickness">Grid Line Thickness</label>
+        <input type="range" id="lineThickness" min="0" max="5" step="0.1" value="1" class="slider">
+        <button type="button" id="toggleGridBtn">Hide Grid</button>
+      </div>
+    </details>
 
-    <label for="speed">Animation Speed</label>
-    <input type="range" id="speed" min="0" max="5" step="0.1" value="1" class="slider">
+    <details class="motion-group">
+      <summary>Animation</summary>
+      <div class="motion-group-body">
+        <label for="distortion">Distortion</label>
+        <input type="range" id="distortion" min="0" max="1" step="0.01" value="0.3" class="slider">
+        <label for="speed">Animation Speed</label>
+        <input type="range" id="speed" min="0" max="5" step="0.1" value="1" class="slider">
+        <label for="timeScrub">Animation Phase</label>
+        <input type="range" id="timeScrub" min="0" max="1" step="0.001" value="0" class="slider">
+      </div>
+    </details>
 
-    <div class="button-row">
-      <button type="button" id="pauseBtn">Pause Animation</button>
-    </div>
-
-    <label for="timeScrub">Animation Phase</label>
-    <input type="range" id="timeScrub" min="0" max="1" step="0.001" value="0" class="slider">
-
-    <label id="animationModeLabel">Animation Mode</label>
-    <div class="mode-buttons" role="group" aria-labelledby="animationModeLabel">
-      <button type="button" data-mode="wave" class="mode-btn is-active" aria-pressed="true">Wave</button>
-      <button type="button" data-mode="chaotic" class="mode-btn">Chaos</button>
-      <button type="button" data-mode="tide" class="mode-btn">Tide</button>
-      <button type="button" data-mode="spiral" class="mode-btn">Spiral</button>
-      <button type="button" data-mode="vortex" class="mode-btn">Vortex</button>
-      <button type="button" data-mode="ripple-shift" class="mode-btn">Ripple</button>
-      <button type="button" data-mode="pulse" class="mode-btn">Pulse</button>
-      <button type="button" data-mode="shear" class="mode-btn">Shear</button>
-      <button type="button" data-mode="orbit" class="mode-btn">Orbit</button>
-      <button type="button" data-mode="fold" class="mode-btn">Fold</button>
-      <button type="button" data-mode="glitch" class="mode-btn">Glitch</button>
-      <button type="button" data-mode="drift" class="mode-btn">Drift</button>
-    </div>
-
-    <label for="lineThickness">Grid Line Thickness</label>
-    <input type="range" id="lineThickness" min="0" max="5" step="0.1" value="1" class="slider">
-
-    <div class="button-row">
-      <button type="button" id="exportBtn">Export PNG</button>
-      <button type="button" id="toggleGridBtn">Hide Grid</button>
-    </div>
+    <details class="motion-group">
+      <summary>Modes</summary>
+      <div class="motion-group-body">
+        <label id="animationModeLabel">Animation Mode</label>
+        <div class="mode-buttons" role="group" aria-labelledby="animationModeLabel">
+          <button type="button" data-mode="wave" class="mode-btn is-active" aria-pressed="true">Wave</button>
+          <button type="button" data-mode="chaotic" class="mode-btn">Chaos</button>
+          <button type="button" data-mode="tide" class="mode-btn">Tide</button>
+          <button type="button" data-mode="spiral" class="mode-btn">Spiral</button>
+          <button type="button" data-mode="vortex" class="mode-btn">Vortex</button>
+          <button type="button" data-mode="ripple-shift" class="mode-btn">Ripple</button>
+          <button type="button" data-mode="pulse" class="mode-btn">Pulse</button>
+          <button type="button" data-mode="shear" class="mode-btn">Shear</button>
+          <button type="button" data-mode="orbit" class="mode-btn">Orbit</button>
+          <button type="button" data-mode="fold" class="mode-btn">Fold</button>
+          <button type="button" data-mode="glitch" class="mode-btn">Glitch</button>
+          <button type="button" data-mode="drift" class="mode-btn">Drift</button>
+        </div>
+      </div>
+    </details>
   </div>
 
   <!-- Canvas rechts -->

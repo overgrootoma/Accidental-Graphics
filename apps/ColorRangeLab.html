@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Color Range Lab · Accidental Graphics</title>
+  <title>Color Range · Accidental Graphics</title>
   <meta name="description" content="Extract, paint, and layer color bands from multiple images.">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
@@ -209,13 +209,14 @@
 
   </style>
 </head>
-<body class="app-page">
+<body class="app-page panel-ui-page">
   <div id="main">
     <div id="controls">
-      <h1>Color Range Lab</h1>
-      <p class="app-description">Pull color bands out of multiple images, paint them onto a fresh canvas, and stack the results with blend modes.</p>
-
-      <div class="control-stack">
+      <div class="panel-ui-header">
+        <div>
+          <p class="motion-eyebrow">Color Range</p>
+          <h1>Settings</h1>
+        </div>
         <div class="button-row sample-buttons">
           <label class="file-button file-button--full">
             Import Image
@@ -226,28 +227,29 @@
         <button id="pickColorBtn" type="button">Pick a color from the canvas</button>
       </div>
 
-      <div class="panel">
-      
+      <details class="motion-group">
+        <summary>Layers</summary>
+        <div class="motion-group-body">
         <div class="layer-list" id="layerList">
           <p class="muted">Drop in a still or load a sample to start painting.</p>
         </div>
-      </div>
-
-      <div class="panel export-panel">
-        <div class="panel-head">
-          <span>Export</span>
-          <span>PNG</span>
         </div>
+      </details>
+
+      <details class="motion-group">
+        <summary>Export</summary>
+        <div class="motion-group-body export-panel">
         <div class="button-row">
           <button id="exportBtn" type="button">Export canvas</button>
           <button id="clearBtn" type="button">Reset</button>
         </div>
         <p class="muted" style="margin-top: 10px;">Visible layers are flattened with their blend modes and opacity.</p>
-      </div>
+        </div>
+      </details>
     </div>
 
     <div class="canvas-stage">
-      <canvas id="canvas" aria-label="Color extraction canvas"></canvas>
+      <canvas id="canvas" aria-label="Color Range canvas"></canvas>
       <div class="stage-overlay" id="pickHint">Click to pick a color</div>
     </div>
   </div>

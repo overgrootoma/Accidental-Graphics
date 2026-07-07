@@ -733,27 +733,13 @@ button:hover,
 input[type=file]:hover,
 input[type=number]:hover,
 #ui button:hover {
-  background: linear-gradient(270deg, var(--blue-accent), #0f0070, var(--blue-accent), #0f0070);
-  background-size: 400% 400%;
-  animation: gradientMove 4s ease infinite;
-  color: #ffffff;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
   box-shadow:
     0 2px 6px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
   transform: translateY(-1px);
 }
-@keyframes gradientMove {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
 .file-button,
 button.file-button {
   background: rgba(255, 255, 255, 0.08);
@@ -1182,6 +1168,529 @@ input[type=range]:active::-moz-range-thumb,
 .slider:active::-moz-range-thumb {
   transform: scale(1.05);
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* =========================================================
+   MOTION STILLS BLACK PANEL UI
+========================================================= */
+
+body.motion-page {
+  background: #000;
+  color: #fff;
+}
+
+body.motion-page #main {
+  gap: 0;
+  padding: 0 0 32px;
+  border-top: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+body.motion-page #controls.motion-controls {
+  flex: 0 0 420px;
+  width: min(100%, 420px);
+  height: calc(100dvh - 72px);
+  padding: 0;
+  gap: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.28);
+  background: #000;
+}
+
+body.motion-page #controls.motion-controls,
+body.motion-page #controls.motion-controls *,
+body.panel-ui-page #controls,
+body.panel-ui-page #controls * {
+  box-sizing: border-box;
+}
+
+.motion-panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+  background: #000;
+}
+
+.motion-eyebrow,
+.motion-muted,
+.motion-meter {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.motion-eyebrow {
+  text-transform: uppercase;
+}
+
+.motion-page h1 {
+  margin: 0;
+  color: #fff;
+  font-size: 22px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.motion-file-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  min-height: 34px;
+  width: 100%;
+  padding: 6px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 0;
+  color: #fff;
+  background: #000;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.motion-file-button:hover,
+.motion-file-button:focus-within {
+  background: #fff;
+  color: #000;
+}
+
+.motion-file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.motion-primary-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  border-bottom: 0;
+  background: #000;
+}
+
+body.motion-page .motion-primary-actions button {
+  width: auto;
+  min-width: 0;
+  height: 34px;
+  min-height: 34px;
+  padding: 6px 5px;
+  line-height: 1.1;
+  white-space: normal;
+}
+
+body.motion-page button,
+body.motion-page input[type="number"],
+body.motion-page select {
+  min-height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 0;
+  background: #000;
+  color: #fff;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+body.motion-page button {
+  padding: 7px 9px;
+}
+
+body.motion-page button:hover,
+body.motion-page button:focus-visible {
+  background: #fff;
+  color: #000;
+  transform: none;
+  box-shadow: none;
+}
+
+.motion-group {
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.motion-group > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 16px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.motion-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.motion-group > summary::after {
+  content: "+";
+  font-size: 18px;
+}
+
+.motion-group[open] > summary::after {
+  content: "-";
+}
+
+.motion-group-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.motion-control {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+}
+
+.motion-control label,
+.motion-control output,
+.motion-color-row label,
+.motion-check,
+.motion-meter,
+.motion-muted {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+}
+
+.motion-control output,
+.motion-meter {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.motion-check,
+.motion-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+  gap: 10px;
+}
+
+.motion-check {
+  justify-content: flex-start;
+}
+
+.motion-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #fff;
+}
+
+.motion-color-row input[type="color"] {
+  width: 48px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 0;
+  background: #000;
+}
+
+.motion-layer-list {
+  display: grid;
+  gap: 8px;
+}
+
+.motion-layer {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+}
+
+.motion-layer.is-active {
+  border-color: #fff;
+}
+
+.motion-layer__title {
+  justify-content: flex-start;
+  width: 100%;
+  text-align: left;
+}
+
+.motion-layer__actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+body.motion-page .canvas-stage {
+  background: #000;
+  padding: 0;
+}
+
+body.motion-page #canvas {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: calc(100dvh - 104px);
+}
+
+@media (max-width: 900px) {
+  body.motion-page {
+    height: auto;
+    overflow-y: auto;
+  }
+
+  body.motion-page #main {
+    min-height: calc(100dvh - 60px);
+    padding-bottom: 32px;
+  }
+
+  body.motion-page #controls.motion-controls {
+    flex: none;
+    width: 100%;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+    overflow: visible;
+  }
+
+  .motion-primary-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.motion-page button {
+    min-height: 40px;
+    padding-inline: 6px;
+  }
+
+  body.motion-page .canvas-stage {
+    min-height: 55dvh;
+    padding: 10px;
+  }
+
+  body.motion-page #canvas {
+    max-height: 58dvh;
+  }
+}
+
+@media (max-width: 520px) {
+  .motion-control {
+    grid-template-columns: 72px minmax(0, 1fr) 42px;
+    gap: 8px;
+  }
+
+  .motion-layer__actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.motion-page .motion-primary-actions button {
+    min-height: 36px;
+  }
+}
+
+/* Shared black panel UI for active app pages except Swing */
+body.panel-ui-page {
+  background: #000;
+  color: #fff;
+}
+
+body.panel-ui-page #main {
+  gap: 0;
+  padding: 0 0 32px;
+  border-top: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+body.panel-ui-page #controls {
+  flex: 0 0 420px;
+  width: min(100%, 420px);
+  height: calc(100dvh - 72px);
+  padding: 0;
+  gap: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.28);
+  background: #000;
+  border-radius: 0;
+  box-shadow: none;
+  color: #fff;
+}
+
+.panel-ui-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+  background: #000;
+}
+
+.panel-ui-hidden {
+  display: none !important;
+}
+
+body.panel-ui-page .file-button,
+body.panel-ui-page button.file-button,
+body.panel-ui-page button,
+body.panel-ui-page select,
+body.panel-ui-page input[type="number"],
+body.panel-ui-page input[type="file"] {
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 0;
+  background: #000;
+  color: #fff;
+  box-shadow: none;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+
+body.panel-ui-page button,
+body.panel-ui-page .file-button {
+  min-height: 34px;
+  padding: 7px 9px;
+}
+
+body.panel-ui-page button:hover,
+body.panel-ui-page button:focus-visible,
+body.panel-ui-page .file-button:hover,
+body.panel-ui-page .file-button:focus-visible {
+  background: #fff;
+  color: #000;
+  transform: none;
+  box-shadow: none;
+}
+
+body.panel-ui-page #controls label,
+body.panel-ui-page #controls button,
+body.panel-ui-page #controls input[type="range"],
+body.panel-ui-page #controls input[type="number"],
+body.panel-ui-page #controls select {
+  width: 100%;
+}
+
+body.panel-ui-page .motion-primary-actions button {
+  width: auto;
+  min-width: 0;
+  padding: 6px 5px;
+  white-space: normal;
+}
+
+body.panel-ui-page .button-row {
+  gap: 6px;
+}
+
+body.panel-ui-page .mode-buttons {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+body.panel-ui-page .mode-btn {
+  border-radius: 0;
+  background: #000;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: none;
+}
+
+body.panel-ui-page .mode-btn:hover,
+body.panel-ui-page .mode-btn:focus-visible,
+body.panel-ui-page .mode-btn.is-active {
+  background: #fff;
+  color: #000;
+  border-color: #fff;
+  box-shadow: none;
+  transform: none;
+}
+
+body.panel-ui-page .layer-card,
+body.panel-ui-page .imgOrderItem,
+body.panel-ui-page #imgOrderContainer,
+body.panel-ui-page .img-order-placeholder,
+body.panel-ui-page .sample-preview {
+  border-radius: 0;
+  border-color: rgba(255, 255, 255, 0.32);
+  background: #000;
+  box-shadow: none;
+}
+
+body.panel-ui-page .layer-card.is-active {
+  border-color: #fff;
+  box-shadow: none;
+}
+
+body.panel-ui-page .layer-card__actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+body.panel-ui-page .focus-row input[type="color"],
+body.panel-ui-page input[type="color"] {
+  border-radius: 0;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: #000;
+}
+
+body.panel-ui-page .canvas-stage,
+body.panel-ui-page #main > canvas {
+  background: #000;
+  padding: 0;
+}
+
+@media (max-width: 900px) {
+  body.panel-ui-page {
+    height: auto;
+    overflow-y: auto;
+  }
+
+  body.panel-ui-page #main {
+    min-height: calc(100dvh - 60px);
+    padding-bottom: 32px;
+  }
+
+  body.panel-ui-page #controls {
+    flex: none;
+    width: 100%;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+    overflow: visible;
+  }
+
+  body.panel-ui-page button {
+    min-height: 40px;
+    padding-inline: 6px;
+  }
+
+  body.panel-ui-page .canvas-stage,
+  body.panel-ui-page #main > canvas {
+    min-height: 55dvh;
+  }
+
+  body.panel-ui-page .canvas-stage {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  body.panel-ui-page .motion-primary-actions,
+  body.panel-ui-page .layer-card__actions,
+  body.panel-ui-page .mode-buttons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 

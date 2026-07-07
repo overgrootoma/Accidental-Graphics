@@ -16,65 +16,130 @@
   <script defer src="../scripts/navMenu.js"></script>
 </head>
 
-<body class="app-page">
+<body class="app-page motion-page">
 
   <div id="main">
     <!-- Left: Controls -->
-    <div id="controls">
-      <h1>MotionStills</h1>
-
-<p class="app-description">
-        MotionStills paints motion trails from any video. Upload a base clip, hit play to generate strokes,
-        then optionally layer more videos and export the combined artwork or the raw paint layer.
-      </p>
-
-     
-      <div class="sample-loader sample-loader--carousel">
-        <label>Try a sample clip</label>
-        <div class="sample-loader__actions">
-          <button type="button" id="motionSampleBaseBtn" class="file-button file-button--full">Load as base</button>
-          <button type="button" id="motionSampleLayerBtn" class="file-button file-button--full">Layer sample</button>
+    <div id="controls" class="motion-controls">
+      <div class="motion-panel-header">
+        <div>
+          <p class="motion-eyebrow">MotionStills</p>
+          <h1>Settings</h1>
         </div>
-      </div>
-      <div class="dual-upload">
-        <label class="file-button file-button--full">
-          <span>Import Video</span>
+        <label class="motion-file-button motion-file-button--primary">
+          <span>Import / Add Layer</span>
           <input id="file" type="file" accept="video/*">
         </label>
-        <label class="file-button file-button--full">
-          <span>Add Video Layer</span>
-          <input id="layerVideoFile" type="file" accept="video/*">
-        </label>
+
+        <div class="motion-primary-actions" aria-label="Main actions">
+          <button id="play" type="button">Play</button>
+          <button id="pause" type="button">Pause</button>
+          <button id="clear" type="button">Clear Canvas</button>
+          <button id="export" type="button">Export PNG</button>
+        </div>
       </div>
 
-      <div class="button-row">
-        <button id="play">Play</button>
-        <button id="pause">Pause</button>
-      </div>
-      <button id="clear">Clear Paint</button>
-      <div class="button-row">
-        <button id="export">Export</button>
-        <button id="exportPaintOnly">Export Paint</button>
-      </div>
-      <button id="exportVideo" type="button">Export Process Video</button>
-      
-      <label for="threshold">Motion threshold: <span id="thVal">20</span></label>
-      <input id="threshold" type="range" min="1" max="100" value="100" class="slider">
+      <details class="motion-group">
+        <summary>Layers</summary>
+        <div class="motion-group-body">
+          <div class="motion-layer-list" id="layerList"></div>
+          <p class="motion-meter" id="layerStatus">No video loaded</p>
+        </div>
+      </details>
 
-      <label for="brush">Brush radius (px): <span id="brushVal">28</span></label>
-      <input id="brush" type="range" min="2" max="200" value="50" class="slider">
+      <details class="motion-group">
+        <summary>Samples</summary>
+        <div class="motion-group-body">
+          <div class="button-row">
+            <button type="button" id="motionSampleBaseBtn">Load Sample</button>
+            <button type="button" id="motionSampleLayerBtn">Layer Sample</button>
+          </div>
+        </div>
+      </details>
 
-      <label for="smear">Smear length (px): <span id="smearVal">60</span></label>
-      <input id="smear" type="range" min="0" max="300" value="60" class="slider">
+      <details class="motion-group">
+        <summary>Outcome</summary>
+        <div class="motion-group-body">
+          <div class="motion-control">
+            <label for="threshold">Threshold</label>
+            <input id="threshold" type="range" min="1" max="255" value="100" class="slider">
+            <output id="thVal">100</output>
+          </div>
+          <div class="motion-control">
+            <label for="brush">Brush</label>
+            <input id="brush" type="range" min="1" max="420" value="50" class="slider">
+            <output id="brushVal">50</output>
+          </div>
+          <div class="motion-control">
+            <label for="smear">Smear</label>
+            <input id="smear" type="range" min="0" max="900" value="60" class="slider">
+            <output id="smearVal">60</output>
+          </div>
+          <div class="motion-control">
+            <label for="alpha">Intensity</label>
+            <input id="alpha" type="range" min="0" max="2" step="0.01" value="0.7" class="slider">
+            <output id="alphaVal">0.7</output>
+          </div>
+          <div class="motion-control">
+            <label for="fade">Fade</label>
+            <input id="fade" type="range" min="0.70" max="1" step="0.0005" value="1" class="slider">
+            <output id="fadeVal">1</output>
+          </div>
+          <div class="motion-control">
+            <label for="maxBlobs">Objects</label>
+            <input id="maxBlobs" type="range" min="1" max="80" value="15" class="slider">
+            <output id="countVal">15</output>
+          </div>
+        </div>
+      </details>
 
-      <label for="alpha">Paint intensity (alpha): <span id="alphaVal">0.7</span></label>
-      <input id="alpha" type="range" min="0" max="1" step="0.01" value="0.7" class="slider">
+      <details class="motion-group">
+        <summary>Advanced</summary>
+        <div class="motion-group-body">
+          <label class="motion-check">
+            <input id="showVideoBackground" type="checkbox" checked>
+            <span>Show video background</span>
+          </label>
+          <label class="motion-check">
+            <input id="trailGlow" type="checkbox" checked>
+            <span>Color trail glow</span>
+          </label>
+          <label class="motion-check">
+            <input id="strokeEnabled" type="checkbox">
+            <span>Stroke tracked objects</span>
+          </label>
+          <div class="motion-color-row">
+            <label for="strokeColor">Stroke Color</label>
+            <input id="strokeColor" type="color" value="#ffffff">
+          </div>
+          <div class="motion-control">
+            <label for="strokeWidth">Stroke</label>
+            <input id="strokeWidth" type="range" min="0.5" max="80" step="0.5" value="6" class="slider">
+            <output id="strokeWidthVal">6</output>
+          </div>
+          <div class="motion-control">
+            <label for="stampLimit">Stamps</label>
+            <input id="stampLimit" type="range" min="1" max="90" value="30" class="slider">
+            <output id="stampLimitVal">30</output>
+          </div>
+          <div class="motion-control">
+            <label for="motionNoise">Texture</label>
+            <input id="motionNoise" type="range" min="0" max="1" step="0.01" value="0.1" class="slider">
+            <output id="motionNoiseVal">0.1</output>
+          </div>
+        </div>
+      </details>
 
-      <label for="fade">Fade per frame: <span id="fadeVal">0.985</span></label>
-      <input id="fade" type="range" min="0.90" max="1" step="0.0005" value="1" class="slider">
-
-      <label for="maxBlobs">Max blobs to track: <span id="countVal">5</span></label>
-      <input id="maxBlobs" type="range" min="1" max="20" value="15" class="slider">
+      <details class="motion-group">
+        <summary>Export</summary>
+        <div class="motion-group-body">
+          <button id="exportTransparent" type="button">PNG Transparent</button>
+          <button id="exportOpaque" type="button">PNG Black Background</button>
+          <button id="exportPaintOnly" type="button">Active Layer PNG</button>
+          <button id="exportLayers" type="button">All Layers Separate</button>
+          <button id="exportVideo" type="button">Export Process Video</button>
+        </div>
+      </details>
     </div>
 
     <!-- Right: Canvas -->
@@ -115,7 +180,6 @@ const playBtn = document.getElementById('play');
 const pauseBtn = document.getElementById('pause');
 const clearBtn = document.getElementById('clear');
 const exportBtn = document.getElementById('export');
-const layerVideoInput = document.getElementById('layerVideoFile');
 const sampleBaseBtn = document.getElementById('motionSampleBaseBtn');
 const sampleLayerBtn = document.getElementById('motionSampleLayerBtn');
 const videoSampleModal = document.getElementById('videoSampleModal');
@@ -124,8 +188,23 @@ const confirmVideoSampleBtn = document.getElementById('confirmVideoSampleBtn');
 const cancelVideoSampleBtn = document.getElementById('cancelVideoSampleBtn');
 const closeVideoSampleModalBtn = document.getElementById('closeVideoSampleModalBtn');
 const exportPaintOnlyBtn = document.getElementById('exportPaintOnly');
+const exportTransparentBtn = document.getElementById('exportTransparent');
+const exportOpaqueBtn = document.getElementById('exportOpaque');
+const exportLayersBtn = document.getElementById('exportLayers');
 const exportVideoBtn = document.getElementById('exportVideo');
 const controlsPanel = document.getElementById('controls');
+const layerList = document.getElementById('layerList');
+const layerStatus = document.getElementById('layerStatus');
+const showVideoBackgroundEl = document.getElementById('showVideoBackground');
+const trailGlowEl = document.getElementById('trailGlow');
+const strokeEnabledEl = document.getElementById('strokeEnabled');
+const strokeColorEl = document.getElementById('strokeColor');
+const strokeWidthEl = document.getElementById('strokeWidth');
+const strokeWidthVal = document.getElementById('strokeWidthVal');
+const stampLimitEl = document.getElementById('stampLimit');
+const stampLimitVal = document.getElementById('stampLimitVal');
+const motionNoiseEl = document.getElementById('motionNoise');
+const motionNoiseVal = document.getElementById('motionNoiseVal');
 const stackedQuery = window.matchMedia ? window.matchMedia('(max-width: 900px)') : {matches: false};
 
 const thresholdEl = document.getElementById('threshold');
@@ -158,6 +237,9 @@ let prevBlobs = [];
 let currentVideoSource = null;
 let baseVideoLoaded = false;
 let isVideoExporting = false;
+let layerIdSeed = 0;
+let activeLayerId = null;
+let motionLayers = [];
 
 // processing canvases (lower res for speed)
 const procCanvas = document.createElement('canvas');
@@ -167,8 +249,8 @@ const prevCanvas = document.createElement('canvas');
 const prevCtx = prevCanvas.getContext('2d');
 
 // painting canvas (accumulates)
-const paintCanvas = document.createElement('canvas');
-const paintCtx = paintCanvas.getContext('2d');
+let paintCanvas = document.createElement('canvas');
+let paintCtx = paintCanvas.getContext('2d');
 
 // source buffer for sampling current frame at display resolution
 const sourceCanvas = document.createElement('canvas');
@@ -192,6 +274,142 @@ if (!sampleVideoData.length) {
 let selectedVideoSrc = null;
 let sampleAction = 'base';
 let sampleModalReturnFocus = null;
+
+function nextLayerName(){
+  return motionLayers.length ? `Video Layer ${motionLayers.length + 1}` : 'Base Video';
+}
+
+function createMotionLayer(name = nextLayerName()){
+  const canvasEl = document.createElement('canvas');
+  canvasEl.width = canvasW || 1280;
+  canvasEl.height = canvasH || 720;
+  return {
+    id: `motion-layer-${++layerIdSeed}`,
+    name,
+    visible: true,
+    canvas: canvasEl,
+    ctx: canvasEl.getContext('2d')
+  };
+}
+
+function getActiveLayer(){
+  return motionLayers.find(layer => layer.id === activeLayerId) || motionLayers[0] || null;
+}
+
+function setActiveLayer(id){
+  const layer = motionLayers.find(item => item.id === id) || motionLayers[0] || null;
+  activeLayerId = layer?.id || null;
+  paintCanvas = layer?.canvas || paintCanvas;
+  paintCtx = layer?.ctx || paintCtx;
+  renderLayers();
+}
+
+function ensureActiveLayer(name){
+  let layer = getActiveLayer();
+  if(!layer){
+    layer = createMotionLayer(name);
+    motionLayers.push(layer);
+    activeLayerId = layer.id;
+  }
+  setActiveLayer(layer.id);
+  return layer;
+}
+
+function addVideoLayer(name){
+  const layer = createMotionLayer(name);
+  motionLayers.push(layer);
+  setActiveLayer(layer.id);
+  return layer;
+}
+
+function clearAllLayers(){
+  motionLayers.forEach(layer => layer.ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height));
+  renderCompositeFrame();
+}
+
+function resizeLayerCanvases(){
+  motionLayers.forEach(layer => {
+    if(layer.canvas.width === canvasW && layer.canvas.height === canvasH) return;
+    layer.canvas.width = canvasW;
+    layer.canvas.height = canvasH;
+    layer.ctx = layer.canvas.getContext('2d');
+  });
+  const active = getActiveLayer();
+  if(active){
+    paintCanvas = active.canvas;
+    paintCtx = active.ctx;
+  }
+}
+
+function renderLayers(){
+  if(!layerList) return;
+  layerList.innerHTML = '';
+  if(!motionLayers.length){
+    const empty = document.createElement('p');
+    empty.className = 'motion-muted';
+    empty.textContent = 'Import a video to create the first layer.';
+    layerList.appendChild(empty);
+    if(layerStatus) layerStatus.textContent = 'No video loaded';
+    return;
+  }
+  motionLayers.forEach((layer, index) => {
+    const item = document.createElement('div');
+    item.className = `motion-layer ${layer.id === activeLayerId ? 'is-active' : ''}`;
+    const title = document.createElement('button');
+    title.type = 'button';
+    title.className = 'motion-layer__title';
+    title.textContent = layer.name;
+    title.addEventListener('click', () => setActiveLayer(layer.id));
+
+    const actions = document.createElement('div');
+    actions.className = 'motion-layer__actions';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.textContent = layer.visible ? 'Hide' : 'Show';
+    toggle.setAttribute('aria-pressed', String(!layer.visible));
+    toggle.addEventListener('click', () => {
+      layer.visible = !layer.visible;
+      renderLayers();
+      renderCompositeFrame();
+    });
+    const up = document.createElement('button');
+    up.type = 'button';
+    up.textContent = 'Up';
+    up.disabled = index === 0;
+    up.addEventListener('click', () => {
+      const [moved] = motionLayers.splice(index, 1);
+      motionLayers.splice(index - 1, 0, moved);
+      renderLayers();
+      renderCompositeFrame();
+    });
+    const down = document.createElement('button');
+    down.type = 'button';
+    down.textContent = 'Down';
+    down.disabled = index === motionLayers.length - 1;
+    down.addEventListener('click', () => {
+      const [moved] = motionLayers.splice(index, 1);
+      motionLayers.splice(index + 1, 0, moved);
+      renderLayers();
+      renderCompositeFrame();
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Delete';
+    remove.addEventListener('click', () => {
+      motionLayers = motionLayers.filter(item => item.id !== layer.id);
+      if(activeLayerId === layer.id) activeLayerId = motionLayers[0]?.id || null;
+      setActiveLayer(activeLayerId);
+      renderCompositeFrame();
+    });
+    actions.append(toggle, up, down, remove);
+    item.append(title, actions);
+    layerList.appendChild(item);
+  });
+  if(layerStatus){
+    const activeIndex = motionLayers.findIndex(layer => layer.id === activeLayerId);
+    layerStatus.textContent = activeIndex >= 0 ? `Active: ${motionLayers[activeIndex].name}` : 'No active layer';
+  }
+}
 
 function buildVideoSampleGrid() {
   if (!videoSampleGrid || videoSampleGrid.childElementCount) return;
@@ -265,7 +483,7 @@ function hidePlayPrompt(){
   playPrompt.classList.add('hidden');
 }
 
-async function loadVideoSource(nextUrl, {preservePaint = false, cleanup} = {}){
+async function loadVideoSource(nextUrl, {preservePaint = false, cleanup, layerName} = {}){
   if(!nextUrl) return;
   const previousSource = currentVideoSource;
   const metadataPromise = new Promise((resolve, reject)=>{
@@ -284,11 +502,15 @@ async function loadVideoSource(nextUrl, {preservePaint = false, cleanup} = {}){
       const hasDisplay = displayW && displayH;
       const shouldResize = !preservePaint || !hasDisplay;
       if(shouldResize){
+        motionLayers = [];
+        activeLayerId = null;
         updatePaintSize(vw, vh);
         lockProcessingResolutionToSource(vw, vh);
+        ensureActiveLayer(layerName || 'Base Video');
         resetProcessingState({clearPaint: !preservePaint});
         baseVideoLoaded = true;
       } else {
+        addVideoLayer(layerName || nextLayerName());
         resetProcessingState({clearPaint: false});
         if(!baseVideoLoaded){
           baseVideoLoaded = true;
@@ -312,6 +534,8 @@ async function loadVideoSource(nextUrl, {preservePaint = false, cleanup} = {}){
     }
     video.pause();
     video.currentTime = 0;
+    renderLayers();
+    renderCompositeFrame();
   } catch(err){
     if(typeof cleanup === 'function'){
       cleanup();
@@ -331,6 +555,7 @@ async function prepareVideoFromFile(file, options = {}){
   const objectUrl = URL.createObjectURL(file);
   await loadVideoSource(objectUrl, {
     ...options,
+    layerName: options.layerName || file.name.replace(/\.[^.]+$/, ''),
     cleanup: () => URL.revokeObjectURL(objectUrl)
   });
 }
@@ -415,6 +640,7 @@ function updatePaintSize(newW, newH){
     paintCanvas.width = canvasW; paintCanvas.height = canvasH;
     sourceCanvas.width = canvasW; sourceCanvas.height = canvasH;
     paintCtx.clearRect(0,0,paintCanvas.width,paintCanvas.height);
+    resizeLayerCanvases();
   }
 }
 setProcessingResolution(procW, procH);
@@ -427,6 +653,10 @@ smearEl.addEventListener('input', ()=> smearVal.textContent = smearEl.value);
 alphaEl.addEventListener('input', ()=> alphaVal.textContent = alphaEl.value);
 fadeEl.addEventListener('input', ()=> fadeVal.textContent = fadeEl.value);
 maxBlobsEl.addEventListener('input', ()=> countVal.textContent = maxBlobsEl.value);
+strokeWidthEl.addEventListener('input', ()=> strokeWidthVal.textContent = strokeWidthEl.value);
+stampLimitEl.addEventListener('input', ()=> stampLimitVal.textContent = stampLimitEl.value);
+motionNoiseEl.addEventListener('input', ()=> motionNoiseVal.textContent = motionNoiseEl.value);
+showVideoBackgroundEl.addEventListener('change', renderCompositeFrame);
 
 // blob detection helper (lightweight)
 function findBlobsFromBinary(imgData, w, h, maxBlobs){
@@ -494,35 +724,11 @@ fileInput.addEventListener('change', async (e)=>{
   const file = e.target.files && e.target.files[0];
   if(!file) return;
   try{
-    await prepareVideoFromFile(file, {preservePaint: false});
+    await prepareVideoFromFile(file, {preservePaint: baseVideoLoaded});
   } catch(err){
     alert(err.message);
   } finally {
     fileInput.value = '';
-  }
-});
-layerVideoInput.addEventListener('click', e=>{
-  if(!baseVideoLoaded){
-    e.preventDefault();
-    alert('Load a base video first.');
-    return;
-  }
-  layerVideoInput.value = '';
-});
-layerVideoInput.addEventListener('change', async ()=>{
-  if(!baseVideoLoaded){
-    layerVideoInput.value = '';
-    alert('Load a base video first.');
-    return;
-  }
-  const file = layerVideoInput.files && layerVideoInput.files[0];
-  if(!file) return;
-  try{
-    await prepareVideoFromFile(file, {preservePaint: true});
-  } catch(err){
-    alert(err.message);
-  } finally {
-    layerVideoInput.value = '';
   }
 });
 
@@ -627,8 +833,41 @@ let lastFrameTime = performance.now();
 const TRAIL_HISTORY = 32;
 const TRAIL_DECAY_MS = 1400;
 
+function renderCompositeFrame(){
+  if(!canvasW || !canvasH) return;
+  dispCtx.clearRect(0,0,canvasW,canvasH);
+  if(showVideoBackgroundEl?.checked && video.src && video.readyState >= 2){
+    try{
+      dispCtx.drawImage(video, 0, 0, canvasW, canvasH);
+    } catch(err){
+      // The frame may be temporarily unavailable during seek/load.
+    }
+  }
+  motionLayers.forEach(layer => {
+    if(layer.visible) dispCtx.drawImage(layer.canvas, 0, 0);
+  });
+}
+
+function drawBlobStroke(x, y, halfSize){
+  if(!strokeEnabledEl?.checked) return;
+  const size = Math.max(2, halfSize * 2);
+  const lineWidth = Math.max(0.5, parseFloat(strokeWidthEl.value) || 1);
+  paintCtx.save();
+  paintCtx.globalCompositeOperation = 'source-over';
+  paintCtx.globalAlpha = 1;
+  paintCtx.strokeStyle = strokeColorEl.value || '#ffffff';
+  paintCtx.lineWidth = lineWidth;
+  paintCtx.lineJoin = 'miter';
+  paintCtx.strokeRect(x - halfSize, y - halfSize, size, size);
+  paintCtx.restore();
+}
+
 function processLoop(){
   if(video.paused || video.ended){ rafId = requestAnimationFrame(processLoop); return; }
+  const activeLayer = getActiveLayer();
+  if(!activeLayer){
+    ensureActiveLayer('Base Video');
+  }
 
   // draw current video frame into proc canvas
   procCtx.drawImage(video, 0, 0, procW, procH);
@@ -677,7 +916,9 @@ function processLoop(){
   // For simplicity, draw circular stamps sampled from the current video frame, displaced along velocity.
   const smearPx = parseFloat(smearEl.value);
   const brushPx = parseFloat(brushEl.value);
-  const alpha = parseFloat(alphaEl.value);
+  const alpha = Math.max(0, parseFloat(alphaEl.value));
+  const stampLimit = parseInt(stampLimitEl.value, 10) || 30;
+  const noiseAmount = Math.max(0, parseFloat(motionNoiseEl.value) || 0);
 
   // draw current video frame to the reusable source canvas at display resolution
   if(sourceCanvas.width !== canvasW || sourceCanvas.height !== canvasH){
@@ -719,11 +960,11 @@ function processLoop(){
     } else {
       // low motion, use small random direction to create texture
       const a = (Math.random() - 0.5) * 2 * Math.PI;
-      ndx = Math.cos(a) * 0.1; ndy = Math.sin(a) * 0.1;
+      ndx = Math.cos(a) * noiseAmount; ndy = Math.sin(a) * noiseAmount;
     }
 
     // number of stamps depends on smear length
-    const stamps = Math.max(1, Math.round(Math.min(30, smearPx / Math.max(4, brushPx/2))));
+    const stamps = Math.max(1, Math.round(Math.min(stampLimit, smearPx / Math.max(4, brushPx/2))));
     for(let s=0; s<stamps; s++){
       const t = (s + 1) / (stamps + 1); // 0..1 along smear
       // displacement amount scales with t and with vmag and smearPx
@@ -751,10 +992,11 @@ function processLoop(){
       paintCtx.putImageData(img, srcX, srcY);
       paintCtx.restore();
     }
+    drawBlobStroke(cx, cy, Math.max(2, brushPx));
   }
 
   // render luminous trails following recent motion
-  for(const [id, trail] of trails){
+  if(trailGlowEl?.checked) for(const [id, trail] of trails){
     // prune stale points
     trail.points = trail.points.filter(pt => now - pt.t <= TRAIL_DECAY_MS);
     if(trail.points.length < 2){
@@ -791,11 +1033,7 @@ function processLoop(){
   // We'll draw the original video frame as background, then overlay paint layer.
   // The idea in your request was to keep non-moving parts unaffected by paint; so we draw the video as base (unchanged)
   // and the paint (accumulation) on top — the paint only comes from moving parts by construction.
-  dispCtx.clearRect(0,0,canvasW,canvasH);
-  // draw current video scaled to canvas (so static areas visible)
-  dispCtx.drawImage(video, 0, 0, canvasW, canvasH);
-  // overlay paint (which contains marks only sampled from moving areas)
-  dispCtx.drawImage(paintCanvas, 0, 0);
+  renderCompositeFrame();
 
   // prepare for next frame
   prevFrame = new Uint8ClampedArray(currImage.data);
@@ -848,6 +1086,83 @@ function downloadBlob(blob, filename){
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function makeExportCanvas({transparent = false, activeOnly = false} = {}){
+  const out = document.createElement('canvas');
+  out.width = canvasW;
+  out.height = canvasH;
+  const outCtx = out.getContext('2d');
+  if(!transparent){
+    outCtx.fillStyle = '#000000';
+    outCtx.fillRect(0, 0, out.width, out.height);
+    if(showVideoBackgroundEl?.checked && video.src && video.readyState >= 2){
+      outCtx.drawImage(video, 0, 0, out.width, out.height);
+    }
+  }
+  if(activeOnly){
+    const layer = getActiveLayer();
+    if(layer) outCtx.drawImage(layer.canvas, 0, 0);
+  } else {
+    motionLayers.forEach(layer => {
+      if(layer.visible) outCtx.drawImage(layer.canvas, 0, 0);
+    });
+  }
+  return out;
+}
+
+function exportCanvasAsPng(canvasEl, filename){
+  if(!canvasEl?.width || !canvasEl?.height){
+    alert('Nothing to export yet');
+    return;
+  }
+  canvasEl.toBlob(blob => {
+    if(!blob){
+      alert('Unable to export PNG.');
+      return;
+    }
+    downloadBlob(blob, filename);
+  }, 'image/png');
+}
+
+function safeFileName(name){
+  return String(name || 'layer').trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'layer';
+}
+
+async function exportLayerFiles(){
+  if(!motionLayers.length){
+    alert('No layers to export.');
+    return;
+  }
+  if(window.showDirectoryPicker){
+    try{
+      const dir = await window.showDirectoryPicker({mode: 'readwrite'});
+      await Promise.all(motionLayers.map((layer, index) => new Promise((resolve, reject) => {
+        layer.canvas.toBlob(async blob => {
+          if(!blob){
+            reject(new Error(`Could not export ${layer.name}.`));
+            return;
+          }
+          try{
+            const handle = await dir.getFileHandle(`${String(index + 1).padStart(2, '0')}-${safeFileName(layer.name)}.png`, {create: true});
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            resolve();
+          } catch(error){
+            reject(error);
+          }
+        }, 'image/png');
+      })));
+      return;
+    } catch(error){
+      if(error?.name === 'AbortError') return;
+      console.warn(error);
+    }
+  }
+  motionLayers.forEach((layer, index) => {
+    exportCanvasAsPng(layer.canvas, `${String(index + 1).padStart(2, '0')}-${safeFileName(layer.name)}.png`);
+  });
+}
+
 async function exportProcessVideo(){
   if(isVideoExporting) return;
   if(!baseVideoLoaded || !video.src){
@@ -882,6 +1197,7 @@ async function exportProcessVideo(){
     video.pause();
     await waitForVideoStart();
     resetProcessingState({clearPaint: true});
+    clearAllLayers();
     dispCtx.clearRect(0, 0, canvasW, canvasH);
     dispCtx.drawImage(video, 0, 0, canvasW, canvasH);
 
@@ -962,43 +1278,20 @@ pauseBtn.addEventListener('click', ()=>{
   video.pause();
   playBtn.setAttribute('aria-pressed', 'false');
 });
-clearBtn.addEventListener('click', ()=>{ paintCtx.clearRect(0,0,paintCanvas.width, paintCanvas.height); });
+clearBtn.addEventListener('click', clearAllLayers);
 exportBtn.addEventListener('click', ()=>{
-  if(!canvas.width || !canvas.height){
-    alert('Nothing to export yet');
-    return;
-  }
-  canvas.toBlob(blob => {
-    if(!blob){
-      alert('Unable to export PNG.');
-      return;
-    }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'MotionStills.png';
-    a.click();
-    URL.revokeObjectURL(url);
-  }, 'image/png');
+  exportCanvasAsPng(makeExportCanvas({transparent: false}), 'MotionStills.png');
 });
 exportPaintOnlyBtn.addEventListener('click', ()=>{
-  if(!paintCanvas.width || !paintCanvas.height){
-    alert('Nothing to export yet');
-    return;
-  }
-  paintCanvas.toBlob(blob =>{
-    if(!blob){
-      alert('Unable to export paint layer.');
-      return;
-    }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'MotionStills-paint.png';
-    a.click();
-    URL.revokeObjectURL(url);
-  }, 'image/png');
+  exportCanvasAsPng(makeExportCanvas({transparent: true, activeOnly: true}), 'MotionStills-active-layer.png');
 });
+exportTransparentBtn.addEventListener('click', ()=>{
+  exportCanvasAsPng(makeExportCanvas({transparent: true}), 'MotionStills-transparent.png');
+});
+exportOpaqueBtn.addEventListener('click', ()=>{
+  exportCanvasAsPng(makeExportCanvas({transparent: false}), 'MotionStills-black-background.png');
+});
+exportLayersBtn.addEventListener('click', exportLayerFiles);
 exportVideoBtn.addEventListener('click', exportProcessVideo);
 
 // keep canvas sized nicely on window resize
