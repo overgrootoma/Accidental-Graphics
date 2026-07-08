@@ -30,12 +30,17 @@
           <span>Import / Add Layer</span>
           <input id="file" type="file" accept="video/*">
         </label>
+        <button id="webcamBtn" type="button" class="motion-file-button motion-file-button--webcam">Use Webcam</button>
+        <div class="motion-project-field">
+          <label for="projectName">Project Name</label>
+          <input id="projectName" type="text" value="MotionStills" autocomplete="off" spellcheck="false">
+        </div>
 
         <div class="motion-primary-actions" aria-label="Main actions">
           <button id="play" type="button">Play</button>
           <button id="pause" type="button">Pause</button>
           <button id="clear" type="button">Clear Canvas</button>
-          <button id="export" type="button">Export PNG</button>
+          <button id="export" type="button">Export</button>
         </div>
       </div>
 
@@ -58,12 +63,12 @@
       </details>
 
       <details class="motion-group">
-        <summary>Outcome</summary>
+        <summary>Settings</summary>
         <div class="motion-group-body">
           <div class="motion-control">
-            <label for="threshold">Threshold</label>
-            <input id="threshold" type="range" min="1" max="255" value="100" class="slider">
-            <output id="thVal">100</output>
+            <label for="threshold">Motion Intensity</label>
+            <input id="threshold" type="range" min="1" max="100" value="50" class="slider">
+            <output id="thVal">50%</output>
           </div>
           <div class="motion-control">
             <label for="brush">Brush</label>
@@ -74,11 +79,6 @@
             <label for="smear">Smear</label>
             <input id="smear" type="range" min="0" max="900" value="60" class="slider">
             <output id="smearVal">60</output>
-          </div>
-          <div class="motion-control">
-            <label for="alpha">Intensity</label>
-            <input id="alpha" type="range" min="0" max="2" step="0.01" value="0.7" class="slider">
-            <output id="alphaVal">0.7</output>
           </div>
           <div class="motion-control">
             <label for="fade">Fade</label>
@@ -101,12 +101,34 @@
             <span>Show video background</span>
           </label>
           <label class="motion-check">
-            <input id="trailGlow" type="checkbox" checked>
-            <span>Color trail glow</span>
-          </label>
-          <label class="motion-check">
             <input id="strokeEnabled" type="checkbox">
             <span>Stroke tracked objects</span>
+          </label>
+          <label class="motion-check">
+            <input id="trackDotEnabled" type="checkbox">
+            <span>Show tracked center dot</span>
+          </label>
+          <div class="motion-select-row">
+            <label for="trackedShape">Tracked Shape</label>
+            <select id="trackedShape">
+              <option value="square">Square</option>
+              <option value="circle">Circle</option>
+              <option value="diamond">Diamond</option>
+              <option value="cross">Cross</option>
+              <option value="star">Star</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="motion-custom-shape">
+            <div class="motion-custom-shape__top">
+              <span>Draw Shape</span>
+              <button id="clearCustomShape" type="button">Clear</button>
+            </div>
+            <canvas id="customShapeCanvas" width="120" height="120" aria-label="Draw custom tracked shape"></canvas>
+          </div>
+          <label class="motion-check">
+            <input id="trackedSizeReactive" type="checkbox">
+            <span>Size reacts to motion</span>
           </label>
           <div class="motion-color-row">
             <label for="strokeColor">Stroke Color</label>
@@ -116,6 +138,29 @@
             <label for="strokeWidth">Stroke</label>
             <input id="strokeWidth" type="range" min="0.5" max="80" step="0.5" value="6" class="slider">
             <output id="strokeWidthVal">6</output>
+          </div>
+          <div class="motion-select-row">
+            <label for="trackDotShape">Dot Shape</label>
+            <select id="trackDotShape">
+              <option value="circle">Circle</option>
+              <option value="square">Square</option>
+              <option value="ring">Ring</option>
+              <option value="cross">Cross</option>
+            </select>
+          </div>
+          <div class="motion-color-row">
+            <label for="trackDotColor">Dot Color</label>
+            <input id="trackDotColor" type="color" value="#ffffff">
+          </div>
+          <div class="motion-control">
+            <label for="trackDotSize">Dot Size</label>
+            <input id="trackDotSize" type="range" min="1" max="80" step="1" value="10" class="slider">
+            <output id="trackDotSizeVal">10</output>
+          </div>
+          <div class="motion-control">
+            <label for="trackDotOpacity">Dot Opacity</label>
+            <input id="trackDotOpacity" type="range" min="0.1" max="1" step="0.05" value="1" class="slider">
+            <output id="trackDotOpacityVal">1</output>
           </div>
           <div class="motion-control">
             <label for="stampLimit">Stamps</label>
@@ -133,18 +178,34 @@
       <details class="motion-group">
         <summary>Export</summary>
         <div class="motion-group-body">
-          <button id="exportTransparent" type="button">PNG Transparent</button>
-          <button id="exportOpaque" type="button">PNG Black Background</button>
-          <button id="exportPaintOnly" type="button">Active Layer PNG</button>
-          <button id="exportLayers" type="button">All Layers Separate</button>
-          <button id="exportVideo" type="button">Export Process Video</button>
+          <label class="motion-check">
+            <input id="exportPngBackground" type="checkbox" checked>
+            <span>PNG with background</span>
+          </label>
+          <label class="motion-check">
+            <input id="exportPngTransparent" type="checkbox">
+            <span>PNG transparent</span>
+          </label>
+          <label class="motion-check">
+            <input id="exportActiveLayer" type="checkbox">
+            <span>Active layer PNG</span>
+          </label>
+          <label class="motion-check">
+            <input id="exportSeparateLayers" type="checkbox">
+            <span>All layers separate</span>
+          </label>
+          <label class="motion-check">
+            <input id="exportProcessVideoOption" type="checkbox">
+            <span>Process video MP4</span>
+          </label>
+          <p class="motion-meter" id="exportStatus">Choose exports, then tap Export.</p>
         </div>
       </details>
     </div>
 
     <!-- Right: Canvas -->
     <div class="canvas-stage">
-      <div class="canvas-prompt" id="playPrompt">press play</div>
+      <div class="canvas-prompt" id="playPrompt">Import file or use webcam</div>
       <canvas id="canvas"></canvas>
     </div>
 </div>
@@ -174,6 +235,7 @@
 
 // DOM
 const fileInput = document.getElementById('file');
+const webcamBtn = document.getElementById('webcamBtn');
 const canvas = document.getElementById('canvas');
 const playPrompt = document.getElementById('playPrompt');
 const playBtn = document.getElementById('play');
@@ -187,20 +249,32 @@ const videoSampleGrid = document.getElementById('videoSampleGrid');
 const confirmVideoSampleBtn = document.getElementById('confirmVideoSampleBtn');
 const cancelVideoSampleBtn = document.getElementById('cancelVideoSampleBtn');
 const closeVideoSampleModalBtn = document.getElementById('closeVideoSampleModalBtn');
-const exportPaintOnlyBtn = document.getElementById('exportPaintOnly');
-const exportTransparentBtn = document.getElementById('exportTransparent');
-const exportOpaqueBtn = document.getElementById('exportOpaque');
-const exportLayersBtn = document.getElementById('exportLayers');
-const exportVideoBtn = document.getElementById('exportVideo');
+const projectNameInput = document.getElementById('projectName');
+const exportPngBackgroundEl = document.getElementById('exportPngBackground');
+const exportPngTransparentEl = document.getElementById('exportPngTransparent');
+const exportActiveLayerEl = document.getElementById('exportActiveLayer');
+const exportSeparateLayersEl = document.getElementById('exportSeparateLayers');
+const exportProcessVideoOptionEl = document.getElementById('exportProcessVideoOption');
+const exportStatus = document.getElementById('exportStatus');
 const controlsPanel = document.getElementById('controls');
 const layerList = document.getElementById('layerList');
 const layerStatus = document.getElementById('layerStatus');
 const showVideoBackgroundEl = document.getElementById('showVideoBackground');
-const trailGlowEl = document.getElementById('trailGlow');
 const strokeEnabledEl = document.getElementById('strokeEnabled');
+const trackDotEnabledEl = document.getElementById('trackDotEnabled');
+const trackedShapeEl = document.getElementById('trackedShape');
+const customShapeCanvas = document.getElementById('customShapeCanvas');
+const clearCustomShapeBtn = document.getElementById('clearCustomShape');
+const trackedSizeReactiveEl = document.getElementById('trackedSizeReactive');
 const strokeColorEl = document.getElementById('strokeColor');
 const strokeWidthEl = document.getElementById('strokeWidth');
 const strokeWidthVal = document.getElementById('strokeWidthVal');
+const trackDotShapeEl = document.getElementById('trackDotShape');
+const trackDotColorEl = document.getElementById('trackDotColor');
+const trackDotSizeEl = document.getElementById('trackDotSize');
+const trackDotSizeVal = document.getElementById('trackDotSizeVal');
+const trackDotOpacityEl = document.getElementById('trackDotOpacity');
+const trackDotOpacityVal = document.getElementById('trackDotOpacityVal');
 const stampLimitEl = document.getElementById('stampLimit');
 const stampLimitVal = document.getElementById('stampLimitVal');
 const motionNoiseEl = document.getElementById('motionNoise');
@@ -213,8 +287,6 @@ const brushEl = document.getElementById('brush');
 const brushVal = document.getElementById('brushVal');
 const smearEl = document.getElementById('smear');
 const smearVal = document.getElementById('smearVal');
-const alphaEl = document.getElementById('alpha');
-const alphaVal = document.getElementById('alphaVal');
 const fadeEl = document.getElementById('fade');
 const fadeVal = document.getElementById('fadeVal');
 const maxBlobsEl = document.getElementById('maxBlobs');
@@ -259,8 +331,6 @@ const sourceCtx = sourceCanvas.getContext('2d');
 // canvas canvas context
 const dispCtx = canvas.getContext('2d');
 
-// trail tracking
-const trails = new Map();
 let blobIdSeed = 0;
 
 let sampleVideoData = window.SampleMedia?.getList?.('videos') || [];
@@ -274,6 +344,89 @@ if (!sampleVideoData.length) {
 let selectedVideoSrc = null;
 let sampleAction = 'base';
 let sampleModalReturnFocus = null;
+let customShapePoints = [
+  {x: 0.5, y: 0.08},
+  {x: 0.72, y: 0.34},
+  {x: 0.92, y: 0.5},
+  {x: 0.68, y: 0.64},
+  {x: 0.5, y: 0.92},
+  {x: 0.32, y: 0.64},
+  {x: 0.08, y: 0.5},
+  {x: 0.28, y: 0.34}
+];
+let customShapeDrawing = false;
+const customShapeCtx = customShapeCanvas?.getContext('2d');
+
+function hasVideoSource(){
+  return !!(video.src || video.srcObject);
+}
+
+function isWebcamSource(){
+  return !!currentVideoSource?.stream;
+}
+
+function drawCurrentVideoFrame(ctx, width, height){
+  if(isWebcamSource()){
+    ctx.save();
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, width, height);
+    ctx.restore();
+    return;
+  }
+  ctx.drawImage(video, 0, 0, width, height);
+}
+
+function getCustomShapePoint(event){
+  const rect = customShapeCanvas.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+    y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))
+  };
+}
+
+function renderCustomShapeCanvas(){
+  if(!customShapeCtx || !customShapeCanvas) return;
+  const w = customShapeCanvas.width;
+  const h = customShapeCanvas.height;
+  customShapeCtx.clearRect(0, 0, w, h);
+  customShapeCtx.fillStyle = '#000';
+  customShapeCtx.fillRect(0, 0, w, h);
+  customShapeCtx.strokeStyle = 'rgba(255,255,255,0.24)';
+  customShapeCtx.lineWidth = 1;
+  customShapeCtx.strokeRect(0.5, 0.5, w - 1, h - 1);
+  if(customShapePoints.length < 2) return;
+  customShapeCtx.strokeStyle = '#fff';
+  customShapeCtx.lineWidth = 4;
+  customShapeCtx.lineCap = 'round';
+  customShapeCtx.lineJoin = 'round';
+  customShapeCtx.beginPath();
+  customShapeCtx.moveTo(customShapePoints[0].x * w, customShapePoints[0].y * h);
+  customShapePoints.slice(1).forEach(point => {
+    customShapeCtx.lineTo(point.x * w, point.y * h);
+  });
+  if(customShapePoints.length > 2) customShapeCtx.closePath();
+  customShapeCtx.stroke();
+}
+
+function startCustomShape(event){
+  if(!customShapeCanvas) return;
+  customShapeDrawing = true;
+  customShapeCanvas.setPointerCapture?.(event.pointerId);
+  customShapePoints = [getCustomShapePoint(event)];
+  renderCustomShapeCanvas();
+}
+
+function moveCustomShape(event){
+  if(!customShapeDrawing || !customShapeCanvas) return;
+  customShapePoints.push(getCustomShapePoint(event));
+  renderCustomShapeCanvas();
+}
+
+function endCustomShape(event){
+  customShapeDrawing = false;
+  customShapeCanvas?.releasePointerCapture?.(event.pointerId);
+}
 
 function nextLayerName(){
   return motionLayers.length ? `Video Layer ${motionLayers.length + 1}` : 'Base Video';
@@ -477,10 +630,56 @@ function closeVideoSampleModal() {
 }
 
 let playPromptVisible = true;
+let playPromptDismissed = false;
+function showPlayPrompt(){
+  if(!playPrompt || playPromptDismissed) return;
+  if(!hasVideoSource()){
+    playPrompt.textContent = 'Import file or use webcam';
+  } else if(video.paused){
+    playPrompt.textContent = 'Press Play to start';
+  } else {
+    return;
+  }
+  playPromptVisible = true;
+  playPrompt.classList.remove('hidden');
+}
+
+function resetPlayPrompt(){
+  playPromptDismissed = false;
+  showPlayPrompt();
+}
+
 function hidePlayPrompt(){
   if(!playPrompt || !playPromptVisible) return;
+  playPromptDismissed = true;
   playPromptVisible = false;
   playPrompt.classList.add('hidden');
+}
+
+function waitForRenderableVideoFrame(){
+  if(video.readyState >= 2){
+    return new Promise(resolve => requestAnimationFrame(resolve));
+  }
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      video.removeEventListener('loadeddata', onReady);
+      video.removeEventListener('canplay', onReady);
+      video.removeEventListener('seeked', onReady);
+      video.removeEventListener('error', onError);
+    };
+    const onReady = () => {
+      cleanup();
+      requestAnimationFrame(resolve);
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('Could not render the selected video frame.'));
+    };
+    video.addEventListener('loadeddata', onReady, {once: true});
+    video.addEventListener('canplay', onReady, {once: true});
+    video.addEventListener('seeked', onReady, {once: true});
+    video.addEventListener('error', onError, {once: true});
+  });
 }
 
 async function loadVideoSource(nextUrl, {preservePaint = false, cleanup, layerName} = {}){
@@ -524,6 +723,7 @@ async function loadVideoSource(nextUrl, {preservePaint = false, cleanup, layerNa
     }
     video.addEventListener('loadedmetadata', onLoaded, {once:true});
     video.addEventListener('error', onError, {once:true});
+    video.srcObject = null;
     video.src = nextUrl;
   });
   try{
@@ -534,17 +734,24 @@ async function loadVideoSource(nextUrl, {preservePaint = false, cleanup, layerNa
     }
     video.pause();
     video.currentTime = 0;
+    await waitForRenderableVideoFrame();
     renderLayers();
     renderCompositeFrame();
+    resetPlayPrompt();
   } catch(err){
     if(typeof cleanup === 'function'){
       cleanup();
     }
     if(previousSource?.url){
+      video.srcObject = null;
       video.src = previousSource.url;
       video.load();
+    } else if(previousSource?.stream){
+      video.removeAttribute('src');
+      video.srcObject = previousSource.stream;
     } else {
       video.removeAttribute('src');
+      video.srcObject = null;
       video.load();
     }
     throw err;
@@ -562,6 +769,94 @@ async function prepareVideoFromFile(file, options = {}){
 async function prepareVideoFromURL(sourceUrl, options = {}){
   if(!sourceUrl) return;
   await loadVideoSource(sourceUrl, options);
+}
+
+async function prepareWebcamSource(){
+  if(!navigator.mediaDevices?.getUserMedia){
+    alert('Webcam is not supported in this browser.');
+    return;
+  }
+  const preservePaint = baseVideoLoaded;
+  const previousSource = currentVideoSource;
+  let stream = null;
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: {ideal: 1280},
+        height: {ideal: 720}
+      },
+      audio: false
+    });
+    video.pause();
+    video.removeAttribute('src');
+    video.srcObject = stream;
+
+    await new Promise((resolve, reject) => {
+      const cleanupListeners = () => {
+        video.removeEventListener('loadedmetadata', onLoaded);
+        video.removeEventListener('error', onError);
+      };
+      const onLoaded = () => {
+        cleanupListeners();
+        resolve();
+      };
+      const onError = () => {
+        cleanupListeners();
+        reject(new Error('Could not load the webcam.'));
+      };
+      video.addEventListener('loadedmetadata', onLoaded, {once: true});
+      video.addEventListener('error', onError, {once: true});
+    });
+
+    await video.play();
+    await waitForRenderableVideoFrame();
+
+    const vw = Math.round(video.videoWidth || 1280);
+    const vh = Math.round(video.videoHeight || 720);
+    const hasDisplay = displayW && displayH;
+    const shouldResize = !preservePaint || !hasDisplay;
+    if(shouldResize){
+      motionLayers = [];
+      activeLayerId = null;
+      updatePaintSize(vw, vh);
+      lockProcessingResolutionToSource(vw, vh);
+      ensureActiveLayer('Webcam');
+      resetProcessingState({clearPaint: !preservePaint});
+      baseVideoLoaded = true;
+    } else {
+      addVideoLayer('Webcam Layer');
+      resetProcessingState({clearPaint: false});
+      baseVideoLoaded = true;
+    }
+
+    currentVideoSource = {
+      stream,
+      mirrored: true,
+      cleanup: () => stream.getTracks().forEach(track => track.stop())
+    };
+    if(previousSource && typeof previousSource.cleanup === 'function'){
+      previousSource.cleanup();
+    }
+    video.pause();
+    renderLayers();
+    renderCompositeFrame();
+    resetPlayPrompt();
+  } catch(error){
+    stream?.getTracks?.().forEach(track => track.stop());
+    if(previousSource?.url){
+      video.srcObject = null;
+      video.src = previousSource.url;
+      video.load();
+    } else if(previousSource?.stream){
+      video.removeAttribute('src');
+      video.srcObject = previousSource.stream;
+    } else {
+      video.removeAttribute('src');
+      video.srcObject = null;
+      video.load();
+    }
+    alert(error.message || 'Unable to start webcam.');
+  }
 }
 
 async function loadSampleVideoAsset(path, options = {}){
@@ -595,11 +890,17 @@ function lockProcessingResolutionToSource(width, height){
   if(!width || !height) return;
   setProcessingResolution(width, height);
 }
+
+function getMotionThreshold(){
+  const intensity = Math.max(1, Math.min(100, parseInt(thresholdEl.value, 10) || 50));
+  // Higher UI intensity should catch subtler movement. 50% preserves the old ideal threshold of 100.
+  return Math.round(200 - intensity * 2);
+}
+
 function resetProcessingState({clearPaint = false} = {}){
   prevFrame = null;
   prevCtx.clearRect(0, 0, prevCanvas.width, prevCanvas.height);
   prevBlobs = [];
-  trails.clear();
   if(clearPaint){
     paintCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
   }
@@ -647,76 +948,178 @@ setProcessingResolution(procW, procH);
 updatePaintSize();
 
 // wire control canvass
-thresholdEl.addEventListener('input', ()=> thresholdVal.textContent = thresholdEl.value);
+thresholdEl.addEventListener('input', ()=> thresholdVal.textContent = `${thresholdEl.value}%`);
 brushEl.addEventListener('input', ()=> brushVal.textContent = brushEl.value);
 smearEl.addEventListener('input', ()=> smearVal.textContent = smearEl.value);
-alphaEl.addEventListener('input', ()=> alphaVal.textContent = alphaEl.value);
 fadeEl.addEventListener('input', ()=> fadeVal.textContent = fadeEl.value);
 maxBlobsEl.addEventListener('input', ()=> countVal.textContent = maxBlobsEl.value);
 strokeWidthEl.addEventListener('input', ()=> strokeWidthVal.textContent = strokeWidthEl.value);
+trackDotSizeEl.addEventListener('input', ()=> trackDotSizeVal.textContent = trackDotSizeEl.value);
+trackDotOpacityEl.addEventListener('input', ()=> trackDotOpacityVal.textContent = trackDotOpacityEl.value);
 stampLimitEl.addEventListener('input', ()=> stampLimitVal.textContent = stampLimitEl.value);
 motionNoiseEl.addEventListener('input', ()=> motionNoiseVal.textContent = motionNoiseEl.value);
 showVideoBackgroundEl.addEventListener('change', renderCompositeFrame);
+customShapeCanvas?.addEventListener('pointerdown', startCustomShape);
+customShapeCanvas?.addEventListener('pointermove', moveCustomShape);
+customShapeCanvas?.addEventListener('pointerup', endCustomShape);
+customShapeCanvas?.addEventListener('pointercancel', endCustomShape);
+clearCustomShapeBtn?.addEventListener('click', () => {
+  customShapePoints = [];
+  renderCustomShapeCanvas();
+});
+renderCustomShapeCanvas();
 
-// blob detection helper (lightweight)
+// Blob detection helper. Groups neighboring motion pixels into real regions so
+// tracking stays tied to the place where movement happened in the frame.
 function findBlobsFromBinary(imgData, w, h, maxBlobs){
-  // imgData: Uint8ClampedArray (RGBA) of binary motion map (0 or 255)
-  // We'll compute energy like previous approach and pick local maxima
-  const energy = new Float32Array(w*h);
-  for(let y=1;y<h-1;y++){
-    for(let x=1;x<w-1;x++){
-      let s = 0;
-      for(let oy=-1; oy<=1; oy++){
-        for(let ox=-1; ox<=1; ox++){
-          const i = ((y+oy)*w + (x+ox))*4;
-          s += imgData[i]; // r channel (same as g,b)
-        }
-      }
-      energy[y*w + x] = s;
-    }
-  }
-  const peaks = [];
-  for(let y=2;y<h-2;y++){
-    for(let x=2;x<w-2;x++){
-      const idx = y*w + x;
-      const val = energy[idx];
-      if(val < 50) continue; // tiny noise skip
-      let isMax = true;
-      for(let oy=-2; oy<=2 && isMax; oy++){
-        for(let ox=-2; ox<=2; ox++){
-          if(energy[(y+oy)*w + (x+ox)] > val){ isMax = false; break; }
-        }
-      }
-      if(isMax) peaks.push({x,y,val});
-    }
-  }
-  peaks.sort((a,b)=>b.val - a.val);
+  const total = w * h;
+  const visited = new Uint8Array(total);
+  const stack = new Int32Array(total);
   const blobs = [];
-  const taken = new Uint8Array(w*h);
-  const suppression = Math.max(6, Math.floor(Math.min(w,h)/30));
-  for(const p of peaks){
-    if(blobs.length >= maxBlobs) break;
-    if(taken[p.y*w + p.x]) continue;
-    // centroid around peak
-    const r = Math.max(4, Math.floor(Math.min(w,h)/40));
-    let sx=0, sy=0, sw=0;
-    for(let yy=Math.max(0,p.y-r); yy<=Math.min(h-1,p.y+r); yy++){
-      for(let xx=Math.max(0,p.x-r); xx<=Math.min(w-1,p.x+r); xx++){
-        const v = energy[yy*w + xx];
-        if(v>0){ sx += xx * v; sy += yy * v; sw += v; }
+  const minArea = Math.max(8, Math.round(total * 0.00004));
+
+  for(let start = 0; start < total; start++){
+    if(visited[start] || imgData[start * 4] === 0) continue;
+
+    let top = 0;
+    let area = 0;
+    let sumX = 0;
+    let sumY = 0;
+    let minX = w;
+    let minY = h;
+    let maxX = 0;
+    let maxY = 0;
+
+    visited[start] = 1;
+    stack[top++] = start;
+
+    while(top > 0){
+      const idx = stack[--top];
+      const x = idx % w;
+      const y = (idx / w) | 0;
+
+      area++;
+      sumX += x;
+      sumY += y;
+      if(x < minX) minX = x;
+      if(y < minY) minY = y;
+      if(x > maxX) maxX = x;
+      if(y > maxY) maxY = y;
+
+      for(let oy = -1; oy <= 1; oy++){
+        const ny = y + oy;
+        if(ny < 0 || ny >= h) continue;
+        for(let ox = -1; ox <= 1; ox++){
+          if(ox === 0 && oy === 0) continue;
+          const nx = x + ox;
+          if(nx < 0 || nx >= w) continue;
+          const next = ny * w + nx;
+          if(visited[next] || imgData[next * 4] === 0) continue;
+          visited[next] = 1;
+          stack[top++] = next;
+        }
       }
     }
-    if(sw===0) continue;
-    const cx = sx / sw, cy = sy / sw;
-    // mark suppression
-    for(let yy=Math.max(0,Math.floor(cy)-suppression); yy<=Math.min(h-1,Math.floor(cy)+suppression); yy++){
-      for(let xx=Math.max(0,Math.floor(cx)-suppression); xx<=Math.min(w-1,Math.floor(cx)+suppression); xx++){
-        taken[yy*w + xx] = 1;
-      }
-    }
-    blobs.push({x: cx, y: cy, strength: p.val});
+
+    if(area < minArea) continue;
+    const boxW = maxX - minX + 1;
+    const boxH = maxY - minY + 1;
+    const fill = area / Math.max(1, boxW * boxH);
+    const sizeScore = area * (0.7 + fill * 0.3);
+
+    blobs.push({
+      x: sumX / area,
+      y: sumY / area,
+      area,
+      width: boxW,
+      height: boxH,
+      radius: Math.max(boxW, boxH) * 0.5,
+      strength: sizeScore
+    });
   }
-  return blobs;
+
+  blobs.sort((a,b) => b.strength - a.strength);
+  return blobs.slice(0, maxBlobs);
+}
+
+function keepTrackPoint(point){
+  return {
+    x: point.x,
+    y: point.y,
+    id: point.id,
+    radius: point.radius,
+    radiusX: point.radiusX,
+    radiusY: point.radiusY,
+    strength: point.strength
+  };
+}
+
+function getBlobMatchDistance(prev, curr){
+  const prevRadius = prev?.radius || 0.025;
+  const currRadius = curr?.radius || 0.025;
+  return Math.max(0.035, Math.min(0.24, (prevRadius + currRadius) * 2.8));
+}
+
+function getBlobBox(point, brushPx){
+  const fixedHalf = Math.max(2, brushPx);
+  if(!trackedSizeReactiveEl?.checked){
+    return {halfW: fixedHalf, halfH: fixedHalf};
+  }
+  const minHalf = Math.max(2, fixedHalf, brushPx);
+  const halfW = Math.max(minHalf, (point?.radiusX || 0) * canvasW);
+  const halfH = Math.max(minHalf, (point?.radiusY || 0) * canvasH);
+  return {halfW, halfH};
+}
+
+function pointFromBlob(blob){
+  return {
+    x: blob.x / procW,
+    y: blob.y / procH,
+    strength: blob.strength,
+    area: blob.area,
+    radius: blob.radius / Math.max(procW, procH),
+    radiusX: blob.width / procW * 0.5,
+    radiusY: blob.height / procH * 0.5,
+    id: null
+  };
+}
+
+function limitMotionBlobs(blobs, maxBlobs){
+  const selected = [];
+  for(const blob of blobs){
+    const point = pointFromBlob(blob);
+    const overlaps = selected.some(existing => {
+      const dx = existing.x - point.x;
+      const dy = existing.y - point.y;
+      return Math.hypot(dx, dy) < Math.max(existing.radius || 0, point.radius || 0) * 0.65;
+    });
+    if(overlaps) continue;
+    selected.push(point);
+    if(selected.length >= maxBlobs) break;
+  }
+  return selected;
+}
+
+function applyTrackSmoothing(prev, curr){
+  if(!prev || !curr) return curr;
+  const prevRadius = Number.isFinite(prev.radius) ? prev.radius : curr.radius || 0.025;
+  const prevRadiusX = Number.isFinite(prev.radiusX) ? prev.radiusX : curr.radiusX || prevRadius;
+  const prevRadiusY = Number.isFinite(prev.radiusY) ? prev.radiusY : curr.radiusY || prevRadius;
+  const weight = Math.min(0.75, Math.max(0.2, (curr.strength || 0) / Math.max(1, (prev.strength || 0) + (curr.strength || 0))));
+  curr.x = prev.x + (curr.x - prev.x) * weight;
+  curr.y = prev.y + (curr.y - prev.y) * weight;
+  curr.radius = prevRadius + ((curr.radius || prevRadius) - prevRadius) * weight;
+  curr.radiusX = prevRadiusX + ((curr.radiusX || prevRadiusX) - prevRadiusX) * weight;
+  curr.radiusY = prevRadiusY + ((curr.radiusY || prevRadiusY) - prevRadiusY) * weight;
+  return curr;
+}
+
+function applyAllTrackSmoothing(matches){
+  for(const match of matches){
+    if(match.prev && match.curr){
+      applyTrackSmoothing(match.prev, match.curr);
+    }
+  }
 }
 
 // load video and fit sizes
@@ -731,6 +1134,7 @@ fileInput.addEventListener('change', async (e)=>{
     fileInput.value = '';
   }
 });
+webcamBtn?.addEventListener('click', prepareWebcamSource);
 
 async function loadSampleClip({preservePaint = false} = {}){
   const sample = sampleVideoData.find(s => s.src === selectedVideoSrc) || sampleVideoData[0];
@@ -796,7 +1200,7 @@ function matchBlobs(prevPoints, currPoints){
       const d = Math.hypot(dx,dy);
       if(d < bestD){ bestD = d; bestIndex = i; }
     }
-    if(bestIndex >= 0 && bestD < 0.2){ // threshold in normalized coords
+    if(bestIndex >= 0 && bestD < getBlobMatchDistance(p, currPoints[bestIndex])){
       used[bestIndex] = true;
       const curr = currPoints[bestIndex];
       curr.id = curr.id ?? p.id ?? assignBlobId(curr);
@@ -816,29 +1220,15 @@ function matchBlobs(prevPoints, currPoints){
   return res;
 }
 
-function ensureTrail(trackId){
-  if(!trackId && trackId !== 0) return null;
-  if(!trails.has(trackId)){
-    trails.set(trackId, {
-      points: [],
-      hue: Math.floor(Math.random() * 360),
-      lastSeen: performance.now()
-    });
-  }
-  return trails.get(trackId);
-}
-
 // painting parameters
 let lastFrameTime = performance.now();
-const TRAIL_HISTORY = 32;
-const TRAIL_DECAY_MS = 1400;
 
 function renderCompositeFrame(){
   if(!canvasW || !canvasH) return;
   dispCtx.clearRect(0,0,canvasW,canvasH);
-  if(showVideoBackgroundEl?.checked && video.src && video.readyState >= 2){
+  if(showVideoBackgroundEl?.checked && hasVideoSource() && video.readyState >= 2){
     try{
-      dispCtx.drawImage(video, 0, 0, canvasW, canvasH);
+      drawCurrentVideoFrame(dispCtx, canvasW, canvasH);
     } catch(err){
       // The frame may be temporarily unavailable during seek/load.
     }
@@ -848,17 +1238,147 @@ function renderCompositeFrame(){
   });
 }
 
-function drawBlobStroke(x, y, halfSize){
+function drawCenteredDiamond(ctx, x, y, halfW, halfH = halfW){
+  ctx.beginPath();
+  ctx.moveTo(x, y - halfH);
+  ctx.lineTo(x + halfW, y);
+  ctx.lineTo(x, y + halfH);
+  ctx.lineTo(x - halfW, y);
+  ctx.closePath();
+}
+
+function drawCrossShape(ctx, x, y, halfW, halfH = halfW){
+  ctx.beginPath();
+  ctx.moveTo(x - halfW, y);
+  ctx.lineTo(x + halfW, y);
+  ctx.moveTo(x, y - halfH);
+  ctx.lineTo(x, y + halfH);
+}
+
+function drawStarShape(ctx, x, y, halfW, halfH){
+  ctx.beginPath();
+  for(let i = 0; i < 10; i++){
+    const angle = -Math.PI / 2 + i * Math.PI / 5;
+    const scale = i % 2 === 0 ? 1 : 0.42;
+    const px = x + Math.cos(angle) * halfW * scale;
+    const py = y + Math.sin(angle) * halfH * scale;
+    if(i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+function drawCustomShape(ctx, x, y, halfW, halfH){
+  if(customShapePoints.length < 2){
+    drawStarShape(ctx, x, y, halfW, halfH);
+    return;
+  }
+  ctx.beginPath();
+  customShapePoints.forEach((point, index) => {
+    const px = x - halfW + point.x * halfW * 2;
+    const py = y - halfH + point.y * halfH * 2;
+    if(index === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  });
+  if(customShapePoints.length > 2) ctx.closePath();
+}
+
+function makeTrackedShapePath(ctx, x, y, halfW, halfH, shape, {filledCross = false} = {}){
+  if(shape === 'circle'){
+    ctx.beginPath();
+    ctx.ellipse(x, y, halfW, halfH, 0, 0, Math.PI * 2);
+  } else if(shape === 'diamond'){
+    drawCenteredDiamond(ctx, x, y, halfW, halfH);
+  } else if(shape === 'star'){
+    drawStarShape(ctx, x, y, halfW, halfH);
+  } else if(shape === 'custom'){
+    drawCustomShape(ctx, x, y, halfW, halfH);
+  } else if(shape === 'cross'){
+    if(filledCross){
+      const bar = Math.max(2, Math.min(halfW, halfH) * 0.35);
+      ctx.beginPath();
+      ctx.rect(x - halfW, y - bar * 0.5, halfW * 2, bar);
+      ctx.rect(x - bar * 0.5, y - halfH, bar, halfH * 2);
+    } else {
+      drawCrossShape(ctx, x, y, halfW, halfH);
+    }
+  } else {
+    ctx.beginPath();
+    ctx.rect(x - halfW, y - halfH, halfW * 2, halfH * 2);
+  }
+}
+
+function drawBlobStroke(x, y, point, brushPx){
   if(!strokeEnabledEl?.checked) return;
-  const size = Math.max(2, halfSize * 2);
+  const {halfW, halfH} = getBlobBox(point, brushPx);
+  const width = Math.max(2, halfW * 2);
+  const height = Math.max(2, halfH * 2);
   const lineWidth = Math.max(0.5, parseFloat(strokeWidthEl.value) || 1);
+  const shape = trackedShapeEl?.value || 'square';
   paintCtx.save();
   paintCtx.globalCompositeOperation = 'source-over';
   paintCtx.globalAlpha = 1;
   paintCtx.strokeStyle = strokeColorEl.value || '#ffffff';
   paintCtx.lineWidth = lineWidth;
   paintCtx.lineJoin = 'miter';
-  paintCtx.strokeRect(x - halfSize, y - halfSize, size, size);
+  if(shape === 'cross'){
+    paintCtx.lineCap = 'square';
+    makeTrackedShapePath(paintCtx, x, y, halfW, halfH, shape);
+    paintCtx.stroke();
+  } else if(shape === 'square'){
+    paintCtx.strokeRect(x - halfW, y - halfH, width, height);
+  } else {
+    makeTrackedShapePath(paintCtx, x, y, halfW, halfH, shape);
+    paintCtx.stroke();
+  }
+  paintCtx.restore();
+}
+
+function drawTrackedShapeCopy(sx, sy, point, brushPx, alpha){
+  const shape = trackedShapeEl?.value || 'square';
+  const {halfW, halfH} = getBlobBox(point, brushPx);
+  const srcX = Math.max(0, Math.floor(sx - halfW));
+  const srcY = Math.max(0, Math.floor(sy - halfH));
+  const srcW = Math.min(canvasW - srcX, Math.ceil(halfW * 2));
+  const srcH = Math.min(canvasH - srcY, Math.ceil(halfH * 2));
+  if(srcW <= 0 || srcH <= 0) return;
+
+  paintCtx.save();
+  paintCtx.globalAlpha = alpha;
+  makeTrackedShapePath(paintCtx, sx, sy, halfW, halfH, shape, {filledCross: true});
+  paintCtx.clip();
+  paintCtx.drawImage(sourceCanvas, srcX, srcY, srcW, srcH, srcX, srcY, srcW, srcH);
+  paintCtx.restore();
+}
+
+function drawTrackedCenterDot(x, y, brushPx){
+  if(!trackDotEnabledEl?.checked) return;
+  const shape = trackDotShapeEl?.value || 'circle';
+  const size = Math.max(1, parseFloat(trackDotSizeEl?.value) || Math.min(10, brushPx * 0.18));
+  const radius = size * 0.5;
+  const opacity = Math.max(0.1, Math.min(1, parseFloat(trackDotOpacityEl?.value) || 1));
+  paintCtx.save();
+  paintCtx.globalCompositeOperation = 'source-over';
+  paintCtx.globalAlpha = opacity;
+  paintCtx.fillStyle = trackDotColorEl?.value || strokeColorEl.value || '#ffffff';
+  paintCtx.strokeStyle = trackDotColorEl?.value || strokeColorEl.value || '#ffffff';
+  paintCtx.lineWidth = Math.max(1, radius * 0.35);
+  paintCtx.lineCap = 'square';
+  paintCtx.lineJoin = 'miter';
+  if(shape === 'square'){
+    paintCtx.fillRect(x - radius, y - radius, size, size);
+  } else if(shape === 'ring'){
+    paintCtx.beginPath();
+    paintCtx.arc(x, y, radius, 0, Math.PI * 2);
+    paintCtx.stroke();
+  } else if(shape === 'cross'){
+    drawCrossShape(paintCtx, x, y, radius, radius);
+    paintCtx.stroke();
+  } else {
+    paintCtx.beginPath();
+    paintCtx.arc(x, y, radius, 0, Math.PI * 2);
+    paintCtx.fill();
+  }
   paintCtx.restore();
 }
 
@@ -870,7 +1390,7 @@ function processLoop(){
   }
 
   // draw current video frame into proc canvas
-  procCtx.drawImage(video, 0, 0, procW, procH);
+  drawCurrentVideoFrame(procCtx, procW, procH);
   const currImage = procCtx.getImageData(0,0,procW,procH);
 
   // compute difference with prev
@@ -883,7 +1403,7 @@ function processLoop(){
 
   // build binary motion map (RGBA)
   const motion = new Uint8ClampedArray(procW * procH * 4);
-  const thresh = parseInt(thresholdEl.value, 10);
+  const thresh = getMotionThreshold();
   for(let i=0;i<currImage.data.length;i+=4){
     const dr = Math.abs(currImage.data[i] - prevFrame[i]);
     const dg = Math.abs(currImage.data[i+1] - prevFrame[i+1]);
@@ -893,15 +1413,14 @@ function processLoop(){
     motion[i] = motion[i+1] = motion[i+2] = flag;
     motion[i+3] = 255;
   }
-  // detect blobs from motion map
+  // detect connected motion regions from the motion map
   const maxBlobs = parseInt(maxBlobsEl.value, 10);
   const blobs = findBlobsFromBinary(motion, procW, procH, maxBlobs);
-
-  // convert to normalized coords and flip Y to match canvas coordinates
-  const currPoints = blobs.map(b => ({ x: b.x / procW, y: 1 - (b.y / procH), strength: b.strength, id: null }));
+  const currPoints = limitMotionBlobs(blobs, maxBlobs);
 
   // match prev->curr to estimate velocities
   const matches = matchBlobs(prevBlobs, currPoints);
+  applyAllTrackSmoothing(matches);
 
   const now = performance.now();
 
@@ -913,10 +1432,10 @@ function processLoop(){
 
   // draw per-blob paint stroke using current video frame as source
   // We'll sample region from the full-size video frame. Map blob normalized coords to canvas pixel coords.
-  // For simplicity, draw circular stamps sampled from the current video frame, displaced along velocity.
+  // Draw shaped copies sampled from the current video frame, displaced along velocity.
   const smearPx = parseFloat(smearEl.value);
   const brushPx = parseFloat(brushEl.value);
-  const alpha = Math.max(0, parseFloat(alphaEl.value));
+  const alpha = 0.7;
   const stampLimit = parseInt(stampLimitEl.value, 10) || 30;
   const noiseAmount = Math.max(0, parseFloat(motionNoiseEl.value) || 0);
 
@@ -925,7 +1444,7 @@ function processLoop(){
     sourceCanvas.width = canvasW;
     sourceCanvas.height = canvasH;
   }
-  sourceCtx.drawImage(video, 0, 0, canvasW, canvasH);
+  drawCurrentVideoFrame(sourceCtx, canvasW, canvasH);
 
   // for each matched pair compute velocity and stamp multiple samples
   for(const m of matches){
@@ -933,13 +1452,6 @@ function processLoop(){
     const cxNorm = m.curr.x, cyNorm = m.curr.y;
     const cx = Math.floor(cxNorm * canvasW);
     const cy = Math.floor(cyNorm * canvasH);
-
-    const trail = ensureTrail(m.trackId);
-    if(trail){
-      trail.points.push({x: cx, y: cy, t: now});
-      if(trail.points.length > TRAIL_HISTORY) trail.points.shift();
-      trail.lastSeen = now;
-    }
 
     // velocity in normalized coords
     let vx = 0, vy = 0;
@@ -972,61 +1484,10 @@ function processLoop(){
       const sx = Math.floor(cx - ndx * disp);
       const sy = Math.floor(cy - ndy * disp);
 
-      // sample a circular region from sourceCanvas at (sx,sy) with radius brushPx and draw onto paintCanvas
-      const r = Math.max(1, Math.round(brushPx));
-      // clipping source rect
-      const srcX = Math.max(0, sx - r);
-      const srcY = Math.max(0, sy - r);
-      const srcW = Math.min(canvasW - srcX, r*2);
-      const srcH = Math.min(canvasH - srcY, r*2);
-      if(srcW <= 0 || srcH <= 0) continue;
-
-      const img = sourceCtx.getImageData(srcX, srcY, srcW, srcH);
-      // draw onto paintCtx with circular mask
-      paintCtx.save();
-      paintCtx.globalAlpha = alpha;
-      paintCtx.beginPath();
-      paintCtx.arc(sx, sy, r, 0, Math.PI*2);
-      paintCtx.closePath();
-      paintCtx.clip();
-      paintCtx.putImageData(img, srcX, srcY);
-      paintCtx.restore();
+      drawTrackedShapeCopy(sx, sy, m.curr, brushPx, alpha);
     }
-    drawBlobStroke(cx, cy, Math.max(2, brushPx));
-  }
-
-  // render luminous trails following recent motion
-  if(trailGlowEl?.checked) for(const [id, trail] of trails){
-    // prune stale points
-    trail.points = trail.points.filter(pt => now - pt.t <= TRAIL_DECAY_MS);
-    if(trail.points.length < 2){
-      if(now - trail.lastSeen > TRAIL_DECAY_MS){
-        trails.delete(id);
-      }
-      continue;
-    }
-    const start = trail.points[0];
-    const end = trail.points[trail.points.length - 1];
-    const strength = Math.min(1, trail.points.length / TRAIL_HISTORY + 0.15);
-    paintCtx.save();
-    paintCtx.globalCompositeOperation = 'lighter';
-    paintCtx.lineCap = 'round';
-    paintCtx.lineJoin = 'round';
-    paintCtx.lineWidth = Math.max(2, brushPx * 0.55);
-    const grad = paintCtx.createLinearGradient(start.x, start.y, end.x, end.y);
-    grad.addColorStop(0, `hsla(${trail.hue}, 85%, 55%, 0)`);
-    grad.addColorStop(0.45, `hsla(${trail.hue}, 85%, 60%, ${strength * 0.45})`);
-    grad.addColorStop(1, `hsla(${trail.hue}, 85%, 70%, ${strength})`);
-    paintCtx.strokeStyle = grad;
-    paintCtx.globalAlpha = alpha * 0.7;
-    paintCtx.beginPath();
-    paintCtx.moveTo(start.x, start.y);
-    for(let i=1;i<trail.points.length;i++){
-      const p = trail.points[i];
-      paintCtx.lineTo(p.x, p.y);
-    }
-    paintCtx.stroke();
-    paintCtx.restore();
+    drawBlobStroke(cx, cy, m.curr, brushPx);
+    drawTrackedCenterDot(cx, cy, brushPx);
   }
 
   // composite: draw the static background (the current video frame) but keep non-moving areas static:
@@ -1038,7 +1499,7 @@ function processLoop(){
   // prepare for next frame
   prevFrame = new Uint8ClampedArray(currImage.data);
   prevCtx.putImageData(currImage, 0, 0);
-  prevBlobs = currPoints.map(p => ({x: p.x, y: p.y}));
+  prevBlobs = currPoints.map(keepTrackPoint);
 
   rafId = requestAnimationFrame(processLoop);
 }
@@ -1086,6 +1547,23 @@ function downloadBlob(blob, filename){
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function getProjectSlug(){
+  return safeFileName(projectNameInput?.value || 'MotionStills') || 'MotionStills';
+}
+
+function canvasToPngBlob(canvasEl){
+  return new Promise((resolve, reject) => {
+    if(!canvasEl?.width || !canvasEl?.height){
+      reject(new Error('Nothing to export yet.'));
+      return;
+    }
+    canvasEl.toBlob(blob => {
+      if(blob) resolve(blob);
+      else reject(new Error('Unable to export PNG.'));
+    }, 'image/png');
+  });
+}
+
 function makeExportCanvas({transparent = false, activeOnly = false} = {}){
   const out = document.createElement('canvas');
   out.width = canvasW;
@@ -1094,8 +1572,8 @@ function makeExportCanvas({transparent = false, activeOnly = false} = {}){
   if(!transparent){
     outCtx.fillStyle = '#000000';
     outCtx.fillRect(0, 0, out.width, out.height);
-    if(showVideoBackgroundEl?.checked && video.src && video.readyState >= 2){
-      outCtx.drawImage(video, 0, 0, out.width, out.height);
+    if(showVideoBackgroundEl?.checked && hasVideoSource() && video.readyState >= 2){
+      drawCurrentVideoFrame(outCtx, out.width, out.height);
     }
   }
   if(activeOnly){
@@ -1109,77 +1587,223 @@ function makeExportCanvas({transparent = false, activeOnly = false} = {}){
   return out;
 }
 
-function exportCanvasAsPng(canvasEl, filename){
-  if(!canvasEl?.width || !canvasEl?.height){
-    alert('Nothing to export yet');
-    return;
-  }
-  canvasEl.toBlob(blob => {
-    if(!blob){
-      alert('Unable to export PNG.');
-      return;
-    }
+async function exportCanvasAsPng(canvasEl, filename){
+  try{
+    const blob = await canvasToPngBlob(canvasEl);
     downloadBlob(blob, filename);
-  }, 'image/png');
+  } catch(error){
+    alert(error.message || 'Unable to export PNG.');
+  }
 }
 
 function safeFileName(name){
   return String(name || 'layer').trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'layer';
 }
 
-async function exportLayerFiles(){
-  if(!motionLayers.length){
-    alert('No layers to export.');
-    return;
-  }
-  if(window.showDirectoryPicker){
-    try{
-      const dir = await window.showDirectoryPicker({mode: 'readwrite'});
-      await Promise.all(motionLayers.map((layer, index) => new Promise((resolve, reject) => {
-        layer.canvas.toBlob(async blob => {
-          if(!blob){
-            reject(new Error(`Could not export ${layer.name}.`));
-            return;
-          }
-          try{
-            const handle = await dir.getFileHandle(`${String(index + 1).padStart(2, '0')}-${safeFileName(layer.name)}.png`, {create: true});
-            const writable = await handle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-            resolve();
-          } catch(error){
-            reject(error);
-          }
-        }, 'image/png');
-      })));
-      return;
-    } catch(error){
-      if(error?.name === 'AbortError') return;
-      console.warn(error);
+const crcTable = (() => {
+  const table = new Uint32Array(256);
+  for(let i = 0; i < 256; i++){
+    let c = i;
+    for(let k = 0; k < 8; k++){
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
     }
+    table[i] = c >>> 0;
   }
-  motionLayers.forEach((layer, index) => {
-    exportCanvasAsPng(layer.canvas, `${String(index + 1).padStart(2, '0')}-${safeFileName(layer.name)}.png`);
-  });
+  return table;
+})();
+
+function crc32(bytes){
+  let crc = 0xffffffff;
+  for(let i = 0; i < bytes.length; i++){
+    crc = crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
-async function exportProcessVideo(){
+function dosDateTime(date = new Date()){
+  const year = Math.max(1980, date.getFullYear());
+  const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const day = (year - 1980) << 9 | ((date.getMonth() + 1) << 5) | date.getDate();
+  return {time, day};
+}
+
+async function createZipBlob(files, rootName){
+  const encoder = new TextEncoder();
+  const now = dosDateTime();
+  const entries = [];
+  let offset = 0;
+
+  for(const file of files){
+    const path = `${rootName}/${file.filename}`.replace(/\\/g, '/');
+    const nameBytes = encoder.encode(path);
+    const data = new Uint8Array(await file.blob.arrayBuffer());
+    const checksum = crc32(data);
+    entries.push({nameBytes, data, checksum, offset});
+    offset += 30 + nameBytes.length + data.length;
+  }
+
+  const centralStart = offset;
+  const centralSize = entries.reduce((sum, entry) => sum + 46 + entry.nameBytes.length, 0);
+  const totalSize = centralStart + centralSize + 22;
+  const zip = new Uint8Array(totalSize);
+  const view = new DataView(zip.buffer);
+  let cursor = 0;
+
+  for(const entry of entries){
+    view.setUint32(cursor, 0x04034b50, true); cursor += 4;
+    view.setUint16(cursor, 20, true); cursor += 2;
+    view.setUint16(cursor, 0, true); cursor += 2;
+    view.setUint16(cursor, 0, true); cursor += 2;
+    view.setUint16(cursor, now.time, true); cursor += 2;
+    view.setUint16(cursor, now.day, true); cursor += 2;
+    view.setUint32(cursor, entry.checksum, true); cursor += 4;
+    view.setUint32(cursor, entry.data.length, true); cursor += 4;
+    view.setUint32(cursor, entry.data.length, true); cursor += 4;
+    view.setUint16(cursor, entry.nameBytes.length, true); cursor += 2;
+    view.setUint16(cursor, 0, true); cursor += 2;
+    zip.set(entry.nameBytes, cursor); cursor += entry.nameBytes.length;
+    zip.set(entry.data, cursor); cursor += entry.data.length;
+  }
+
+  for(const entry of entries){
+    view.setUint32(cursor, 0x02014b50, true); cursor += 4;
+    view.setUint16(cursor, 20, true); cursor += 2;
+    view.setUint16(cursor, 20, true); cursor += 2;
+    view.setUint16(cursor, 0, true); cursor += 2;
+    view.setUint16(cursor, 0, true); cursor += 2;
+    view.setUint16(cursor, now.time, true); cursor += 2;
+    view.setUint16(cursor, now.day, true); cursor += 2;
+    view.setUint32(cursor, entry.checksum, true); cursor += 4;
+    view.setUint32(cursor, entry.data.length, true); cursor += 4;
+    view.setUint32(cursor, entry.data.length, true); cursor += 4;
+    view.setUint16(cursor, entry.nameBytes.length, true); cursor += 2;
+    view.setUint16(cursor, 0, true); cursor += 2;
+    view.setUint16(cursor, 0, true); cursor += 2;
+    view.setUint16(cursor, 0, true); cursor += 2;
+    view.setUint16(cursor, 0, true); cursor += 2;
+    view.setUint32(cursor, 0, true); cursor += 4;
+    view.setUint32(cursor, entry.offset, true); cursor += 4;
+    zip.set(entry.nameBytes, cursor); cursor += entry.nameBytes.length;
+  }
+
+  view.setUint32(cursor, 0x06054b50, true); cursor += 4;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint16(cursor, entries.length, true); cursor += 2;
+  view.setUint16(cursor, entries.length, true); cursor += 2;
+  view.setUint32(cursor, centralSize, true); cursor += 4;
+  view.setUint32(cursor, centralStart, true); cursor += 4;
+  view.setUint16(cursor, 0, true);
+
+  return new Blob([zip], {type: 'application/zip'});
+}
+
+function getExportSelections(){
+  return {
+    background: !!exportPngBackgroundEl?.checked,
+    transparent: !!exportPngTransparentEl?.checked,
+    activeLayer: !!exportActiveLayerEl?.checked,
+    separateLayers: !!exportSeparateLayersEl?.checked,
+    processVideo: !!exportProcessVideoOptionEl?.checked
+  };
+}
+
+async function buildSelectedExportFiles(){
+  const selected = getExportSelections();
+  const files = [];
+  if(selected.background){
+    files.push({
+      filename: 'background.png',
+      blob: await canvasToPngBlob(makeExportCanvas({transparent: false}))
+    });
+  }
+  if(selected.transparent){
+    files.push({
+      filename: 'transparent.png',
+      blob: await canvasToPngBlob(makeExportCanvas({transparent: true}))
+    });
+  }
+  if(selected.activeLayer){
+    files.push({
+      filename: 'active-layer.png',
+      blob: await canvasToPngBlob(makeExportCanvas({transparent: true, activeOnly: true}))
+    });
+  }
+  if(selected.separateLayers){
+    if(!motionLayers.length) throw new Error('No layers to export.');
+    for(const [index, layer] of motionLayers.entries()){
+      files.push({
+        filename: `layers/${String(index + 1).padStart(2, '0')}-${safeFileName(layer.name)}.png`,
+        blob: await canvasToPngBlob(layer.canvas)
+      });
+    }
+  }
+  if(selected.processVideo){
+    const blob = await exportProcessVideo({returnBlob: true});
+    if(blob){
+      files.push({
+        filename: 'process.mp4',
+        blob
+      });
+    }
+  }
+  if(!files.length){
+    throw new Error('Choose at least one export option.');
+  }
+  return files;
+}
+
+async function saveExportFiles(files){
+  const project = getProjectSlug();
+  const zip = await createZipBlob(files, project);
+  downloadBlob(zip, `${project}.zip`);
+  return 'zip';
+}
+
+async function exportSelectedOutputs(){
   if(isVideoExporting) return;
-  if(!baseVideoLoaded || !video.src){
+  try{
+    exportBtn.disabled = true;
+    exportBtn.textContent = 'Exporting';
+    if(exportStatus) exportStatus.textContent = 'Preparing exports...';
+    const files = await buildSelectedExportFiles();
+    await saveExportFiles(files);
+    if(exportStatus){
+      exportStatus.textContent = `Downloaded ${getProjectSlug()}.zip with ${files.length} file${files.length === 1 ? '' : 's'}.`;
+    }
+  } catch(error){
+    if(error?.name !== 'AbortError'){
+      console.error(error);
+      alert(error.message || 'Unable to export selected files.');
+      if(exportStatus) exportStatus.textContent = 'Export failed.';
+    }
+  } finally {
+    exportBtn.disabled = false;
+    exportBtn.textContent = 'Export';
+  }
+}
+
+async function exportProcessVideo({returnBlob = false} = {}){
+  if(isVideoExporting) return;
+  if(!baseVideoLoaded || !hasVideoSource()){
+    if(returnBlob) throw new Error('Load a video first.');
     alert('Load a video first.');
     return;
   }
   if(!Number.isFinite(video.duration) || video.duration <= 0){
+    if(returnBlob) throw new Error('The loaded video does not have a valid duration.');
     alert('The loaded video does not have a valid duration.');
     return;
   }
   if(typeof canvas.captureStream !== 'function' || typeof MediaRecorder === 'undefined'){
+    if(returnBlob) throw new Error('Video export is not supported by this browser.');
     alert('Video export is not supported by this browser. Try a current version of Chrome, Edge, Firefox, or Safari.');
     return;
   }
 
   const mimeType = getMp4RecordingType();
   if(!mimeType){
+    if(returnBlob) throw new Error('This browser cannot record MP4 video.');
     alert('This browser cannot record MP4 video. Use a current version of Chrome, Edge, or Safari.');
     return;
   }
@@ -1188,10 +1812,14 @@ async function exportProcessVideo(){
   const previousDisabled = controls.map(control => control.disabled);
   let recorder = null;
   let progressHandler = null;
+  const layerSnapshots = motionLayers.map(layer => ({
+    layer,
+    imageData: layer.ctx.getImageData(0, 0, layer.canvas.width, layer.canvas.height)
+  }));
   isVideoExporting = true;
   controls.forEach(control => { control.disabled = true; });
-  exportVideoBtn.disabled = true;
-  exportVideoBtn.textContent = 'Preparing Video…';
+  exportBtn.textContent = 'Preparing Video';
+  if(exportStatus) exportStatus.textContent = 'Preparing process video...';
 
   try{
     video.pause();
@@ -1199,7 +1827,7 @@ async function exportProcessVideo(){
     resetProcessingState({clearPaint: true});
     clearAllLayers();
     dispCtx.clearRect(0, 0, canvasW, canvasH);
-    dispCtx.drawImage(video, 0, 0, canvasW, canvasH);
+    drawCurrentVideoFrame(dispCtx, canvasW, canvasH);
 
     const stream = canvas.captureStream(30);
     const chunks = [];
@@ -1236,10 +1864,12 @@ async function exportProcessVideo(){
 
     progressHandler = () => {
       const progress = Math.min(100, Math.round((video.currentTime / video.duration) * 100));
-      exportVideoBtn.textContent = `Exporting Video ${progress}%`;
+      exportBtn.textContent = `Video ${progress}%`;
+      if(exportStatus) exportStatus.textContent = `Exporting process video ${progress}%...`;
     };
     video.addEventListener('timeupdate', progressHandler);
-    exportVideoBtn.textContent = 'Exporting Video 0%';
+    exportBtn.textContent = 'Video 0%';
+    if(exportStatus) exportStatus.textContent = 'Exporting process video 0%...';
     recorder.start(1000);
     await video.play();
     playBtn.setAttribute('aria-pressed', 'true');
@@ -1252,24 +1882,30 @@ async function exportProcessVideo(){
 
     const blob = new Blob(chunks, {type: mimeType});
     if(!blob.size) throw new Error('The exported video was empty.');
-    downloadBlob(blob, 'MotionStills-process.mp4');
+    if(returnBlob) return blob;
+    downloadBlob(blob, `${getProjectSlug()}-process.mp4`);
   } catch(error){
     console.error(error);
     if(recorder?.state === 'recording') recorder.stop();
+    if(returnBlob) throw error;
     alert(error.message || 'Unable to export the process video.');
   } finally {
     video.pause();
     playBtn.setAttribute('aria-pressed', 'false');
     if(progressHandler) video.removeEventListener('timeupdate', progressHandler);
+    layerSnapshots.forEach(({layer, imageData}) => {
+      layer.ctx.putImageData(imageData, 0, 0);
+    });
+    renderCompositeFrame();
     controls.forEach((control, index) => { control.disabled = previousDisabled[index]; });
-    exportVideoBtn.textContent = 'Export Process Video';
+    exportBtn.textContent = 'Export';
     isVideoExporting = false;
   }
 }
 
 // controls
 playBtn.addEventListener('click', ()=>{
-  if(!video.src) return alert('Load a video first');
+  if(!hasVideoSource()) return alert('Load a video or start the webcam first');
   video.play();
   playBtn.setAttribute('aria-pressed', 'true');
   if(!rafId) processLoop();
@@ -1279,20 +1915,7 @@ pauseBtn.addEventListener('click', ()=>{
   playBtn.setAttribute('aria-pressed', 'false');
 });
 clearBtn.addEventListener('click', clearAllLayers);
-exportBtn.addEventListener('click', ()=>{
-  exportCanvasAsPng(makeExportCanvas({transparent: false}), 'MotionStills.png');
-});
-exportPaintOnlyBtn.addEventListener('click', ()=>{
-  exportCanvasAsPng(makeExportCanvas({transparent: true, activeOnly: true}), 'MotionStills-active-layer.png');
-});
-exportTransparentBtn.addEventListener('click', ()=>{
-  exportCanvasAsPng(makeExportCanvas({transparent: true}), 'MotionStills-transparent.png');
-});
-exportOpaqueBtn.addEventListener('click', ()=>{
-  exportCanvasAsPng(makeExportCanvas({transparent: false}), 'MotionStills-black-background.png');
-});
-exportLayersBtn.addEventListener('click', exportLayerFiles);
-exportVideoBtn.addEventListener('click', exportProcessVideo);
+exportBtn.addEventListener('click', exportSelectedOutputs);
 
 // keep canvas sized nicely on window resize
 window.addEventListener('resize', ()=> {
