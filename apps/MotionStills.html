@@ -28,13 +28,9 @@
         </div>
         <label class="motion-file-button motion-file-button--primary">
           <span>Import / Add Layer</span>
-          <input id="file" type="file" accept="video/*">
+          <input id="file" type="file" accept="video/*" multiple>
         </label>
         <button id="webcamBtn" type="button" class="motion-file-button motion-file-button--webcam">Use Webcam</button>
-        <div class="motion-project-field">
-          <label for="projectName">Project Name</label>
-          <input id="projectName" type="text" value="MotionStills" autocomplete="off" spellcheck="false">
-        </div>
 
         <div class="motion-primary-actions" aria-label="Main actions">
           <button id="play" type="button">Play</button>
@@ -43,6 +39,31 @@
           <button id="export" type="button">Export</button>
         </div>
       </div>
+
+      <details class="motion-group">
+        <summary>Project</summary>
+        <div class="motion-group-body">
+          <div class="motion-project-field">
+            <label for="projectName">Project Name</label>
+            <input id="projectName" type="text" value="MotionStills" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="motion-canvas-size">
+            <label for="canvasSizePreset">Canvas Size</label>
+            <select id="canvasSizePreset">
+              <option value="screen">Fit screen</option>
+              <option value="source">Source video</option>
+              <option value="1920x1080">1920 x 1080</option>
+              <option value="1280x720">1280 x 720</option>
+              <option value="1080x1080">1080 x 1080</option>
+              <option value="1080x1920">1080 x 1920</option>
+              <option value="custom">Custom</option>
+            </select>
+            <input id="canvasWidthInput" type="number" min="320" max="4096" step="1" value="1280" inputmode="numeric" aria-label="Canvas width">
+            <input id="canvasHeightInput" type="number" min="240" max="4096" step="1" value="720" inputmode="numeric" aria-label="Canvas height">
+          </div>
+          <button id="resetProjectBtn" type="button">Reset / New Canvas</button>
+        </div>
+      </details>
 
       <details class="motion-group">
         <summary>Layers</summary>
@@ -68,27 +89,27 @@
           <div class="motion-control">
             <label for="threshold">Motion Intensity</label>
             <input id="threshold" type="range" min="1" max="100" value="50" class="slider">
-            <output id="thVal">50%</output>
+            <input id="thVal" class="motion-value-input" type="number" min="1" max="100" step="1" value="50" aria-label="Motion intensity value">
           </div>
           <div class="motion-control">
             <label for="brush">Brush</label>
             <input id="brush" type="range" min="1" max="420" value="50" class="slider">
-            <output id="brushVal">50</output>
+            <input id="brushVal" class="motion-value-input" type="number" min="1" max="420" step="1" value="50" aria-label="Brush value">
           </div>
           <div class="motion-control">
             <label for="smear">Smear</label>
             <input id="smear" type="range" min="0" max="900" value="60" class="slider">
-            <output id="smearVal">60</output>
+            <input id="smearVal" class="motion-value-input" type="number" min="0" max="900" step="1" value="60" aria-label="Smear value">
           </div>
           <div class="motion-control">
             <label for="fade">Fade</label>
             <input id="fade" type="range" min="0.70" max="1" step="0.0005" value="1" class="slider">
-            <output id="fadeVal">1</output>
+            <input id="fadeVal" class="motion-value-input" type="number" min="0.70" max="1" step="0.0005" value="1" aria-label="Fade value">
           </div>
           <div class="motion-control">
             <label for="maxBlobs">Objects</label>
             <input id="maxBlobs" type="range" min="1" max="80" value="15" class="slider">
-            <output id="countVal">15</output>
+            <input id="countVal" class="motion-value-input" type="number" min="1" max="80" step="1" value="15" aria-label="Objects value">
           </div>
         </div>
       </details>
@@ -137,7 +158,7 @@
           <div class="motion-control">
             <label for="strokeWidth">Stroke</label>
             <input id="strokeWidth" type="range" min="0.5" max="80" step="0.5" value="6" class="slider">
-            <output id="strokeWidthVal">6</output>
+            <input id="strokeWidthVal" class="motion-value-input" type="number" min="0.5" max="80" step="0.5" value="6" aria-label="Stroke value">
           </div>
           <div class="motion-select-row">
             <label for="trackDotShape">Dot Shape</label>
@@ -155,22 +176,22 @@
           <div class="motion-control">
             <label for="trackDotSize">Dot Size</label>
             <input id="trackDotSize" type="range" min="1" max="80" step="1" value="10" class="slider">
-            <output id="trackDotSizeVal">10</output>
+            <input id="trackDotSizeVal" class="motion-value-input" type="number" min="1" max="80" step="1" value="10" aria-label="Dot size value">
           </div>
           <div class="motion-control">
             <label for="trackDotOpacity">Dot Opacity</label>
             <input id="trackDotOpacity" type="range" min="0.1" max="1" step="0.05" value="1" class="slider">
-            <output id="trackDotOpacityVal">1</output>
+            <input id="trackDotOpacityVal" class="motion-value-input" type="number" min="0.1" max="1" step="0.05" value="1" aria-label="Dot opacity value">
           </div>
           <div class="motion-control">
             <label for="stampLimit">Stamps</label>
             <input id="stampLimit" type="range" min="1" max="90" value="30" class="slider">
-            <output id="stampLimitVal">30</output>
+            <input id="stampLimitVal" class="motion-value-input" type="number" min="1" max="90" step="1" value="30" aria-label="Stamps value">
           </div>
           <div class="motion-control">
             <label for="motionNoise">Texture</label>
             <input id="motionNoise" type="range" min="0" max="1" step="0.01" value="0.1" class="slider">
-            <output id="motionNoiseVal">0.1</output>
+            <input id="motionNoiseVal" class="motion-value-input" type="number" min="0" max="1" step="0.01" value="0.1" aria-label="Texture value">
           </div>
         </div>
       </details>
@@ -197,6 +218,10 @@
           <label class="motion-check">
             <input id="exportProcessVideoOption" type="checkbox">
             <span>Process video MP4</span>
+          </label>
+          <label class="motion-check">
+            <input id="exportLayerVideosOption" type="checkbox">
+            <span>All layers PNG sequence</span>
           </label>
           <p class="motion-meter" id="exportStatus">Choose exports, then tap Export.</p>
         </div>
@@ -250,11 +275,16 @@ const confirmVideoSampleBtn = document.getElementById('confirmVideoSampleBtn');
 const cancelVideoSampleBtn = document.getElementById('cancelVideoSampleBtn');
 const closeVideoSampleModalBtn = document.getElementById('closeVideoSampleModalBtn');
 const projectNameInput = document.getElementById('projectName');
+const canvasSizePresetEl = document.getElementById('canvasSizePreset');
+const canvasWidthInput = document.getElementById('canvasWidthInput');
+const canvasHeightInput = document.getElementById('canvasHeightInput');
+const resetProjectBtn = document.getElementById('resetProjectBtn');
 const exportPngBackgroundEl = document.getElementById('exportPngBackground');
 const exportPngTransparentEl = document.getElementById('exportPngTransparent');
 const exportActiveLayerEl = document.getElementById('exportActiveLayer');
 const exportSeparateLayersEl = document.getElementById('exportSeparateLayers');
 const exportProcessVideoOptionEl = document.getElementById('exportProcessVideoOption');
+const exportLayerVideosOptionEl = document.getElementById('exportLayerVideosOption');
 const exportStatus = document.getElementById('exportStatus');
 const controlsPanel = document.getElementById('controls');
 const layerList = document.getElementById('layerList');
@@ -312,6 +342,7 @@ let isVideoExporting = false;
 let layerIdSeed = 0;
 let activeLayerId = null;
 let motionLayers = [];
+let applyingLayerSettings = false;
 
 // processing canvases (lower res for speed)
 const procCanvas = document.createElement('canvas');
@@ -432,6 +463,108 @@ function nextLayerName(){
   return motionLayers.length ? `Video Layer ${motionLayers.length + 1}` : 'Base Video';
 }
 
+function readMotionSettings(){
+  return {
+    threshold: thresholdEl.value,
+    brush: brushEl.value,
+    smear: smearEl.value,
+    fade: fadeEl.value,
+    maxBlobs: maxBlobsEl.value,
+    showVideoBackground: !!showVideoBackgroundEl?.checked,
+    strokeEnabled: !!strokeEnabledEl?.checked,
+    trackDotEnabled: !!trackDotEnabledEl?.checked,
+    trackedShape: trackedShapeEl?.value || 'square',
+    customShapePoints: customShapePoints.map(point => ({x: point.x, y: point.y})),
+    trackedSizeReactive: !!trackedSizeReactiveEl?.checked,
+    strokeColor: strokeColorEl?.value || '#ffffff',
+    strokeWidth: strokeWidthEl?.value || '6',
+    trackDotShape: trackDotShapeEl?.value || 'circle',
+    trackDotColor: trackDotColorEl?.value || '#ffffff',
+    trackDotSize: trackDotSizeEl?.value || '10',
+    trackDotOpacity: trackDotOpacityEl?.value || '1',
+    stampLimit: stampLimitEl?.value || '30',
+    motionNoise: motionNoiseEl?.value || '0.1'
+  };
+}
+
+function syncMotionSettingLabels(){
+  thresholdVal.value = thresholdEl.value;
+  brushVal.value = brushEl.value;
+  smearVal.value = smearEl.value;
+  fadeVal.value = fadeEl.value;
+  countVal.value = maxBlobsEl.value;
+  strokeWidthVal.value = strokeWidthEl.value;
+  trackDotSizeVal.value = trackDotSizeEl.value;
+  trackDotOpacityVal.value = trackDotOpacityEl.value;
+  stampLimitVal.value = stampLimitEl.value;
+  motionNoiseVal.value = motionNoiseEl.value;
+}
+
+function writeMotionSettings(settings){
+  if(!settings) return;
+  applyingLayerSettings = true;
+  thresholdEl.value = settings.threshold ?? thresholdEl.value;
+  brushEl.value = settings.brush ?? brushEl.value;
+  smearEl.value = settings.smear ?? smearEl.value;
+  fadeEl.value = settings.fade ?? fadeEl.value;
+  maxBlobsEl.value = settings.maxBlobs ?? maxBlobsEl.value;
+  if(showVideoBackgroundEl) showVideoBackgroundEl.checked = settings.showVideoBackground ?? showVideoBackgroundEl.checked;
+  if(strokeEnabledEl) strokeEnabledEl.checked = settings.strokeEnabled ?? strokeEnabledEl.checked;
+  if(trackDotEnabledEl) trackDotEnabledEl.checked = settings.trackDotEnabled ?? trackDotEnabledEl.checked;
+  if(trackedShapeEl) trackedShapeEl.value = settings.trackedShape || trackedShapeEl.value;
+  if(Array.isArray(settings.customShapePoints)){
+    customShapePoints = settings.customShapePoints.map(point => ({x: point.x, y: point.y}));
+  }
+  if(trackedSizeReactiveEl) trackedSizeReactiveEl.checked = settings.trackedSizeReactive ?? trackedSizeReactiveEl.checked;
+  if(strokeColorEl) strokeColorEl.value = settings.strokeColor || strokeColorEl.value;
+  if(strokeWidthEl) strokeWidthEl.value = settings.strokeWidth ?? strokeWidthEl.value;
+  if(trackDotShapeEl) trackDotShapeEl.value = settings.trackDotShape || trackDotShapeEl.value;
+  if(trackDotColorEl) trackDotColorEl.value = settings.trackDotColor || trackDotColorEl.value;
+  if(trackDotSizeEl) trackDotSizeEl.value = settings.trackDotSize ?? trackDotSizeEl.value;
+  if(trackDotOpacityEl) trackDotOpacityEl.value = settings.trackDotOpacity ?? trackDotOpacityEl.value;
+  if(stampLimitEl) stampLimitEl.value = settings.stampLimit ?? stampLimitEl.value;
+  if(motionNoiseEl) motionNoiseEl.value = settings.motionNoise ?? motionNoiseEl.value;
+  syncMotionSettingLabels();
+  renderCustomShapeCanvas();
+  applyingLayerSettings = false;
+}
+
+function rememberActiveLayerSettings(){
+  if(applyingLayerSettings) return;
+  const layer = getActiveLayer();
+  if(layer) layer.settings = readMotionSettings();
+}
+
+function cloneVideoSource(source){
+  if(!source) return null;
+  if(source.stream){
+    return {
+      stream: source.stream,
+      mirrored: !!source.mirrored,
+      cleanup: source.cleanup
+    };
+  }
+  return {
+    url: source.url,
+    cleanup: source.cleanup
+  };
+}
+
+function cleanupLayerSource(layer){
+  if(layer?.source && typeof layer.source.cleanup === 'function'){
+    layer.source.cleanup();
+  }
+}
+
+function cleanupAllLayerSources(){
+  motionLayers.forEach(cleanupLayerSource);
+}
+
+function assignLayerSource(layer, source){
+  if(!layer || !source) return;
+  layer.source = cloneVideoSource(source);
+}
+
 function createMotionLayer(name = nextLayerName()){
   const canvasEl = document.createElement('canvas');
   canvasEl.width = canvasW || 1280;
@@ -440,6 +573,8 @@ function createMotionLayer(name = nextLayerName()){
     id: `motion-layer-${++layerIdSeed}`,
     name,
     visible: true,
+    settings: readMotionSettings(),
+    source: null,
     canvas: canvasEl,
     ctx: canvasEl.getContext('2d')
   };
@@ -449,12 +584,14 @@ function getActiveLayer(){
   return motionLayers.find(layer => layer.id === activeLayerId) || motionLayers[0] || null;
 }
 
-function setActiveLayer(id){
+function setActiveLayer(id, {render = true} = {}){
+  rememberActiveLayerSettings();
   const layer = motionLayers.find(item => item.id === id) || motionLayers[0] || null;
   activeLayerId = layer?.id || null;
   paintCanvas = layer?.canvas || paintCanvas;
   paintCtx = layer?.ctx || paintCtx;
-  renderLayers();
+  if(layer?.settings) writeMotionSettings(layer.settings);
+  if(render) renderLayers();
 }
 
 function ensureActiveLayer(name){
@@ -478,6 +615,102 @@ function addVideoLayer(name){
 function clearAllLayers(){
   motionLayers.forEach(layer => layer.ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height));
   renderCompositeFrame();
+}
+
+function resetProjectToNewCanvas(){
+  video.pause();
+  cleanupAllLayerSources();
+  motionLayers = [];
+  activeLayerId = null;
+  baseVideoLoaded = false;
+  currentVideoSource = null;
+  prevFrame = null;
+  prevBlobs = [];
+  playBtn.setAttribute('aria-pressed', 'false');
+  video.removeAttribute('src');
+  video.srcObject = null;
+  video.load();
+  paintCanvas = document.createElement('canvas');
+  paintCtx = paintCanvas.getContext('2d');
+  resetProcessingState({clearPaint: true});
+  updatePaintSize();
+  dispCtx.clearRect(0, 0, canvasW, canvasH);
+  renderLayers();
+  syncCanvasSizeControls();
+  resetPlayPrompt();
+}
+
+function waitForVideoEnded(){
+  return new Promise((resolve, reject) => {
+    const onEnded = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('Video playback failed while rerunning the layer.'));
+    };
+    const cleanup = () => {
+      video.removeEventListener('ended', onEnded);
+      video.removeEventListener('error', onError);
+    };
+    video.addEventListener('ended', onEnded, {once: true});
+    video.addEventListener('error', onError, {once: true});
+  });
+}
+
+async function rerunLayer(layer){
+  if(isVideoExporting) return;
+  if(!layer || !motionLayers.includes(layer)) throw new Error('Layer no longer exists.');
+  if(!layer.source?.url) throw new Error('Only imported video layers can be rerun.');
+
+  rememberActiveLayerSettings();
+  const controls = Array.from(controlsPanel.querySelectorAll('button, input, select'));
+  const previousDisabled = controls.map(control => control.disabled);
+  const originalSource = cloneVideoSource(currentVideoSource);
+  const originalTime = video.currentTime;
+  const originalLayerId = activeLayerId;
+  const originalSettings = readMotionSettings();
+  let progressHandler = null;
+  isVideoExporting = true;
+  controls.forEach(control => { control.disabled = true; });
+
+  try{
+    setActiveLayer(layer.id);
+    await useLayerVideoSource(layer);
+    resetProcessingState({clearPaint: true});
+    layer.ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+    renderCompositeFrame();
+
+    progressHandler = () => {
+      const progress = video.duration ? Math.min(100, Math.round((video.currentTime / video.duration) * 100)) : 0;
+      if(layerStatus) layerStatus.textContent = `Rerunning ${layer.name} ${progress}%...`;
+    };
+    video.addEventListener('timeupdate', progressHandler);
+    if(layerStatus) layerStatus.textContent = `Rerunning ${layer.name} 0%...`;
+    await video.play();
+    playBtn.setAttribute('aria-pressed', 'true');
+    if(!rafId) processLoop();
+    await waitForVideoEnded();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    if(layerStatus) layerStatus.textContent = `Reran ${layer.name}.`;
+  } finally {
+    video.pause();
+    playBtn.setAttribute('aria-pressed', 'false');
+    if(progressHandler) video.removeEventListener('timeupdate', progressHandler);
+    try{
+      await restoreVideoSourceForExport(originalSource, originalTime);
+    } catch(error){
+      console.warn('Could not restore previous video source after rerun.', error);
+    }
+    setActiveLayer(originalLayerId);
+    writeMotionSettings(originalSettings);
+    rememberActiveLayerSettings();
+    renderCompositeFrame();
+    controls.forEach((control, index) => { control.disabled = previousDisabled[index]; });
+    isVideoExporting = false;
+    renderLayers();
+  }
 }
 
 function resizeLayerCanvases(){
@@ -508,11 +741,29 @@ function renderLayers(){
   motionLayers.forEach((layer, index) => {
     const item = document.createElement('div');
     item.className = `motion-layer ${layer.id === activeLayerId ? 'is-active' : ''}`;
-    const title = document.createElement('button');
-    title.type = 'button';
+    const title = document.createElement('input');
+    title.type = 'text';
     title.className = 'motion-layer__title';
-    title.textContent = layer.name;
-    title.addEventListener('click', () => setActiveLayer(layer.id));
+    title.value = layer.name;
+    title.setAttribute('aria-label', `Layer name: ${layer.name}`);
+    title.addEventListener('focus', () => {
+      setActiveLayer(layer.id, {render: false});
+      layerList.querySelectorAll('.motion-layer').forEach(row => row.classList.remove('is-active'));
+      item.classList.add('is-active');
+      if(layerStatus) layerStatus.textContent = `Active: ${layer.name}`;
+    });
+    title.addEventListener('input', () => {
+      layer.name = title.value;
+      title.setAttribute('aria-label', `Layer name: ${layer.name || 'Untitled layer'}`);
+      if(layerStatus && layer.id === activeLayerId) layerStatus.textContent = `Active: ${layer.name || 'Untitled layer'}`;
+    });
+    title.addEventListener('change', () => {
+      const cleanName = title.value.trim() || 'Untitled Layer';
+      layer.name = cleanName;
+      title.value = cleanName;
+      title.setAttribute('aria-label', `Layer name: ${cleanName}`);
+      if(layerStatus && layer.id === activeLayerId) layerStatus.textContent = `Active: ${cleanName}`;
+    });
 
     const actions = document.createElement('div');
     actions.className = 'motion-layer__actions';
@@ -524,6 +775,17 @@ function renderLayers(){
       layer.visible = !layer.visible;
       renderLayers();
       renderCompositeFrame();
+    });
+    const rerun = document.createElement('button');
+    rerun.type = 'button';
+    rerun.textContent = 'Rerun';
+    rerun.disabled = !layer.source?.url || isVideoExporting;
+    rerun.title = layer.source?.url ? 'Replay this layer from the beginning' : 'Only imported video layers can be rerun';
+    rerun.addEventListener('click', () => {
+      rerunLayer(layer).catch(error => {
+        console.error(error);
+        alert(error.message || 'Unable to rerun this layer.');
+      });
     });
     const up = document.createElement('button');
     up.type = 'button';
@@ -549,12 +811,13 @@ function renderLayers(){
     remove.type = 'button';
     remove.textContent = 'Delete';
     remove.addEventListener('click', () => {
+      cleanupLayerSource(layer);
       motionLayers = motionLayers.filter(item => item.id !== layer.id);
       if(activeLayerId === layer.id) activeLayerId = motionLayers[0]?.id || null;
       setActiveLayer(activeLayerId);
       renderCompositeFrame();
     });
-    actions.append(toggle, up, down, remove);
+    actions.append(toggle, rerun, up, down, remove);
     item.append(title, actions);
     layerList.appendChild(item);
   });
@@ -685,6 +948,7 @@ function waitForRenderableVideoFrame(){
 async function loadVideoSource(nextUrl, {preservePaint = false, cleanup, layerName} = {}){
   if(!nextUrl) return;
   const previousSource = currentVideoSource;
+  const nextSource = { url: nextUrl, cleanup };
   const metadataPromise = new Promise((resolve, reject)=>{
     function cleanup(){
       video.removeEventListener('loadedmetadata', onLoaded);
@@ -701,15 +965,16 @@ async function loadVideoSource(nextUrl, {preservePaint = false, cleanup, layerNa
       const hasDisplay = displayW && displayH;
       const shouldResize = !preservePaint || !hasDisplay;
       if(shouldResize){
+        cleanupAllLayerSources();
         motionLayers = [];
         activeLayerId = null;
         updatePaintSize(vw, vh);
         lockProcessingResolutionToSource(vw, vh);
-        ensureActiveLayer(layerName || 'Base Video');
+        assignLayerSource(ensureActiveLayer(layerName || 'Base Video'), nextSource);
         resetProcessingState({clearPaint: !preservePaint});
         baseVideoLoaded = true;
       } else {
-        addVideoLayer(layerName || nextLayerName());
+        assignLayerSource(addVideoLayer(layerName || nextLayerName()), nextSource);
         resetProcessingState({clearPaint: false});
         if(!baseVideoLoaded){
           baseVideoLoaded = true;
@@ -728,8 +993,8 @@ async function loadVideoSource(nextUrl, {preservePaint = false, cleanup, layerNa
   });
   try{
     await metadataPromise;
-    currentVideoSource = { url: nextUrl, cleanup };
-    if(previousSource && typeof previousSource.cleanup === 'function'){
+    currentVideoSource = nextSource;
+    if(previousSource?.stream && typeof previousSource.cleanup === 'function'){
       previousSource.cleanup();
     }
     video.pause();
@@ -737,6 +1002,7 @@ async function loadVideoSource(nextUrl, {preservePaint = false, cleanup, layerNa
     await waitForRenderableVideoFrame();
     renderLayers();
     renderCompositeFrame();
+    syncCanvasSizeControls();
     resetPlayPrompt();
   } catch(err){
     if(typeof cleanup === 'function'){
@@ -815,31 +1081,34 @@ async function prepareWebcamSource(){
     const vh = Math.round(video.videoHeight || 720);
     const hasDisplay = displayW && displayH;
     const shouldResize = !preservePaint || !hasDisplay;
-    if(shouldResize){
-      motionLayers = [];
-      activeLayerId = null;
-      updatePaintSize(vw, vh);
-      lockProcessingResolutionToSource(vw, vh);
-      ensureActiveLayer('Webcam');
-      resetProcessingState({clearPaint: !preservePaint});
-      baseVideoLoaded = true;
-    } else {
-      addVideoLayer('Webcam Layer');
-      resetProcessingState({clearPaint: false});
-      baseVideoLoaded = true;
-    }
-
-    currentVideoSource = {
+    const nextSource = {
       stream,
       mirrored: true,
       cleanup: () => stream.getTracks().forEach(track => track.stop())
     };
-    if(previousSource && typeof previousSource.cleanup === 'function'){
+    if(shouldResize){
+      cleanupAllLayerSources();
+      motionLayers = [];
+      activeLayerId = null;
+      updatePaintSize(vw, vh);
+      lockProcessingResolutionToSource(vw, vh);
+      assignLayerSource(ensureActiveLayer('Webcam'), nextSource);
+      resetProcessingState({clearPaint: !preservePaint});
+      baseVideoLoaded = true;
+    } else {
+      assignLayerSource(addVideoLayer('Webcam Layer'), nextSource);
+      resetProcessingState({clearPaint: false});
+      baseVideoLoaded = true;
+    }
+
+    currentVideoSource = nextSource;
+    if(previousSource?.stream && previousSource.stream !== stream && typeof previousSource.cleanup === 'function'){
       previousSource.cleanup();
     }
     video.pause();
     renderLayers();
     renderCompositeFrame();
+    syncCanvasSizeControls();
     resetPlayPrompt();
   } catch(error){
     stream?.getTracks?.().forEach(track => track.stop());
@@ -891,6 +1160,75 @@ function lockProcessingResolutionToSource(width, height){
   setProcessingResolution(width, height);
 }
 
+function clampCanvasDimension(value, fallback, min, max){
+  const parsed = parseInt(value, 10);
+  if(!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function getCanvasPresetSize(sourceW, sourceH){
+  const preset = canvasSizePresetEl?.value || 'screen';
+  if(preset === 'screen') return null;
+  if(preset === 'source'){
+    if(sourceW && sourceH) return {width: sourceW, height: sourceH};
+    return null;
+  }
+  if(preset === 'custom'){
+    return {
+      width: clampCanvasDimension(canvasWidthInput?.value, canvasW || 1280, 320, 4096),
+      height: clampCanvasDimension(canvasHeightInput?.value, canvasH || 720, 240, 4096)
+    };
+  }
+  const match = preset.match(/^(\d+)x(\d+)$/);
+  if(match){
+    return {
+      width: clampCanvasDimension(match[1], 1280, 320, 4096),
+      height: clampCanvasDimension(match[2], 720, 240, 4096)
+    };
+  }
+  return null;
+}
+
+function getCanvasViewportFit(aspect){
+  const viewportHeight = Math.max(240, Math.floor(window.innerHeight || document.documentElement?.clientHeight || displayH || 720));
+  const viewportWidth = Math.max(320, Math.floor(window.innerWidth || document.documentElement?.clientWidth || displayW || 1280));
+  const lateralGap = stackedQuery.matches ? 0 : 32;
+  const controlsWidth = !stackedQuery.matches && controlsPanel ? controlsPanel.getBoundingClientRect().width : 0;
+  const availableWidth = Math.max(320, viewportWidth - controlsWidth - lateralGap);
+
+  let cssHeight = viewportHeight;
+  let cssWidth = Math.round(cssHeight * aspect);
+
+  if(cssWidth > availableWidth){
+    cssWidth = availableWidth;
+    cssHeight = Math.round(cssWidth / aspect);
+  }
+
+  return {
+    width: Math.max(320, cssWidth),
+    height: Math.max(240, cssHeight)
+  };
+}
+
+function syncCanvasSizeControls(){
+  const preset = canvasSizePresetEl?.value || 'screen';
+  const custom = preset === 'custom';
+  const locked = !!baseVideoLoaded;
+  if(canvasSizePresetEl) canvasSizePresetEl.disabled = locked;
+  if(canvasWidthInput) canvasWidthInput.disabled = locked || !custom;
+  if(canvasHeightInput) canvasHeightInput.disabled = locked || !custom;
+}
+
+function reflectCanvasPresetInputs(){
+  const preset = canvasSizePresetEl?.value || 'screen';
+  const match = preset.match(/^(\d+)x(\d+)$/);
+  if(match){
+    if(canvasWidthInput) canvasWidthInput.value = match[1];
+    if(canvasHeightInput) canvasHeightInput.value = match[2];
+  }
+  syncCanvasSizeControls();
+}
+
 function getMotionThreshold(){
   const intensity = Math.max(1, Math.min(100, parseInt(thresholdEl.value, 10) || 50));
   // Higher UI intensity should catch subtler movement. 50% preserves the old ideal threshold of 100.
@@ -906,35 +1244,44 @@ function resetProcessingState({clearPaint = false} = {}){
   }
 }
 function updatePaintSize(newW, newH){
-  if(typeof newW === 'number' && typeof newH === 'number' && newW > 0 && newH > 0){
-    displayAspect = newW / newH;
+  const fixedSize = getCanvasPresetSize(newW, newH);
+  let targetCanvasW = 0;
+  let targetCanvasH = 0;
+  let cssSize = null;
+
+  if(fixedSize){
+    targetCanvasW = fixedSize.width;
+    targetCanvasH = fixedSize.height;
+    if(canvasSizePresetEl?.value === 'source'){
+      if(canvasWidthInput) canvasWidthInput.value = String(targetCanvasW);
+      if(canvasHeightInput) canvasHeightInput.value = String(targetCanvasH);
+    }
+    displayAspect = targetCanvasW / targetCanvasH;
+    cssSize = getCanvasViewportFit(displayAspect);
+  } else {
+    if(typeof newW === 'number' && typeof newH === 'number' && newW > 0 && newH > 0){
+      displayAspect = newW / newH;
+    }
+    if(!isFinite(displayAspect) || displayAspect <= 0){
+      displayAspect = 16 / 9;
+    }
+    cssSize = getCanvasViewportFit(displayAspect);
+    targetCanvasW = cssSize.width;
+    targetCanvasH = cssSize.height;
   }
+
   if(!isFinite(displayAspect) || displayAspect <= 0){
     displayAspect = 16 / 9;
   }
 
-  const viewportHeight = Math.max(240, Math.floor(window.innerHeight || document.documentElement?.clientHeight || displayH || 720));
-  const viewportWidth = Math.max(320, Math.floor(window.innerWidth || document.documentElement?.clientWidth || displayW || 1280));
-  const lateralGap = stackedQuery.matches ? 0 : 32;
-  const controlsWidth = !stackedQuery.matches && controlsPanel ? controlsPanel.getBoundingClientRect().width : 0;
-  const availableWidth = Math.max(320, viewportWidth - controlsWidth - lateralGap);
+  displayW = targetCanvasW;
+  displayH = targetCanvasH;
 
-  let targetHeight = viewportHeight;
-  let targetWidth = Math.round(targetHeight * displayAspect);
-
-  if(targetWidth > availableWidth){
-    targetWidth = availableWidth;
-    targetHeight = Math.round(targetWidth / displayAspect);
-  }
-
-  displayW = Math.max(320, targetWidth);
-  displayH = Math.max(240, targetHeight);
-
-  const resized = canvas.width !== displayW || canvas.height !== displayH;
-  canvas.width = displayW;
-  canvas.height = displayH;
-  canvas.style.width = `${displayW}px`;
-  canvas.style.height = `${displayH}px`;
+  const resized = canvas.width !== targetCanvasW || canvas.height !== targetCanvasH;
+  canvas.width = targetCanvasW;
+  canvas.height = targetCanvasH;
+  canvas.style.width = `${cssSize.width}px`;
+  canvas.style.height = `${cssSize.height}px`;
   canvasW = canvas.width;
   canvasH = canvas.height;
   if(resized){
@@ -945,27 +1292,104 @@ function updatePaintSize(newW, newH){
   }
 }
 setProcessingResolution(procW, procH);
+syncCanvasSizeControls();
 updatePaintSize();
 
 // wire control canvass
-thresholdEl.addEventListener('input', ()=> thresholdVal.textContent = `${thresholdEl.value}%`);
-brushEl.addEventListener('input', ()=> brushVal.textContent = brushEl.value);
-smearEl.addEventListener('input', ()=> smearVal.textContent = smearEl.value);
-fadeEl.addEventListener('input', ()=> fadeVal.textContent = fadeEl.value);
-maxBlobsEl.addEventListener('input', ()=> countVal.textContent = maxBlobsEl.value);
-strokeWidthEl.addEventListener('input', ()=> strokeWidthVal.textContent = strokeWidthEl.value);
-trackDotSizeEl.addEventListener('input', ()=> trackDotSizeVal.textContent = trackDotSizeEl.value);
-trackDotOpacityEl.addEventListener('input', ()=> trackDotOpacityVal.textContent = trackDotOpacityEl.value);
-stampLimitEl.addEventListener('input', ()=> stampLimitVal.textContent = stampLimitEl.value);
-motionNoiseEl.addEventListener('input', ()=> motionNoiseVal.textContent = motionNoiseEl.value);
+canvasSizePresetEl?.addEventListener('change', () => {
+  if(baseVideoLoaded) return;
+  reflectCanvasPresetInputs();
+  updatePaintSize();
+  renderCompositeFrame();
+});
+canvasWidthInput?.addEventListener('input', () => {
+  if(baseVideoLoaded || canvasSizePresetEl?.value !== 'custom') return;
+  updatePaintSize();
+  renderCompositeFrame();
+});
+canvasHeightInput?.addEventListener('input', () => {
+  if(baseVideoLoaded || canvasSizePresetEl?.value !== 'custom') return;
+  updatePaintSize();
+  renderCompositeFrame();
+});
+resetProjectBtn?.addEventListener('click', resetProjectToNewCanvas);
+
+function clampRangeValue(rangeEl, value){
+  const fallback = parseFloat(rangeEl.value) || 0;
+  let next = parseFloat(value);
+  if(!Number.isFinite(next)) next = fallback;
+  const min = parseFloat(rangeEl.min);
+  const max = parseFloat(rangeEl.max);
+  if(Number.isFinite(min)) next = Math.max(min, next);
+  if(Number.isFinite(max)) next = Math.min(max, next);
+  return String(next);
+}
+
+function bindRangeValue(rangeEl, valueEl){
+  if(!rangeEl || !valueEl) return;
+  valueEl.value = rangeEl.value;
+  rangeEl.addEventListener('input', () => {
+    valueEl.value = rangeEl.value;
+  });
+  valueEl.addEventListener('input', () => {
+    rangeEl.value = clampRangeValue(rangeEl, valueEl.value);
+    rememberActiveLayerSettings();
+  });
+  valueEl.addEventListener('change', () => {
+    rangeEl.value = clampRangeValue(rangeEl, valueEl.value);
+    valueEl.value = rangeEl.value;
+    rememberActiveLayerSettings();
+  });
+}
+
+bindRangeValue(thresholdEl, thresholdVal);
+bindRangeValue(brushEl, brushVal);
+bindRangeValue(smearEl, smearVal);
+bindRangeValue(fadeEl, fadeVal);
+bindRangeValue(maxBlobsEl, countVal);
+bindRangeValue(strokeWidthEl, strokeWidthVal);
+bindRangeValue(trackDotSizeEl, trackDotSizeVal);
+bindRangeValue(trackDotOpacityEl, trackDotOpacityVal);
+bindRangeValue(stampLimitEl, stampLimitVal);
+bindRangeValue(motionNoiseEl, motionNoiseVal);
 showVideoBackgroundEl.addEventListener('change', renderCompositeFrame);
+[
+  thresholdEl,
+  brushEl,
+  smearEl,
+  fadeEl,
+  maxBlobsEl,
+  showVideoBackgroundEl,
+  strokeEnabledEl,
+  trackDotEnabledEl,
+  trackedShapeEl,
+  trackedSizeReactiveEl,
+  strokeColorEl,
+  strokeWidthEl,
+  trackDotShapeEl,
+  trackDotColorEl,
+  trackDotSizeEl,
+  trackDotOpacityEl,
+  stampLimitEl,
+  motionNoiseEl
+].filter(Boolean).forEach(control => {
+  control.addEventListener('input', rememberActiveLayerSettings);
+  control.addEventListener('change', rememberActiveLayerSettings);
+});
 customShapeCanvas?.addEventListener('pointerdown', startCustomShape);
 customShapeCanvas?.addEventListener('pointermove', moveCustomShape);
-customShapeCanvas?.addEventListener('pointerup', endCustomShape);
-customShapeCanvas?.addEventListener('pointercancel', endCustomShape);
+customShapeCanvas?.addEventListener('pointerup', event => {
+  endCustomShape(event);
+  rememberActiveLayerSettings();
+});
+customShapeCanvas?.addEventListener('pointercancel', event => {
+  endCustomShape(event);
+  rememberActiveLayerSettings();
+});
 clearCustomShapeBtn?.addEventListener('click', () => {
   customShapePoints = [];
   renderCustomShapeCanvas();
+  rememberActiveLayerSettings();
 });
 renderCustomShapeCanvas();
 
@@ -1124,12 +1548,20 @@ function applyAllTrackSmoothing(matches){
 
 // load video and fit sizes
 fileInput.addEventListener('change', async (e)=>{
-  const file = e.target.files && e.target.files[0];
-  if(!file) return;
+  const files = Array.from(e.target.files || []);
+  if(!files.length) return;
+  const failures = [];
   try{
-    await prepareVideoFromFile(file, {preservePaint: baseVideoLoaded});
-  } catch(err){
-    alert(err.message);
+    for(const file of files){
+      try{
+        await prepareVideoFromFile(file, {preservePaint: baseVideoLoaded});
+      } catch(err){
+        failures.push(`${file.name}: ${err.message || 'Could not import video.'}`);
+      }
+    }
+    if(failures.length){
+      alert(`Some videos could not be imported:\n${failures.join('\n')}`);
+    }
   } finally {
     fileInput.value = '';
   }
@@ -1435,7 +1867,7 @@ function processLoop(){
   // Draw shaped copies sampled from the current video frame, displaced along velocity.
   const smearPx = parseFloat(smearEl.value);
   const brushPx = parseFloat(brushEl.value);
-  const alpha = 0.7;
+  const alpha = 1;
   const stampLimit = parseInt(stampLimitEl.value, 10) || 30;
   const noiseAmount = Math.max(0, parseFloat(motionNoiseEl.value) || 0);
 
@@ -1704,11 +2136,173 @@ function getExportSelections(){
     transparent: !!exportPngTransparentEl?.checked,
     activeLayer: !!exportActiveLayerEl?.checked,
     separateLayers: !!exportSeparateLayersEl?.checked,
-    processVideo: !!exportProcessVideoOptionEl?.checked
+    processVideo: !!exportProcessVideoOptionEl?.checked,
+    layerVideos: !!exportLayerVideosOptionEl?.checked
   };
 }
 
+function waitForVideoMetadata(){
+  if(video.readyState >= 1 && video.videoWidth && video.videoHeight){
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      video.removeEventListener('loadedmetadata', onLoaded);
+      video.removeEventListener('error', onError);
+    };
+    const onLoaded = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('Could not load the layer video source.'));
+    };
+    video.addEventListener('loadedmetadata', onLoaded, {once: true});
+    video.addEventListener('error', onError, {once: true});
+  });
+}
+
+async function useLayerVideoSource(layer){
+  if(!layer?.source?.url){
+    throw new Error(`${layer?.name || 'This layer'} cannot be replayed. Use imported video layers, not webcam layers.`);
+  }
+  video.pause();
+  video.srcObject = null;
+  video.src = layer.source.url;
+  await waitForVideoMetadata();
+  currentVideoSource = cloneVideoSource(layer.source);
+  video.currentTime = 0;
+  await waitForRenderableVideoFrame();
+}
+
+async function restoreVideoSourceForExport(source, time = 0){
+  if(!source) return;
+  video.pause();
+  if(source.stream){
+    video.removeAttribute('src');
+    video.srcObject = source.stream;
+    currentVideoSource = cloneVideoSource(source);
+    await waitForVideoMetadata();
+    return;
+  }
+  if(source.url){
+    video.srcObject = null;
+    video.src = source.url;
+    currentVideoSource = cloneVideoSource(source);
+    await waitForVideoMetadata();
+    if(Number.isFinite(time) && video.duration && time < video.duration){
+      video.currentTime = Math.max(0, time);
+      await waitForRenderableVideoFrame();
+    }
+  }
+}
+
+async function buildLayerProcessVideoFiles(){
+  if(!motionLayers.length) throw new Error('No layers to export.');
+  const originalSource = cloneVideoSource(currentVideoSource);
+  const originalTime = video.currentTime;
+  const originalLayerId = activeLayerId;
+  const originalSettings = readMotionSettings();
+  const files = [];
+
+  try{
+    for(const [index, layer] of motionLayers.entries()){
+      setActiveLayer(layer.id);
+      await useLayerVideoSource(layer);
+      files.push(...await exportLayerPngSequence(layer, {
+        layerIndex: index,
+        layerCount: motionLayers.length
+      }));
+    }
+  } finally {
+    await restoreVideoSourceForExport(originalSource, originalTime);
+    setActiveLayer(originalLayerId);
+    writeMotionSettings(originalSettings);
+    rememberActiveLayerSettings();
+    renderCompositeFrame();
+  }
+
+  return files;
+}
+
+async function exportLayerPngSequence(layer, {layerIndex = 0, layerCount = 1, fps = 30} = {}){
+  if(!layer?.source?.url) throw new Error(`${layer?.name || 'This layer'} cannot be exported as a sequence. Use imported video layers.`);
+  const previousShowVideoBackground = !!showVideoBackgroundEl?.checked;
+  const frameFiles = [];
+  const framePromises = [];
+  const layerFolder = `${String(layerIndex + 1).padStart(2, '0')}-${safeFileName(layer.name)}`;
+  let progressFrame = 0;
+
+  try{
+    if(showVideoBackgroundEl) showVideoBackgroundEl.checked = false;
+    video.pause();
+    await waitForVideoStart();
+    resetProcessingState({clearPaint: true});
+    clearAllLayers();
+    dispCtx.clearRect(0, 0, canvasW, canvasH);
+
+    let nextCaptureTime = 0;
+    let frameNumber = 0;
+    let captureError = null;
+    const captureFrame = () => {
+      if(captureError) return;
+      const filename = `layer-sequences/${layerFolder}/frame-${String(frameNumber++).padStart(5, '0')}.png`;
+      const promise = canvasToPngBlob(canvas)
+        .then(blob => {
+          frameFiles.push({filename, blob});
+        })
+        .catch(error => {
+          captureError = error;
+        });
+      framePromises.push(promise);
+    };
+
+    const captureComplete = new Promise((resolve, reject) => {
+      const tick = () => {
+        if(captureError){
+          reject(captureError);
+          return;
+        }
+        while(video.currentTime + 0.0001 >= nextCaptureTime && nextCaptureTime <= video.duration){
+          captureFrame();
+          nextCaptureTime += 1 / fps;
+        }
+        const progress = video.duration ? Math.min(100, Math.round((video.currentTime / video.duration) * 100)) : 0;
+        if(progress !== progressFrame){
+          progressFrame = progress;
+          exportBtn.textContent = `Layer ${layerIndex + 1} ${progress}%`;
+          if(exportStatus) exportStatus.textContent = `Exporting PNG sequence ${layerIndex + 1} of ${layerCount} ${progress}%...`;
+        }
+        if(video.ended){
+          captureFrame();
+          resolve();
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+
+    exportBtn.textContent = `Layer ${layerIndex + 1} 0%`;
+    if(exportStatus) exportStatus.textContent = `Exporting PNG sequence ${layerIndex + 1} of ${layerCount} 0%...`;
+    await video.play();
+    playBtn.setAttribute('aria-pressed', 'true');
+    if(!rafId) processLoop();
+    await captureComplete;
+    await Promise.all(framePromises);
+    if(!frameFiles.length) throw new Error(`No frames were exported for ${layer.name}.`);
+  } finally {
+    video.pause();
+    playBtn.setAttribute('aria-pressed', 'false');
+    if(showVideoBackgroundEl) showVideoBackgroundEl.checked = previousShowVideoBackground;
+  }
+
+  return frameFiles.sort((a, b) => a.filename.localeCompare(b.filename));
+}
+
 async function buildSelectedExportFiles(){
+  rememberActiveLayerSettings();
   const selected = getExportSelections();
   const files = [];
   if(selected.background){
@@ -1747,6 +2341,9 @@ async function buildSelectedExportFiles(){
       });
     }
   }
+  if(selected.layerVideos){
+    files.push(...await buildLayerProcessVideoFiles());
+  }
   if(!files.length){
     throw new Error('Choose at least one export option.');
   }
@@ -1783,7 +2380,7 @@ async function exportSelectedOutputs(){
   }
 }
 
-async function exportProcessVideo({returnBlob = false} = {}){
+async function exportProcessVideo({returnBlob = false, statusLabel = 'process video'} = {}){
   if(isVideoExporting) return;
   if(!baseVideoLoaded || !hasVideoSource()){
     if(returnBlob) throw new Error('Load a video first.');
@@ -1803,8 +2400,9 @@ async function exportProcessVideo({returnBlob = false} = {}){
 
   const mimeType = getMp4RecordingType();
   if(!mimeType){
-    if(returnBlob) throw new Error('This browser cannot record MP4 video.');
-    alert('This browser cannot record MP4 video. Use a current version of Chrome, Edge, or Safari.');
+    const message = 'This browser cannot record MP4 video.';
+    if(returnBlob) throw new Error(message);
+    alert(`${message} Use a current version of Chrome, Edge, or Safari.`);
     return;
   }
 
@@ -1819,7 +2417,7 @@ async function exportProcessVideo({returnBlob = false} = {}){
   isVideoExporting = true;
   controls.forEach(control => { control.disabled = true; });
   exportBtn.textContent = 'Preparing Video';
-  if(exportStatus) exportStatus.textContent = 'Preparing process video...';
+  if(exportStatus) exportStatus.textContent = `Preparing ${statusLabel}...`;
 
   try{
     video.pause();
@@ -1865,11 +2463,11 @@ async function exportProcessVideo({returnBlob = false} = {}){
     progressHandler = () => {
       const progress = Math.min(100, Math.round((video.currentTime / video.duration) * 100));
       exportBtn.textContent = `Video ${progress}%`;
-      if(exportStatus) exportStatus.textContent = `Exporting process video ${progress}%...`;
+      if(exportStatus) exportStatus.textContent = `Exporting ${statusLabel} ${progress}%...`;
     };
     video.addEventListener('timeupdate', progressHandler);
     exportBtn.textContent = 'Video 0%';
-    if(exportStatus) exportStatus.textContent = 'Exporting process video 0%...';
+    if(exportStatus) exportStatus.textContent = `Exporting ${statusLabel} 0%...`;
     recorder.start(1000);
     await video.play();
     playBtn.setAttribute('aria-pressed', 'true');
