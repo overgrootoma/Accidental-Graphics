@@ -223,6 +223,23 @@
             <input id="exportLayerVideosOption" type="checkbox">
             <span>All layers PNG sequence</span>
           </label>
+          <div class="motion-select-row">
+            <label for="exportSequenceFps">Sequence FPS</label>
+            <select id="exportSequenceFps">
+              <option value="12">12</option>
+              <option value="24" selected>24</option>
+              <option value="30">30</option>
+              <option value="60">60</option>
+            </select>
+          </div>
+          <div class="motion-select-row">
+            <label for="exportSequenceScale">Sequence Scale</label>
+            <select id="exportSequenceScale">
+              <option value="0.5">50%</option>
+              <option value="0.75">75%</option>
+              <option value="1" selected>100%</option>
+            </select>
+          </div>
           <p class="motion-meter" id="exportStatus">Choose exports, then tap Export.</p>
         </div>
       </details>
@@ -285,6 +302,8 @@ const exportActiveLayerEl = document.getElementById('exportActiveLayer');
 const exportSeparateLayersEl = document.getElementById('exportSeparateLayers');
 const exportProcessVideoOptionEl = document.getElementById('exportProcessVideoOption');
 const exportLayerVideosOptionEl = document.getElementById('exportLayerVideosOption');
+const exportSequenceFpsEl = document.getElementById('exportSequenceFps');
+const exportSequenceScaleEl = document.getElementById('exportSequenceScale');
 const exportStatus = document.getElementById('exportStatus');
 const controlsPanel = document.getElementById('controls');
 const layerList = document.getElementById('layerList');
@@ -529,10 +548,15 @@ function writeMotionSettings(settings){
   applyingLayerSettings = false;
 }
 
+function rememberLayerSettings(layer){
+  if(applyingLayerSettings || !layer) return;
+  layer.settings = readMotionSettings();
+}
+
 function rememberActiveLayerSettings(){
   if(applyingLayerSettings) return;
-  const layer = getActiveLayer();
-  if(layer) layer.settings = readMotionSettings();
+  const layer = motionLayers.find(item => item.id === activeLayerId);
+  rememberLayerSettings(layer);
 }
 
 function cloneVideoSource(source){
@@ -546,6 +570,7 @@ function cloneVideoSource(source){
   }
   return {
     url: source.url,
+    file: source.file || null,
     cleanup: source.cleanup
   };
 }
@@ -584,8 +609,8 @@ function getActiveLayer(){
   return motionLayers.find(layer => layer.id === activeLayerId) || motionLayers[0] || null;
 }
 
-function setActiveLayer(id, {render = true} = {}){
-  rememberActiveLayerSettings();
+function setActiveLayer(id, {render = true, rememberCurrent = true} = {}){
+  if(rememberCurrent) rememberActiveLayerSettings();
   const layer = motionLayers.find(item => item.id === id) || motionLayers[0] || null;
   activeLayerId = layer?.id || null;
   paintCanvas = layer?.canvas || paintCanvas;
@@ -615,6 +640,21 @@ function addVideoLayer(name){
 function clearAllLayers(){
   motionLayers.forEach(layer => layer.ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height));
   renderCompositeFrame();
+}
+
+function snapshotLayerCanvases(){
+  return motionLayers.map(layer => ({
+    layer,
+    imageData: layer.ctx.getImageData(0, 0, layer.canvas.width, layer.canvas.height)
+  }));
+}
+
+function restoreLayerCanvases(snapshots){
+  snapshots.forEach(({layer, imageData}) => {
+    if(layer?.ctx && imageData){
+      layer.ctx.putImageData(imageData, 0, 0);
+    }
+  });
 }
 
 function resetProjectToNewCanvas(){
@@ -811,10 +851,14 @@ function renderLayers(){
     remove.type = 'button';
     remove.textContent = 'Delete';
     remove.addEventListener('click', () => {
+      rememberActiveLayerSettings();
+      const wasActive = activeLayerId === layer.id;
+      const nextActiveId = wasActive
+        ? motionLayers.find(item => item.id !== layer.id)?.id || null
+        : activeLayerId;
       cleanupLayerSource(layer);
       motionLayers = motionLayers.filter(item => item.id !== layer.id);
-      if(activeLayerId === layer.id) activeLayerId = motionLayers[0]?.id || null;
-      setActiveLayer(activeLayerId);
+      setActiveLayer(nextActiveId, {rememberCurrent: false});
       renderCompositeFrame();
     });
     actions.append(toggle, rerun, up, down, remove);
@@ -945,10 +989,34 @@ function waitForRenderableVideoFrame(){
   });
 }
 
-async function loadVideoSource(nextUrl, {preservePaint = false, cleanup, layerName} = {}){
+function seekVideoTo(time){
+  const targetTime = Math.max(0, Math.min(time, Number.isFinite(video.duration) ? video.duration : time));
+  if(Math.abs(video.currentTime - targetTime) < 0.0005 && video.readyState >= 2){
+    return new Promise(resolve => requestAnimationFrame(resolve));
+  }
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener('error', onError);
+    };
+    const onSeeked = () => {
+      cleanup();
+      requestAnimationFrame(resolve);
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('Could not render a frame during PNG sequence export.'));
+    };
+    video.addEventListener('seeked', onSeeked, {once: true});
+    video.addEventListener('error', onError, {once: true});
+    video.currentTime = targetTime;
+  });
+}
+
+async function loadVideoSource(nextUrl, {preservePaint = false, cleanup, layerName, sourceFile = null} = {}){
   if(!nextUrl) return;
   const previousSource = currentVideoSource;
-  const nextSource = { url: nextUrl, cleanup };
+  const nextSource = { url: nextUrl, file: sourceFile, cleanup };
   const metadataPromise = new Promise((resolve, reject)=>{
     function cleanup(){
       video.removeEventListener('loadedmetadata', onLoaded);
@@ -1029,6 +1097,7 @@ async function prepareVideoFromFile(file, options = {}){
   await loadVideoSource(objectUrl, {
     ...options,
     layerName: options.layerName || file.name.replace(/\.[^.]+$/, ''),
+    sourceFile: file,
     cleanup: () => URL.revokeObjectURL(objectUrl)
   });
 }
@@ -1814,8 +1883,7 @@ function drawTrackedCenterDot(x, y, brushPx){
   paintCtx.restore();
 }
 
-function processLoop(){
-  if(video.paused || video.ended){ rafId = requestAnimationFrame(processLoop); return; }
+function processCurrentVideoFrame(){
   const activeLayer = getActiveLayer();
   if(!activeLayer){
     ensureActiveLayer('Base Video');
@@ -1829,8 +1897,8 @@ function processLoop(){
   if(prevFrame === null){
     prevFrame = new Uint8ClampedArray(currImage.data);
     prevCtx.putImageData(currImage, 0, 0);
-    rafId = requestAnimationFrame(processLoop); 
-    return;
+    renderCompositeFrame();
+    return false;
   }
 
   // build binary motion map (RGBA)
@@ -1933,6 +2001,12 @@ function processLoop(){
   prevCtx.putImageData(currImage, 0, 0);
   prevBlobs = currPoints.map(keepTrackPoint);
 
+  return true;
+}
+
+function processLoop(){
+  if(video.paused || video.ended){ rafId = requestAnimationFrame(processLoop); return; }
+  processCurrentVideoFrame();
   rafId = requestAnimationFrame(processLoop);
 }
 
@@ -2062,42 +2136,56 @@ function dosDateTime(date = new Date()){
 async function createZipBlob(files, rootName){
   const encoder = new TextEncoder();
   const now = dosDateTime();
+  const zipParts = [];
   const entries = [];
   let offset = 0;
+
+  if(files.length > 65535){
+    throw new Error('This export contains too many files for a browser ZIP. Export only the PNG sequence to save it directly to a folder.');
+  }
 
   for(const file of files){
     const path = `${rootName}/${file.filename}`.replace(/\\/g, '/');
     const nameBytes = encoder.encode(path);
     const data = new Uint8Array(await file.blob.arrayBuffer());
     const checksum = crc32(data);
-    entries.push({nameBytes, data, checksum, offset});
-    offset += 30 + nameBytes.length + data.length;
+    const nextOffset = offset + 30 + nameBytes.length + data.length;
+    if(nextOffset > 0xffffffff){
+      throw new Error('This export is too large for a browser ZIP. Export only the PNG sequence to save frames directly to a folder, or export a shorter clip.');
+    }
+
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+    let cursor = 0;
+    localView.setUint32(cursor, 0x04034b50, true); cursor += 4;
+    localView.setUint16(cursor, 20, true); cursor += 2;
+    localView.setUint16(cursor, 0, true); cursor += 2;
+    localView.setUint16(cursor, 0, true); cursor += 2;
+    localView.setUint16(cursor, now.time, true); cursor += 2;
+    localView.setUint16(cursor, now.day, true); cursor += 2;
+    localView.setUint32(cursor, checksum, true); cursor += 4;
+    localView.setUint32(cursor, data.length, true); cursor += 4;
+    localView.setUint32(cursor, data.length, true); cursor += 4;
+    localView.setUint16(cursor, nameBytes.length, true); cursor += 2;
+    localView.setUint16(cursor, 0, true); cursor += 2;
+    localHeader.set(nameBytes, cursor);
+
+    zipParts.push(localHeader, data);
+    entries.push({nameBytes, size: data.length, checksum, offset});
+    offset = nextOffset;
+    await new Promise(resolve => setTimeout(resolve, 0));
   }
 
   const centralStart = offset;
   const centralSize = entries.reduce((sum, entry) => sum + 46 + entry.nameBytes.length, 0);
-  const totalSize = centralStart + centralSize + 22;
-  const zip = new Uint8Array(totalSize);
-  const view = new DataView(zip.buffer);
-  let cursor = 0;
-
-  for(const entry of entries){
-    view.setUint32(cursor, 0x04034b50, true); cursor += 4;
-    view.setUint16(cursor, 20, true); cursor += 2;
-    view.setUint16(cursor, 0, true); cursor += 2;
-    view.setUint16(cursor, 0, true); cursor += 2;
-    view.setUint16(cursor, now.time, true); cursor += 2;
-    view.setUint16(cursor, now.day, true); cursor += 2;
-    view.setUint32(cursor, entry.checksum, true); cursor += 4;
-    view.setUint32(cursor, entry.data.length, true); cursor += 4;
-    view.setUint32(cursor, entry.data.length, true); cursor += 4;
-    view.setUint16(cursor, entry.nameBytes.length, true); cursor += 2;
-    view.setUint16(cursor, 0, true); cursor += 2;
-    zip.set(entry.nameBytes, cursor); cursor += entry.nameBytes.length;
-    zip.set(entry.data, cursor); cursor += entry.data.length;
+  if(centralStart + centralSize + 22 > 0xffffffff){
+    throw new Error('This export is too large for a browser ZIP. Export only the PNG sequence to save frames directly to a folder, or export a shorter clip.');
   }
 
   for(const entry of entries){
+    const centralHeader = new Uint8Array(46 + entry.nameBytes.length);
+    const view = new DataView(centralHeader.buffer);
+    let cursor = 0;
     view.setUint32(cursor, 0x02014b50, true); cursor += 4;
     view.setUint16(cursor, 20, true); cursor += 2;
     view.setUint16(cursor, 20, true); cursor += 2;
@@ -2106,8 +2194,8 @@ async function createZipBlob(files, rootName){
     view.setUint16(cursor, now.time, true); cursor += 2;
     view.setUint16(cursor, now.day, true); cursor += 2;
     view.setUint32(cursor, entry.checksum, true); cursor += 4;
-    view.setUint32(cursor, entry.data.length, true); cursor += 4;
-    view.setUint32(cursor, entry.data.length, true); cursor += 4;
+    view.setUint32(cursor, entry.size, true); cursor += 4;
+    view.setUint32(cursor, entry.size, true); cursor += 4;
     view.setUint16(cursor, entry.nameBytes.length, true); cursor += 2;
     view.setUint16(cursor, 0, true); cursor += 2;
     view.setUint16(cursor, 0, true); cursor += 2;
@@ -2115,19 +2203,24 @@ async function createZipBlob(files, rootName){
     view.setUint16(cursor, 0, true); cursor += 2;
     view.setUint32(cursor, 0, true); cursor += 4;
     view.setUint32(cursor, entry.offset, true); cursor += 4;
-    zip.set(entry.nameBytes, cursor); cursor += entry.nameBytes.length;
+    centralHeader.set(entry.nameBytes, cursor);
+    zipParts.push(centralHeader);
   }
 
-  view.setUint32(cursor, 0x06054b50, true); cursor += 4;
-  view.setUint16(cursor, 0, true); cursor += 2;
-  view.setUint16(cursor, 0, true); cursor += 2;
-  view.setUint16(cursor, entries.length, true); cursor += 2;
-  view.setUint16(cursor, entries.length, true); cursor += 2;
-  view.setUint32(cursor, centralSize, true); cursor += 4;
-  view.setUint32(cursor, centralStart, true); cursor += 4;
-  view.setUint16(cursor, 0, true);
+  const endRecord = new Uint8Array(22);
+  const endView = new DataView(endRecord.buffer);
+  let cursor = 0;
+  endView.setUint32(cursor, 0x06054b50, true); cursor += 4;
+  endView.setUint16(cursor, 0, true); cursor += 2;
+  endView.setUint16(cursor, 0, true); cursor += 2;
+  endView.setUint16(cursor, entries.length, true); cursor += 2;
+  endView.setUint16(cursor, entries.length, true); cursor += 2;
+  endView.setUint32(cursor, centralSize, true); cursor += 4;
+  endView.setUint32(cursor, centralStart, true); cursor += 4;
+  endView.setUint16(cursor, 0, true);
+  zipParts.push(endRecord);
 
-  return new Blob([zip], {type: 'application/zip'});
+  return new Blob(zipParts, {type: 'application/zip'});
 }
 
 function getExportSelections(){
@@ -2138,6 +2231,165 @@ function getExportSelections(){
     separateLayers: !!exportSeparateLayersEl?.checked,
     processVideo: !!exportProcessVideoOptionEl?.checked,
     layerVideos: !!exportLayerVideosOptionEl?.checked
+  };
+}
+
+function getExportErrorMessage(error){
+  if(error?.name === 'UnknownError'){
+    return 'The browser failed while writing the PNG sequence ZIP. Choose a local drive with enough free space and try again, or export a shorter clip.';
+  }
+  return error?.message || 'Unable to export selected files.';
+}
+
+function getSequenceExportSettings(){
+  const fps = parseInt(exportSequenceFpsEl?.value, 10);
+  const scale = parseFloat(exportSequenceScaleEl?.value);
+  return {
+    fps: [12, 24, 30, 60].includes(fps) ? fps : 24,
+    scale: [0.5, 0.75, 1].includes(scale) ? scale : 1
+  };
+}
+
+function makeScaledSequenceCanvas(sourceCanvasEl, scale){
+  if(scale >= 0.999) return sourceCanvasEl;
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, Math.round(sourceCanvasEl.width * scale));
+  out.height = Math.max(1, Math.round(sourceCanvasEl.height * scale));
+  const outCtx = out.getContext('2d');
+  outCtx.imageSmoothingEnabled = true;
+  outCtx.imageSmoothingQuality = 'high';
+  outCtx.drawImage(sourceCanvasEl, 0, 0, out.width, out.height);
+  return out;
+}
+
+function createDirectoryFrameWriter(rootHandle){
+  const directoryCache = new Map([['', rootHandle]]);
+  let writeQueue = Promise.resolve();
+
+  return function writeFrame(filename, blob){
+    const task = writeQueue.then(async () => {
+      const parts = filename.split('/').filter(Boolean);
+      const fileName = parts.pop();
+      let currentPath = '';
+      let directory = rootHandle;
+
+      for(const part of parts){
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        if(!directoryCache.has(currentPath)){
+          directoryCache.set(currentPath, await directory.getDirectoryHandle(part, {create: true}));
+        }
+        directory = directoryCache.get(currentPath);
+      }
+
+      const fileHandle = await directory.getFileHandle(fileName, {create: true});
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+    });
+    writeQueue = task.catch(() => {});
+    return task;
+  };
+}
+
+function makeZipLocalHeader(nameBytes, size, checksum, now){
+  const header = new Uint8Array(30 + nameBytes.length);
+  const view = new DataView(header.buffer);
+  let cursor = 0;
+  view.setUint32(cursor, 0x04034b50, true); cursor += 4;
+  view.setUint16(cursor, 20, true); cursor += 2;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint16(cursor, now.time, true); cursor += 2;
+  view.setUint16(cursor, now.day, true); cursor += 2;
+  view.setUint32(cursor, checksum, true); cursor += 4;
+  view.setUint32(cursor, size, true); cursor += 4;
+  view.setUint32(cursor, size, true); cursor += 4;
+  view.setUint16(cursor, nameBytes.length, true); cursor += 2;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  header.set(nameBytes, cursor);
+  return header;
+}
+
+function makeZipCentralHeader(entry, now){
+  const header = new Uint8Array(46 + entry.nameBytes.length);
+  const view = new DataView(header.buffer);
+  let cursor = 0;
+  view.setUint32(cursor, 0x02014b50, true); cursor += 4;
+  view.setUint16(cursor, 20, true); cursor += 2;
+  view.setUint16(cursor, 20, true); cursor += 2;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint16(cursor, now.time, true); cursor += 2;
+  view.setUint16(cursor, now.day, true); cursor += 2;
+  view.setUint32(cursor, entry.checksum, true); cursor += 4;
+  view.setUint32(cursor, entry.size, true); cursor += 4;
+  view.setUint32(cursor, entry.size, true); cursor += 4;
+  view.setUint16(cursor, entry.nameBytes.length, true); cursor += 2;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint32(cursor, 0, true); cursor += 4;
+  view.setUint32(cursor, entry.offset, true); cursor += 4;
+  header.set(entry.nameBytes, cursor);
+  return header;
+}
+
+function makeZipEndRecord(entryCount, centralSize, centralStart){
+  const record = new Uint8Array(22);
+  const view = new DataView(record.buffer);
+  let cursor = 0;
+  view.setUint32(cursor, 0x06054b50, true); cursor += 4;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint16(cursor, 0, true); cursor += 2;
+  view.setUint16(cursor, entryCount, true); cursor += 2;
+  view.setUint16(cursor, entryCount, true); cursor += 2;
+  view.setUint32(cursor, centralSize, true); cursor += 4;
+  view.setUint32(cursor, centralStart, true); cursor += 4;
+  view.setUint16(cursor, 0, true);
+  return record;
+}
+
+function createStreamingZipWriter(writable, rootName){
+  const encoder = new TextEncoder();
+  const now = dosDateTime();
+  const entries = [];
+  let offset = 0;
+
+  return {
+    async addFile(filename, blob){
+      if(entries.length >= 65535){
+        throw new Error('This export contains too many files for a browser ZIP.');
+      }
+      const path = `${rootName}/${filename}`.replace(/\\/g, '/');
+      const nameBytes = encoder.encode(path);
+      const data = new Uint8Array(await blob.arrayBuffer());
+      const checksum = crc32(data);
+      const size = data.length;
+      const nextOffset = offset + 30 + nameBytes.length + size;
+      if(nextOffset > 0xffffffff){
+        throw new Error('This PNG sequence is larger than 4 GB. Export a shorter clip or lower the canvas size.');
+      }
+      await writable.write(makeZipLocalHeader(nameBytes, size, checksum, now));
+      await writable.write(data);
+      entries.push({nameBytes, size, checksum, offset});
+      offset = nextOffset;
+    },
+    async close(){
+      const centralStart = offset;
+      let centralSize = 0;
+      for(const entry of entries){
+        const header = makeZipCentralHeader(entry, now);
+        await writable.write(header);
+        centralSize += header.length;
+      }
+      if(centralStart + centralSize + 22 > 0xffffffff){
+        throw new Error('This PNG sequence is larger than 4 GB. Export a shorter clip or lower the canvas size.');
+      }
+      await writable.write(makeZipEndRecord(entries.length, centralSize, centralStart));
+      await writable.close();
+      return entries.length;
+    }
   };
 }
 
@@ -2163,14 +2415,41 @@ function waitForVideoMetadata(){
   });
 }
 
+async function loadLayerVideoUrl(layer){
+  video.pause();
+  video.srcObject = null;
+  video.src = layer.source.url;
+  video.load();
+  await waitForVideoMetadata();
+}
+
+function refreshVideoSourceObjectUrl(source){
+  if(!source?.file) return false;
+  if(typeof source.cleanup === 'function'){
+    source.cleanup();
+  }
+  const objectUrl = URL.createObjectURL(source.file);
+  source.url = objectUrl;
+  source.cleanup = () => URL.revokeObjectURL(objectUrl);
+  return true;
+}
+
+function refreshLayerObjectUrl(layer){
+  if(!layer?.source) return false;
+  if(!refreshVideoSourceObjectUrl(layer.source)) return false;
+  return true;
+}
+
 async function useLayerVideoSource(layer){
   if(!layer?.source?.url){
     throw new Error(`${layer?.name || 'This layer'} cannot be replayed. Use imported video layers, not webcam layers.`);
   }
-  video.pause();
-  video.srcObject = null;
-  video.src = layer.source.url;
-  await waitForVideoMetadata();
+  try{
+    await loadLayerVideoUrl(layer);
+  } catch(error){
+    if(!refreshLayerObjectUrl(layer)) throw error;
+    await loadLayerVideoUrl(layer);
+  }
   currentVideoSource = cloneVideoSource(layer.source);
   video.currentTime = 0;
   await waitForRenderableVideoFrame();
@@ -2188,9 +2467,17 @@ async function restoreVideoSourceForExport(source, time = 0){
   }
   if(source.url){
     video.srcObject = null;
-    video.src = source.url;
+    try{
+      video.src = source.url;
+      video.load();
+      await waitForVideoMetadata();
+    } catch(error){
+      if(!refreshVideoSourceObjectUrl(source)) throw error;
+      video.src = source.url;
+      video.load();
+      await waitForVideoMetadata();
+    }
     currentVideoSource = cloneVideoSource(source);
-    await waitForVideoMetadata();
     if(Number.isFinite(time) && video.duration && time < video.duration){
       video.currentTime = Math.max(0, time);
       await waitForRenderableVideoFrame();
@@ -2198,25 +2485,40 @@ async function restoreVideoSourceForExport(source, time = 0){
   }
 }
 
-async function buildLayerProcessVideoFiles(){
+async function buildLayerProcessVideoFiles({onFrame, fps, scale} = {}){
   if(!motionLayers.length) throw new Error('No layers to export.');
   const originalSource = cloneVideoSource(currentVideoSource);
   const originalTime = video.currentTime;
   const originalLayerId = activeLayerId;
   const originalSettings = readMotionSettings();
+  const layerSnapshots = snapshotLayerCanvases();
+  const exportLayers = motionLayers.slice();
   const files = [];
 
+  const unsupportedLayer = exportLayers.find(layer => !layer.source?.url);
+  if(unsupportedLayer){
+    throw new Error(`${unsupportedLayer.name || 'A layer'} cannot be exported as a PNG sequence. Use imported video layers, not webcam layers.`);
+  }
+
   try{
-    for(const [index, layer] of motionLayers.entries()){
+    for(const [index, layer] of exportLayers.entries()){
       setActiveLayer(layer.id);
       await useLayerVideoSource(layer);
       files.push(...await exportLayerPngSequence(layer, {
         layerIndex: index,
-        layerCount: motionLayers.length
+        layerCount: exportLayers.length,
+        fps,
+        scale,
+        onFrame
       }));
     }
   } finally {
-    await restoreVideoSourceForExport(originalSource, originalTime);
+    try{
+      await restoreVideoSourceForExport(originalSource, originalTime);
+    } catch(error){
+      console.warn('Could not restore previous video source after layer sequence export.', error);
+    }
+    restoreLayerCanvases(layerSnapshots);
     setActiveLayer(originalLayerId);
     writeMotionSettings(originalSettings);
     rememberActiveLayerSettings();
@@ -2226,11 +2528,10 @@ async function buildLayerProcessVideoFiles(){
   return files;
 }
 
-async function exportLayerPngSequence(layer, {layerIndex = 0, layerCount = 1, fps = 30} = {}){
+async function exportLayerPngSequence(layer, {layerIndex = 0, layerCount = 1, fps = 24, scale = 1, onFrame} = {}){
   if(!layer?.source?.url) throw new Error(`${layer?.name || 'This layer'} cannot be exported as a sequence. Use imported video layers.`);
   const previousShowVideoBackground = !!showVideoBackgroundEl?.checked;
   const frameFiles = [];
-  const framePromises = [];
   const layerFolder = `${String(layerIndex + 1).padStart(2, '0')}-${safeFileName(layer.name)}`;
   let progressFrame = 0;
 
@@ -2242,60 +2543,43 @@ async function exportLayerPngSequence(layer, {layerIndex = 0, layerCount = 1, fp
     clearAllLayers();
     dispCtx.clearRect(0, 0, canvasW, canvasH);
 
-    let nextCaptureTime = 0;
-    let frameNumber = 0;
-    let captureError = null;
-    const captureFrame = () => {
-      if(captureError) return;
-      const filename = `layer-sequences/${layerFolder}/frame-${String(frameNumber++).padStart(5, '0')}.png`;
-      const promise = canvasToPngBlob(canvas)
-        .then(blob => {
-          frameFiles.push({filename, blob});
-        })
-        .catch(error => {
-          captureError = error;
-        });
-      framePromises.push(promise);
-    };
-
-    const captureComplete = new Promise((resolve, reject) => {
-      const tick = () => {
-        if(captureError){
-          reject(captureError);
-          return;
-        }
-        while(video.currentTime + 0.0001 >= nextCaptureTime && nextCaptureTime <= video.duration){
-          captureFrame();
-          nextCaptureTime += 1 / fps;
-        }
-        const progress = video.duration ? Math.min(100, Math.round((video.currentTime / video.duration) * 100)) : 0;
-        if(progress !== progressFrame){
-          progressFrame = progress;
-          exportBtn.textContent = `Layer ${layerIndex + 1} ${progress}%`;
-          if(exportStatus) exportStatus.textContent = `Exporting PNG sequence ${layerIndex + 1} of ${layerCount} ${progress}%...`;
-        }
-        if(video.ended){
-          captureFrame();
-          resolve();
-          return;
-        }
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    });
-
     exportBtn.textContent = `Layer ${layerIndex + 1} 0%`;
-    if(exportStatus) exportStatus.textContent = `Exporting PNG sequence ${layerIndex + 1} of ${layerCount} 0%...`;
-    await video.play();
-    playBtn.setAttribute('aria-pressed', 'true');
-    if(!rafId) processLoop();
-    await captureComplete;
-    await Promise.all(framePromises);
+    if(exportStatus) exportStatus.textContent = `Exporting PNG sequence ${layerIndex + 1} of ${layerCount} at ${fps} fps, ${Math.round(scale * 100)}% size 0%...`;
+    playBtn.setAttribute('aria-pressed', 'false');
+
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    if(duration <= 0) throw new Error(`Cannot export ${layer.name} because the video duration is invalid.`);
+    const frameCount = Math.max(1, Math.ceil(duration * fps));
+
+    for(let frameNumber = 0; frameNumber < frameCount; frameNumber++){
+      const frameTime = Math.min(duration, frameNumber / fps);
+      await seekVideoTo(frameTime);
+      processCurrentVideoFrame();
+      await new Promise(resolve => requestAnimationFrame(resolve));
+
+      const filename = `layer-sequences/${layerFolder}/frame-${String(frameNumber).padStart(5, '0')}.png`;
+      const exportCanvas = makeScaledSequenceCanvas(canvas, scale);
+      const blob = await canvasToPngBlob(exportCanvas);
+      if(onFrame){
+        await onFrame(filename, blob);
+        frameFiles.push({filename});
+      } else {
+        frameFiles.push({filename, blob});
+      }
+
+      const progress = Math.min(100, Math.round(((frameNumber + 1) / frameCount) * 100));
+      if(progress !== progressFrame){
+        progressFrame = progress;
+        exportBtn.textContent = `Layer ${layerIndex + 1} ${progress}%`;
+        if(exportStatus) exportStatus.textContent = `Exporting PNG sequence ${layerIndex + 1} of ${layerCount} at ${fps} fps, ${Math.round(scale * 100)}% size ${progress}%...`;
+      }
+    }
     if(!frameFiles.length) throw new Error(`No frames were exported for ${layer.name}.`);
   } finally {
     video.pause();
     playBtn.setAttribute('aria-pressed', 'false');
     if(showVideoBackgroundEl) showVideoBackgroundEl.checked = previousShowVideoBackground;
+    writeMotionSettings(layer.settings);
   }
 
   return frameFiles.sort((a, b) => a.filename.localeCompare(b.filename));
@@ -2342,12 +2626,129 @@ async function buildSelectedExportFiles(){
     }
   }
   if(selected.layerVideos){
-    files.push(...await buildLayerProcessVideoFiles());
+    files.push(...await buildLayerProcessVideoFiles(getSequenceExportSettings()));
   }
   if(!files.length){
     throw new Error('Choose at least one export option.');
   }
   return files;
+}
+
+async function saveSelectedExportsToDirectory(selected){
+  if(typeof window.showDirectoryPicker !== 'function'){
+    throw new Error('Large PNG sequence folder export needs Chrome or Edge. In this browser, export a shorter clip as ZIP.');
+  }
+
+  rememberActiveLayerSettings();
+  const pickedDirectory = await window.showDirectoryPicker({mode: 'readwrite'});
+  const projectDirectory = await pickedDirectory.getDirectoryHandle(getProjectSlug(), {create: true});
+  const writeFile = createDirectoryFrameWriter(projectDirectory);
+  let fileCount = 0;
+
+  const writeNamedBlob = async (filename, blob) => {
+    await writeFile(filename, blob);
+    fileCount += 1;
+  };
+
+  if(selected.background){
+    await writeNamedBlob('background.png', await canvasToPngBlob(makeExportCanvas({transparent: false})));
+  }
+  if(selected.transparent){
+    await writeNamedBlob('transparent.png', await canvasToPngBlob(makeExportCanvas({transparent: true})));
+  }
+  if(selected.activeLayer){
+    await writeNamedBlob('active-layer.png', await canvasToPngBlob(makeExportCanvas({transparent: true, activeOnly: true})));
+  }
+  if(selected.separateLayers){
+    if(!motionLayers.length) throw new Error('No layers to export.');
+    for(const [index, layer] of motionLayers.entries()){
+      await writeNamedBlob(`layers/${String(index + 1).padStart(2, '0')}-${safeFileName(layer.name)}.png`, await canvasToPngBlob(layer.canvas));
+    }
+  }
+  if(selected.processVideo){
+    const blob = await exportProcessVideo({returnBlob: true});
+    if(blob){
+      await writeNamedBlob('process.mp4', blob);
+    }
+  }
+  if(selected.layerVideos){
+    const sequenceFiles = await buildLayerProcessVideoFiles({
+      ...getSequenceExportSettings(),
+      onFrame: writeNamedBlob
+    });
+    if(!sequenceFiles.length) throw new Error('No PNG sequence frames were exported.');
+  }
+  if(!fileCount){
+    throw new Error('Choose at least one export option.');
+  }
+  return fileCount;
+}
+
+async function saveSelectedExportsToStreamingZip(selected){
+  if(typeof window.showSaveFilePicker !== 'function'){
+    throw new Error('Large PNG sequence ZIP export needs Chrome or Edge. Try Chrome/Edge or export a shorter clip.');
+  }
+
+  rememberActiveLayerSettings();
+  const project = getProjectSlug();
+  const fileHandle = await window.showSaveFilePicker({
+    suggestedName: `${project}.zip`,
+    types: [{
+      description: 'ZIP archive',
+      accept: {'application/zip': ['.zip']}
+    }]
+  });
+  const writable = await fileHandle.createWritable();
+  const zipWriter = createStreamingZipWriter(writable, project);
+  let fileCount = 0;
+
+  const addNamedBlob = async (filename, blob) => {
+    await zipWriter.addFile(filename, blob);
+    fileCount += 1;
+  };
+
+  try{
+    if(selected.background){
+      await addNamedBlob('background.png', await canvasToPngBlob(makeExportCanvas({transparent: false})));
+    }
+    if(selected.transparent){
+      await addNamedBlob('transparent.png', await canvasToPngBlob(makeExportCanvas({transparent: true})));
+    }
+    if(selected.activeLayer){
+      await addNamedBlob('active-layer.png', await canvasToPngBlob(makeExportCanvas({transparent: true, activeOnly: true})));
+    }
+    if(selected.separateLayers){
+      if(!motionLayers.length) throw new Error('No layers to export.');
+      for(const [index, layer] of motionLayers.entries()){
+        await addNamedBlob(`layers/${String(index + 1).padStart(2, '0')}-${safeFileName(layer.name)}.png`, await canvasToPngBlob(layer.canvas));
+      }
+    }
+    if(selected.processVideo){
+      const blob = await exportProcessVideo({returnBlob: true});
+      if(blob){
+        await addNamedBlob('process.mp4', blob);
+      }
+    }
+    if(selected.layerVideos){
+      const sequenceFiles = await buildLayerProcessVideoFiles({
+        ...getSequenceExportSettings(),
+        onFrame: addNamedBlob
+      });
+      if(!sequenceFiles.length) throw new Error('No PNG sequence frames were exported.');
+    }
+    if(!fileCount){
+      throw new Error('Choose at least one export option.');
+    }
+    await zipWriter.close();
+    return fileCount;
+  } catch(error){
+    try{
+      await writable.abort();
+    } catch(abortError){
+      console.warn('Could not abort failed ZIP export.', abortError);
+    }
+    throw error;
+  }
 }
 
 async function saveExportFiles(files){
@@ -2363,15 +2764,24 @@ async function exportSelectedOutputs(){
     exportBtn.disabled = true;
     exportBtn.textContent = 'Exporting';
     if(exportStatus) exportStatus.textContent = 'Preparing exports...';
-    const files = await buildSelectedExportFiles();
-    await saveExportFiles(files);
-    if(exportStatus){
-      exportStatus.textContent = `Downloaded ${getProjectSlug()}.zip with ${files.length} file${files.length === 1 ? '' : 's'}.`;
+    const selected = getExportSelections();
+    if(selected.layerVideos && typeof window.showSaveFilePicker === 'function'){
+      if(exportStatus) exportStatus.textContent = 'Choose a ZIP file for the PNG sequence export...';
+      const fileCount = await saveSelectedExportsToStreamingZip(selected);
+      if(exportStatus){
+        exportStatus.textContent = `Saved ${getProjectSlug()}.zip with ${fileCount} file${fileCount === 1 ? '' : 's'}.`;
+      }
+    } else {
+      const files = await buildSelectedExportFiles();
+      await saveExportFiles(files);
+      if(exportStatus){
+        exportStatus.textContent = `Downloaded ${getProjectSlug()}.zip with ${files.length} file${files.length === 1 ? '' : 's'}.`;
+      }
     }
   } catch(error){
     if(error?.name !== 'AbortError'){
       console.error(error);
-      alert(error.message || 'Unable to export selected files.');
+      alert(getExportErrorMessage(error));
       if(exportStatus) exportStatus.textContent = 'Export failed.';
     }
   } finally {
