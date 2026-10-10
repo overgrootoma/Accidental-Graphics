@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Selectorman · Accidental Graphics</title>
-  <meta name="description" content="Selectorman lets you carve living fragments from any imported image.">
+  <meta name="description" content="Select parts of an image and let each part move on its own.">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,10 +29,14 @@
       box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.45);
     }
 
+    /* Absolute, so the canvas never makes its own box grow when it is resized. */
     #selectCanvas {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       display: block;
+      touch-action: none;
     }
 
     .selection-hint {
@@ -174,8 +178,7 @@
   <div id="main">
     <div id="controls">
       <h1>Selectorman</h1>
-      <p class="app-description">Drop a still, carve living fragments, and let each selection bend, pulse, or spin inside
-        its own boundary. Export at any time before the glitches escape.</p>
+      <p class="app-description">Select parts of an image and let each part move on its own. Export a still at any moment.</p>
 
       <div class="sample-loader sample-loader--carousel">
         <label>Use a sample image</label>
@@ -233,7 +236,7 @@
       <button id="exportArtwork">Export artwork</button>
 
       <div class="selection-list" id="selectionList">
-        <div class="selection-pill">Selections appear here after you finish drawing them.</div>
+        <div class="selection-pill">Your selections show up here.</div>
       </div>
     </div>
 
@@ -484,9 +487,8 @@
       function resizeCanvas() {
         const parent = canvas.parentElement;
         if (!parent) return;
-        const bounds = parent.getBoundingClientRect();
-        const width = Math.max(320, bounds.width);
-        const height = Math.max(320, bounds.height);
+        const width = Math.max(320, parent.clientWidth);
+        const height = Math.max(320, parent.clientHeight);
         const scaleX = canvasWidth ? width / canvasWidth : 1;
         const scaleY = canvasHeight ? height / canvasHeight : 1;
         canvasWidth = width;
@@ -603,14 +605,21 @@
           ctx.drawImage(imageElement, fit.x, fit.y, fit.width, fit.height);
           return;
         }
+        const originX = fit.x + (offsetX % width);
+        const originY = fit.y + (offsetY % height);
+        const minX = bounds ? bounds.x : 0;
+        const minY = bounds ? bounds.y : 0;
+        const maxX = bounds ? bounds.x + bounds.width : canvasWidth;
+        const maxY = bounds ? bounds.y + bounds.height : canvasHeight;
+        // Only the tiles that overlap the selection (everything else is clipped anyway).
+        const ix0 = Math.floor((minX - originX) / width);
+        const ix1 = Math.floor((maxX - originX) / width);
+        const iy0 = Math.floor((minY - originY) / height);
+        const iy1 = Math.floor((maxY - originY) / height);
         const normX = offsetX % width;
         const normY = offsetY % height;
-        const spanX = bounds ? Math.max(1, bounds.width) : canvasWidth;
-        const spanY = bounds ? Math.max(1, bounds.height) : canvasHeight;
-        const tilesX = Math.ceil(spanX / width) + 2;
-        const tilesY = Math.ceil(spanY / height) + 2;
-        for (let ix = -tilesX; ix <= tilesX; ix++) {
-          for (let iy = -tilesY; iy <= tilesY; iy++) {
+        for (let ix = ix0; ix <= ix1; ix++) {
+          for (let iy = iy0; iy <= iy1; iy++) {
             ctx.drawImage(
               imageElement,
               fit.x + normX + ix * width,
@@ -649,7 +658,7 @@
           ctx.fillRect(0, 0, canvasWidth, canvasHeight);
           ctx.fillStyle = 'rgba(255,255,255,0.15)';
           ctx.font = '600 1.2rem var(--font-ui, system-ui)';
-          ctx.fillText('Drop an image → carve living selections', 24, 48);
+          ctx.fillText('Load an image to start', 24, 48);
         }
         ctx.restore();
       }
@@ -804,10 +813,29 @@
         return simplified;
       }
 
+      // The traced shape as one byte per pixel (1 = inside), drawn once with the canvas.
+      function rasterizeMask(points, width, height) {
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = width;
+        maskCanvas.height = height;
+        const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+        maskCtx.beginPath();
+        maskCtx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) maskCtx.lineTo(points[i].x, points[i].y);
+        maskCtx.closePath();
+        maskCtx.fill();
+        const alpha = maskCtx.getImageData(0, 0, width, height).data;
+        const bits = new Uint8Array(width * height);
+        for (let i = 0; i < bits.length; i++) bits[i] = alpha[i * 4 + 3] > 127 ? 1 : 0;
+        return bits;
+      }
+
       function floodFillRegion(imageData, startX, startY, tolerance = 26, maxPixels = 500000, mask = null) {
         const { data, width, height } = imageData;
         if (startX < 0 || startX >= width || startY < 0 || startY >= height) return null;
-        if (mask && (!mask.points?.length || !pointInPolygon(startX, startY, mask.points))) return null;
+        if (mask && !mask.points?.length) return null;
+        const maskBits = mask ? rasterizeMask(mask.points, width, height) : null;
+        if (maskBits && !maskBits[Math.floor(startY) * width + Math.floor(startX)]) return null;
         const startIdx = (Math.floor(startY) * width + Math.floor(startX)) * 4;
         const base = pixelLuma(data, startIdx);
         const visited = new Uint8Array(width * height);
@@ -827,7 +855,7 @@
           if (maskBounds) {
             if (x < maskBounds.x || x > maskBounds.x + maskBounds.width || y < maskBounds.y || y > maskBounds.y + maskBounds.height) continue;
           }
-          if (mask && !pointInPolygon(x, y, mask.points)) continue;
+          if (maskBits && !maskBits[idx]) continue;
           const dataIdx = idx * 4;
           const luma = pixelLuma(data, dataIdx);
           if (Math.abs(luma - base) > tolerance) continue;
@@ -859,7 +887,7 @@
                 continue;
               }
             }
-            if (mask && !pointInPolygon(nx, ny, mask.points)) {
+            if (maskBits && !maskBits[n]) {
               isBoundary = true;
               continue;
             }
@@ -1207,7 +1235,7 @@
         if (!selections.length) {
           const empty = document.createElement('div');
           empty.className = 'selection-pill';
-          empty.textContent = 'Selections appear here after you finish drawing them. Adjust animation + intensity per layer.';
+          empty.textContent = 'Your selections show up here. Each one gets its own animation and intensity.';
           selectionList.appendChild(empty);
           return;
         }
@@ -1631,6 +1659,11 @@
       }
 
       resizeCanvas();
+      if (window.ResizeObserver) {
+        new ResizeObserver(() => resizeCanvas()).observe(canvas.parentElement);
+      } else {
+        window.addEventListener('resize', resizeCanvas);
+      }
       updateHint();
       requestAnimationFrame(loop);
     })();

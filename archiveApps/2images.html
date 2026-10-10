@@ -4,8 +4,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Accidental Graphics</title>
-  <meta name="description" content="Tool to make accidental graphics">
+  <title>2Images · Accidental Graphics</title>
+  <meta name="description" content="Rebuild one image out of blocks of a second image, matched by brightness.">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,7 +22,7 @@
   <!-- Sidebar controls -->
   <div id="controls">
 <h1>2images</h1>
-<p class="app-description">Blend two source images into a blocky collage by matching brightness and exporting the remixed grid.</p>
+<p class="app-description">Rebuilds the target image out of blocks of the palette image, matched by brightness.</p>
   <div class="sample-loader sample-loader--carousel">
     <label>Use sample images</label>
     <div class="sample-carousel-controls">
@@ -42,11 +42,14 @@
   <label class="file-button file-button--full">Source Palette Image
     <input type="file" id="img2Input" accept="image/*">
   </label>
-  <label>Target Block size: <input type="range" id="blockSizeInput" value="10" min="2" max="50" class="slider"></label>
+  <label>Block size: <span id="blockSizeLabel">10 px</span> <input type="range" id="blockSizeInput" value="10" min="2" max="50" class="slider"></label>
+  <label>Tones: <span id="tonesLabel">10</span> <input type="range" id="tonesInput" value="10" min="2" max="40" class="slider"></label>
+  <label>Palette block: <span id="sourceBlockLabel">30 px</span> <input type="range" id="sourceBlockInput" value="30" min="6" max="120" class="slider"></label>
   <button id="processBtn" disabled>Generate</button>
-  <button id="exportBtn">Export Image</button>
+  <button id="exportBtn" disabled>Export Image</button>
 </div>
 <canvas id="canvas"></canvas>
+</div>
 <div class="app-year">2026 Accidental Graphics</div>
 <script src="../scripts/sampleMedia.js"></script>
 <script>
@@ -57,6 +60,11 @@ const exportBtn = document.getElementById('exportBtn');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const blockSizeInput = document.getElementById('blockSizeInput');
+const blockSizeLabel = document.getElementById('blockSizeLabel');
+const tonesInput = document.getElementById('tonesInput');
+const tonesLabel = document.getElementById('tonesLabel');
+const sourceBlockInput = document.getElementById('sourceBlockInput');
+const sourceBlockLabel = document.getElementById('sourceBlockLabel');
 const loadSampleTargetBtn = document.getElementById('loadSampleTarget');
 const loadSamplePaletteBtn = document.getElementById('loadSamplePalette');
 const samplePreview = document.getElementById('twoImagesSamplePreview');
@@ -64,9 +72,13 @@ const sampleName = document.getElementById('twoImagesSampleName');
 const samplePrevBtn = document.getElementById('twoImagesSamplePrev');
 const sampleNextBtn = document.getElementById('twoImagesSampleNext');
 
-let img1 = new Image();
-let img2 = new Image();
-let img1Loaded = false, img2Loaded = false;
+// Big photos are scaled down first: the result looks the same and stays fast.
+const MAX_TARGET_SIDE = 2400;
+const MAX_PALETTE_SIDE = 1200;
+
+// Each image is kept as a scaled copy plus its pixels, so changing a slider
+// only redoes the block matching.
+const images = { target: null, palette: null };
 
 const sampleCarousel = window.SampleMedia?.createCarousel({
   type: 'images',
@@ -77,130 +89,165 @@ const sampleCarousel = window.SampleMedia?.createCarousel({
   emptyMessage: 'Add sample stills in sampleMedia.js'
 });
 
-function assignImage(target, src, { revokeUrl = false } = {}){
-  target.onload = () => {
-    if(target === img1) img1Loaded = true;
-    if(target === img2) img2Loaded = true;
-    enableButton();
+function drawMessage(text){
+  canvas.width = 800;
+  canvas.height = 500;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.font = '700 22px Doto, system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+}
+
+function prepareImage(img, maxSide){
+  const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+  const width = Math.max(1, Math.round(img.naturalWidth * scale));
+  const height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const prepared = document.createElement('canvas');
+  prepared.width = width;
+  prepared.height = height;
+  const preparedCtx = prepared.getContext('2d', { willReadFrequently: true });
+  preparedCtx.drawImage(img, 0, 0, width, height);
+  return { canvas: prepared, data: preparedCtx.getImageData(0, 0, width, height) };
+}
+
+function assignImage(slot, src, { revokeUrl = false } = {}){
+  const img = new Image();
+  img.onload = () => {
+    images[slot] = prepareImage(img, slot === 'target' ? MAX_TARGET_SIDE : MAX_PALETTE_SIDE);
     if(revokeUrl) URL.revokeObjectURL(src);
+    updateButtons();
+    if(images.target && images.palette){
+      generate();
+    } else {
+      drawMessage(images.target ? 'Now load a palette image' : 'Now load a target image');
+    }
   };
-  target.onerror = () => {
+  img.onerror = () => {
     alert('Could not load that image. Try another file.');
     if(revokeUrl) URL.revokeObjectURL(src);
   };
-  target.src = src;
+  img.src = src;
 }
 
-function loadImageFile(target, file){
+function loadImageFile(slot, file){
   if(!file) return;
-  const url = URL.createObjectURL(file);
-  assignImage(target, url, { revokeUrl: true });
+  assignImage(slot, URL.createObjectURL(file), { revokeUrl: true });
 }
 
-img1Input.addEventListener('change', e => loadImageFile(img1, e.target.files[0]));
-img2Input.addEventListener('change', e => loadImageFile(img2, e.target.files[0]));
+img1Input.addEventListener('change', e => loadImageFile('target', e.target.files[0]));
+img2Input.addEventListener('change', e => loadImageFile('palette', e.target.files[0]));
 
 if(sampleCarousel?.hasSamples){
   loadSampleTargetBtn?.addEventListener('click', ()=>{
     const sample = sampleCarousel.getCurrentSample?.();
-    if(!sample?.src) return;
-    assignImage(img1, `${sample.src}?t=${Date.now()}`);
+    if(sample?.src) assignImage('target', sample.src);
   });
   loadSamplePaletteBtn?.addEventListener('click', ()=>{
     const sample = sampleCarousel.getCurrentSample?.();
-    if(!sample?.src) return;
-    assignImage(img2, `${sample.src}?p=${Date.now()}`);
+    if(sample?.src) assignImage('palette', sample.src);
   });
 } else {
   loadSampleTargetBtn?.setAttribute('disabled','true');
   loadSamplePaletteBtn?.setAttribute('disabled','true');
 }
 
-function enableButton(){
-  processBtn.disabled = !(img1Loaded && img2Loaded);
+function updateButtons(){
+  processBtn.disabled = !(images.target && images.palette);
+  exportBtn.disabled = processBtn.disabled;
+}
+
+function updateLabels(){
+  blockSizeLabel.textContent = `${blockSizeInput.value} px`;
+  tonesLabel.textContent = tonesInput.value;
+  sourceBlockLabel.textContent = `${sourceBlockInput.value} px`;
 }
 
 function getBlockBrightness(imageData, xStart, yStart, blockSize){
-  let sum = 0, count=0;
-  for(let y=0;y<blockSize;y++){
-    for(let x=0;x<blockSize;x++){
-      const px = xStart + x;
-      const py = yStart + y;
-      if(px>=imageData.width || py>=imageData.height) continue;
-      const idx = (py*imageData.width + px)*4;
-      const r = imageData.data[idx];
-      const g = imageData.data[idx+1];
-      const b = imageData.data[idx+2];
-      sum += 0.299*r + 0.587*g + 0.114*b;
+  const { data, width, height } = imageData;
+  const xEnd = Math.min(width, xStart + blockSize);
+  const yEnd = Math.min(height, yStart + blockSize);
+  let sum = 0, count = 0;
+  for(let y = yStart; y < yEnd; y++){
+    let idx = (y * width + xStart) * 4;
+    for(let x = xStart; x < xEnd; x++, idx += 4){
+      sum += 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
       count++;
     }
   }
-  return sum/count;
+  return count ? sum / count : 0;
 }
 
-processBtn.addEventListener('click', ()=>{
-  const blockSize = parseInt(blockSizeInput.value) || 30;
-  const dpr = window.devicePixelRatio || 1;
+function generate(){
+  const target = images.target;
+  const palette = images.palette;
+  if(!target || !palette) return;
+  const blockSize = parseInt(blockSizeInput.value, 10) || 10;
+  const tones = parseInt(tonesInput.value, 10) || 10;
+  const sourceSize = Math.min(parseInt(sourceBlockInput.value, 10) || 30, palette.data.width, palette.data.height);
 
-  canvas.width = img1.width * dpr;
-  canvas.height = img1.height * dpr;
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-
-  const tempCanvas1 = document.createElement('canvas');
-  tempCanvas1.width = img1.width;
-  tempCanvas1.height = img1.height;
-  const ctx1 = tempCanvas1.getContext('2d');
-  ctx1.drawImage(img1,0,0);
-  const img1Data = ctx1.getImageData(0,0,img1.width,img1.height);
-
-  const blockSourceSize = 30;
-  const tempCanvas2 = document.createElement('canvas');
-  tempCanvas2.width = img2.width;
-  tempCanvas2.height = img2.height;
-  const ctx2 = tempCanvas2.getContext('2d');
-  ctx2.drawImage(img2,0,0);
-  const img2Data = ctx2.getImageData(0,0,img2.width,img2.height);
-
+  // Palette blocks, darkest to brightest; only a few evenly spaced ones are used.
   const sourceBlocks = [];
-  for(let y=0; y<img2.height; y+=blockSourceSize){
-    for(let x=0; x<img2.width; x+=blockSourceSize){
-      const brightness = getBlockBrightness(img2Data,x,y,blockSourceSize);
-      const blockCanvas = document.createElement('canvas');
-      blockCanvas.width = blockSourceSize;
-      blockCanvas.height = blockSourceSize;
-      const blockCtx = blockCanvas.getContext('2d');
-      blockCtx.putImageData(ctx2.getImageData(x,y,blockSourceSize,blockSourceSize),0,0);
-      sourceBlocks.push({brightness,canvas:blockCanvas});
+  for(let y = 0; y + sourceSize <= palette.data.height; y += sourceSize){
+    for(let x = 0; x + sourceSize <= palette.data.width; x += sourceSize){
+      sourceBlocks.push({ x, y, brightness: getBlockBrightness(palette.data, x, y, sourceSize) });
     }
   }
-
-  sourceBlocks.sort((a,b)=>a.brightness-b.brightness);
-  const step = Math.floor(sourceBlocks.length/10);
+  sourceBlocks.sort((a, b) => a.brightness - b.brightness);
+  const toneCount = Math.max(1, Math.min(tones, sourceBlocks.length));
   const selectedBlocks = [];
-  for(let i=0;i<10;i++) selectedBlocks.push(sourceBlocks[i*step]);
-
-  const targetBlocks = [];
-  for(let y=0; y<img1.height; y+=blockSize){
-    for(let x=0; x<img1.width; x+=blockSize){
-      const brightness = getBlockBrightness(img1Data,x,y,blockSize);
-      targetBlocks.push({x,y,brightness});
-    }
+  for(let i = 0; i < toneCount; i++){
+    const index = toneCount === 1 ? 0 : Math.round(i * (sourceBlocks.length - 1) / (toneCount - 1));
+    selectedBlocks.push(sourceBlocks[index]);
   }
 
-  targetBlocks.sort((a,b)=>a.brightness-b.brightness);
+  // Target blocks, darkest to brightest, each get the palette block of the same rank.
+  const targetBlocks = [];
+  for(let y = 0; y < target.data.height; y += blockSize){
+    for(let x = 0; x < target.data.width; x += blockSize){
+      targetBlocks.push({ x, y, brightness: getBlockBrightness(target.data, x, y, blockSize) });
+    }
+  }
+  targetBlocks.sort((a, b) => a.brightness - b.brightness);
 
-  targetBlocks.forEach((block,i)=>{
-    const sourceBlock = selectedBlocks[Math.floor(i/targetBlocks.length*selectedBlocks.length)];
-    ctx.drawImage(sourceBlock.canvas,block.x,block.y,blockSize,blockSize);
+  canvas.width = target.data.width;
+  canvas.height = target.data.height;
+  ctx.imageSmoothingEnabled = true;
+  targetBlocks.forEach((block, i) => {
+    const sourceBlock = selectedBlocks[Math.floor(i / targetBlocks.length * selectedBlocks.length)];
+    ctx.drawImage(palette.canvas, sourceBlock.x, sourceBlock.y, sourceSize, sourceSize, block.x, block.y, blockSize, blockSize);
   });
-});
+}
+
+let generateFrame = 0;
+function scheduleGenerate(){
+  updateLabels();
+  if(!images.target || !images.palette || generateFrame) return;
+  generateFrame = requestAnimationFrame(() => {
+    generateFrame = 0;
+    generate();
+  });
+}
+
+[blockSizeInput, tonesInput, sourceBlockInput].forEach(input => input.addEventListener('input', scheduleGenerate));
+processBtn.addEventListener('click', generate);
 
 exportBtn.addEventListener('click', ()=>{
-  const link = document.createElement('a');
-  link.download = 'mapped_image.png';
-  link.href = canvas.toDataURL('image/png');
-  link.click();
+  if(!images.target || !images.palette) return;
+  canvas.toBlob(blob => {
+    if(!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = 'mapped_image.png';
+    link.href = url;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
 });
+
+updateLabels();
+drawMessage('Load a target and a palette image');
 </script>
 </body>
 </html>

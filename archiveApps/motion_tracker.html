@@ -4,8 +4,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Accidental Graphics</title>
-  <meta name="description" content="Tool to make accidental graphics">
+  <title>MotionDrawing · Accidental Graphics</title>
+  <meta name="description" content="Draw the movement in a video or your webcam as lines.">
   <link rel="stylesheet" href="../css/style.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,6 +14,19 @@
 <link rel="stylesheet" href="../css/nav.css">
 <script defer src="../scripts/navConfig.js"></script>
 <script defer src="../scripts/navMenu.js"></script>
+<style>
+  #controls h1 {
+    overflow-wrap: anywhere;
+    font-size: 1.7rem;
+  }
+  .motion-status {
+    width: 100%;
+    margin: 0;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    min-height: 1.4em;
+  }
+</style>
 </head>
 
 <body class="app-page">
@@ -23,7 +36,7 @@
     <!-- Left: Controls -->
     <div id="controls">
       <h1>MotionDrawing</h1>
-      <p class="app-description">Track motion from webcam or uploaded clips and let the optical flow plot luminous trails you can export as PNGs.</p>
+      <p class="app-description">Draws the movement in a video or your webcam as lines. Export as PNG.</p>
 
     <label class="file-button file-button--full">
       Import Video
@@ -54,9 +67,7 @@
     <label for="colorPicker">Line Color</label>
     <input type="color" id="colorPicker" value="#ffffff">
 
-    <p style="font-size:0.85rem;color:#aaa;margin-top:auto;">
-      
-    </p>
+    <p class="motion-status" id="motionStatus" role="status">Load a video or turn on the webcam.</p>
   </div>
 
   <!-- Canvas area -->
@@ -64,7 +75,6 @@
   <video id="video" class="webcam-hidden" crossorigin="anonymous" playsinline muted></video>
 </div>
 
-<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 <script src="../scripts/sampleMedia.js"></script>
 <script>
 const fileInput = document.getElementById('fileInput');
@@ -82,17 +92,35 @@ const sampleName = document.getElementById('motionDrawingName');
 const samplePrevBtn = document.getElementById('motionDrawingPrev');
 const sampleNextBtn = document.getElementById('motionDrawingNext');
 const colorPicker = document.getElementById('colorPicker');
+const statusEl = document.getElementById('motionStatus');
 const controlsPanel = document.getElementById('controls');
 const stackedQuery = window.matchMedia('(max-width: 900px)');
 const layoutGap = 24;
 
-let srcMat, gray, prevGray, p0, p1, status, err;
+// === Parameters ===
+const OPENCV_URL = 'https://docs.opencv.org/4.x/opencv.js';
+const PROCESS_WIDTH = 480;      // frames are analysed at this width: much faster, same trails
+const MAX_CORNERS = 200;
+const QUALITY_LEVEL = 0.01;
+const MIN_DISTANCE = 7;
+const LK_WIN_SIZE = 15;
+const REFRESH_BELOW = MAX_CORNERS * 0.4; // look for new points when too many got lost
+
+// Frames are read from one reusable canvas.
+const frameCanvas = document.createElement('canvas');
+const frameCtx = frameCanvas.getContext('2d', { willReadFrequently: true });
+
+let mats = null;          // OpenCV buffers, made once per frame size
+let p0 = null;
 let tracking = false;
 let needInitFeatures = true;
 let useWebcam = false;
 let stream = null;
 let rafId = null;
-let lineColor = "#ffffff";
+let lineColor = colorPicker.value;
+let opencvPromise = null;
+
+const setStatus = text => { statusEl.textContent = text; };
 
 const sampleCarousel = window.SampleMedia?.createCarousel({
   type: 'videos',
@@ -107,11 +135,38 @@ if(!sampleCarousel?.hasSamples){
   sampleBtn?.setAttribute('disabled', 'true');
 }
 
-// === Parameters ===
-const MAX_CORNERS = 200;
-const QUALITY_LEVEL = 0.01;
-const MIN_DISTANCE = 7;
-const LK_WIN_SIZE = 15;
+// OpenCV is ~10 MB, so it only loads when you start tracking.
+function loadOpenCV(){
+  if (opencvPromise) return opencvPromise;
+  // Note: never resolve with the cv object itself. It has a .then() method, and a
+  // promise resolved with it keeps calling that forever and freezes the page.
+  opencvPromise = new Promise((resolve, reject) => {
+    const ready = () => {
+      if (!window.cv) return reject(new Error('OpenCV did not load.'));
+      if (window.cv.Mat) return resolve();
+      if (window.cv instanceof Promise) {
+        window.cv.then(mod => { window.cv = mod; resolve(); }, reject);
+        return;
+      }
+      const poll = setInterval(() => {
+        if (window.cv && window.cv.Mat) { clearInterval(poll); resolve(); }
+      }, 100);
+      window.cv.onRuntimeInitialized = () => { clearInterval(poll); resolve(); };
+    };
+    if (window.cv) return ready();
+    setStatus('Loading the motion tracker (~10 MB)…');
+    const script = document.createElement('script');
+    script.src = OPENCV_URL;
+    script.async = true;
+    script.onload = ready;
+    script.onerror = () => reject(new Error('Could not load OpenCV. Check your connection.'));
+    document.head.appendChild(script);
+  }).catch(err => {
+    opencvPromise = null;
+    throw err;
+  });
+  return opencvPromise;
+}
 
 // Resize canvas to fill remaining space
 function calculateStageSize() {
@@ -146,86 +201,84 @@ window.addEventListener('load', resizeCanvas);
 // UI events
 colorPicker.addEventListener('input', e => { lineColor = e.target.value; });
 
-function loadVideoSource(src, { revokeUrl = false } = {}) {
+function stopTracking() {
+  tracking = false;
+  cancelAnimationFrame(rafId);
+  rafId = null;
+}
+
+// An imported file stays readable while it loops; its URL is freed when the next video loads.
+let objectUrl = null;
+
+function loadVideoSource(src, { isObjectUrl = false } = {}) {
+  stopTracking();
   stopWebcam();
-  video.srcObject = null;
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = isObjectUrl ? src : null;
+  video.loop = true;
   video.src = src;
   video.load();
   useWebcam = false;
   needInitFeatures = true;
   clearTrails();
-  if (revokeUrl) {
-    video.addEventListener('loadeddata', () => URL.revokeObjectURL(src), { once: true });
-  }
+  setStatus('Video loaded. Press ▶ to draw.');
 }
 
 fileInput.addEventListener('change', e => {
   const f = e.target.files[0];
   if (!f) return;
-  const url = URL.createObjectURL(f);
-  loadVideoSource(url, { revokeUrl: true });
+  loadVideoSource(URL.createObjectURL(f), { isObjectUrl: true });
+  fileInput.value = '';
 });
 
-async function loadSampleVideo(path){
-  if(!path) throw new Error('Missing sample path.');
-  try{
-    const response = await fetch(path);
-    if(!response.ok) throw new Error('Failed to fetch sample clip.');
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    loadVideoSource(objectUrl, { revokeUrl: true });
-  } catch(err){
-    console.warn('Sample fetch failed, falling back to direct URL.', err);
-    loadVideoSource(path);
-  }
-}
-
-sampleBtn?.addEventListener('click', async () => {
+sampleBtn?.addEventListener('click', () => {
   const sample = sampleCarousel?.getCurrentSample?.();
-  if (!sample?.src) return;
-  try{
-    await loadSampleVideo(sample.src);
-  } catch(err){
-    alert(err.message || 'Unable to load sample video.');
-  }
+  if (sample?.src) loadVideoSource(sample.src);
 });
 
 btnWebcam.addEventListener('click', async () => {
+  stopTracking();
   stopWebcam();
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    video.srcObject = stream;
-    video.play();
-    useWebcam = true;
-    needInitFeatures = true;
-    clearTrails();
-    video.classList.remove('webcam-hidden');
-    startTracking();
   } catch (err) {
+    setStatus('No webcam access. Allow the camera in your browser and try again.');
+    return;
   }
+  video.removeAttribute('src');
+  video.loop = false;
+  video.srcObject = stream;
+  useWebcam = true;
+  needInitFeatures = true;
+  clearTrails();
+  video.classList.remove('webcam-hidden');
+  startTracking();
 });
 
 btnPlay.addEventListener('click', () => {
   if (!useWebcam && !video.src) {
-    alert('Select a video or enable webcam first.');
+    setStatus('Load a video or turn on the webcam first.');
     return;
   }
-  video.play();
   startTracking();
 });
 
 btnStop.addEventListener('click', () => {
-  video.pause();
-  tracking = false;
-  cancelAnimationFrame(rafId);
+  if (!useWebcam) video.pause();
+  stopTracking();
+  setStatus('Paused.');
 });
 
 btnExport.addEventListener('click', () => {
-  const url = canvasTrails.toDataURL('image/png');
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'motion_trails.png';
-  a.click();
+  canvasTrails.toBlob(blob => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'motion_trails.png';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
 });
 
 btnClear.addEventListener('click', clearTrails);
@@ -244,94 +297,123 @@ function stopWebcam() {
   video.classList.add('webcam-hidden');
 }
 
-function startTracking() {
-  if (typeof cv === 'undefined' || !cv.Mat) {
-    alert('Wait until OpenCV.js is fully loaded.');
+function waitForVideoSize() {
+  if (video.videoWidth && video.videoHeight) return Promise.resolve();
+  return new Promise(resolve => video.addEventListener('loadedmetadata', resolve, { once: true }));
+}
+
+function freeMats() {
+  if (!mats) return;
+  Object.values(mats).forEach(mat => mat.delete());
+  mats = null;
+  if (p0) { p0.delete(); p0 = null; }
+}
+
+// Buffers depend on the frame size, so they are only rebuilt when that changes.
+function ensureMats(width, height) {
+  if (mats && mats.width === width && mats.height === height) return;
+  freeMats();
+  mats = {
+    src: new cv.Mat(height, width, cv.CV_8UC4),
+    gray: new cv.Mat(),
+    prevGray: new cv.Mat(),
+    p1: new cv.Mat(),
+    status: new cv.Mat(),
+    err: new cv.Mat(),
+    mask: new cv.Mat(),
+  };
+  Object.defineProperty(mats, 'width', { value: width, enumerable: false });
+  Object.defineProperty(mats, 'height', { value: height, enumerable: false });
+  needInitFeatures = true;
+}
+
+async function startTracking() {
+  try {
+    await loadOpenCV();
+  } catch (err) {
+    setStatus(err.message);
     return;
   }
-
-  srcMat = new cv.Mat(video.videoHeight || 480, video.videoWidth || 640, cv.CV_8UC4);
-  gray = new cv.Mat();
-  prevGray = new cv.Mat();
-  needInitFeatures = true;
+  await waitForVideoSize();
+  try {
+    await video.play();
+  } catch (err) {
+    setStatus('Press ▶ to start the video.');
+    return;
+  }
+  const scale = Math.min(1, PROCESS_WIDTH / video.videoWidth);
+  frameCanvas.width = Math.round(video.videoWidth * scale);
+  frameCanvas.height = Math.round(video.videoHeight * scale);
+  ensureMats(frameCanvas.width, frameCanvas.height);
+  setStatus(useWebcam ? 'Drawing from the webcam.' : 'Drawing. The video loops until you pause.');
+  if (tracking) return;
   tracking = true;
-  tick();
+  rafId = requestAnimationFrame(tick);
+}
+
+// Video coordinates → canvas, keeping the video's proportions (centered).
+function getFit() {
+  const scale = Math.min(canvasTrails.width / frameCanvas.width, canvasTrails.height / frameCanvas.height);
+  return {
+    scale,
+    x: (canvasTrails.width - frameCanvas.width * scale) / 2,
+    y: (canvasTrails.height - frameCanvas.height * scale) / 2,
+  };
+}
+
+function detectFeatures() {
+  if (p0) p0.delete();
+  p0 = new cv.Mat();
+  cv.goodFeaturesToTrack(mats.gray, p0, MAX_CORNERS, QUALITY_LEVEL, MIN_DISTANCE, mats.mask);
 }
 
 function tick() {
   if (!tracking) return;
+  if (!useWebcam && (video.paused || video.ended)) {
+    stopTracking();
+    return;
+  }
 
-  const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = video.videoWidth;
-  tempCanvas.height = video.videoHeight;
-  const tempCtx = tempCanvas.getContext('2d');
-  tempCtx.drawImage(video, 0, 0);
-  const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-  srcMat.data.set(imageData.data);
-  cv.cvtColor(srcMat, gray, cv.COLOR_RGBA2GRAY);
+  frameCtx.drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
+  const imageData = frameCtx.getImageData(0, 0, frameCanvas.width, frameCanvas.height);
+  mats.src.data.set(imageData.data);
+  cv.cvtColor(mats.src, mats.gray, cv.COLOR_RGBA2GRAY);
 
-  if (needInitFeatures) {
-    p0 && p0.delete && p0.delete();
-    p0 = new cv.Mat();
-    let mask = new cv.Mat();
-    cv.goodFeaturesToTrack(gray, p0, MAX_CORNERS, QUALITY_LEVEL, MIN_DISTANCE, mask);
-    mask.delete();
-    gray.copyTo(prevGray);
+  if (needInitFeatures || !p0 || p0.rows === 0) {
+    detectFeatures();
     needInitFeatures = false;
   } else {
-    p1 && p1.delete && p1.delete();
-    status && status.delete && status.delete();
-    err && err.delete && err.delete();
-    p1 = new cv.Mat();
-    status = new cv.Mat();
-    err = new cv.Mat();
     const winSize = new cv.Size(LK_WIN_SIZE, LK_WIN_SIZE);
-    cv.calcOpticalFlowPyrLK(prevGray, gray, p0, p1, status, err, winSize, 3);
+    cv.calcOpticalFlowPyrLK(mats.prevGray, mats.gray, p0, mats.p1, mats.status, mats.err, winSize, 3);
 
-    const good_new = [], good_old = [];
-    for (let i = 0; i < status.rows; i++) {
-      if (status.data[i] === 1) {
-        const nx = p1.data32F[i * 2];
-        const ny = p1.data32F[i * 2 + 1];
-        const ox = p0.data32F[i * 2];
-        const oy = p0.data32F[i * 2 + 1];
-        good_new.push({ x: nx, y: ny });
-        good_old.push({ x: ox, y: oy });
-      }
-    }
-
+    const fit = getFit();
+    const kept = [];
     ctx.strokeStyle = lineColor;
     ctx.lineWidth = 2.8;
     ctx.globalAlpha = 0.18;
-    for (let i = 0; i < good_new.length; i++) {
-      const n = good_new[i], o = good_old[i];
-      const scaleX = canvasTrails.width / video.videoWidth;
-      const scaleY = canvasTrails.height / video.videoHeight;
-      ctx.beginPath();
-      ctx.moveTo(o.x * scaleX, o.y * scaleY);
-      ctx.lineTo(n.x * scaleX, n.y * scaleY);
-      ctx.stroke();
+    ctx.beginPath();
+    for (let i = 0; i < mats.status.rows; i++) {
+      if (mats.status.data[i] !== 1) continue;
+      const nx = mats.p1.data32F[i * 2];
+      const ny = mats.p1.data32F[i * 2 + 1];
+      const ox = p0.data32F[i * 2];
+      const oy = p0.data32F[i * 2 + 1];
+      ctx.moveTo(fit.x + ox * fit.scale, fit.y + oy * fit.scale);
+      ctx.lineTo(fit.x + nx * fit.scale, fit.y + ny * fit.scale);
+      kept.push(nx, ny);
     }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
 
-    p0.delete();
-    p0 = new cv.Mat();
-    if (good_new.length > 0) {
-      p0.create(good_new.length, 1, cv.CV_32FC2);
-      for (let i = 0; i < good_new.length; i++) {
-        p0.data32F[i * 2] = good_new[i].x;
-        p0.data32F[i * 2 + 1] = good_new[i].y;
-      }
+    if (kept.length / 2 < REFRESH_BELOW) {
+      detectFeatures();
     } else {
-      needInitFeatures = true;
+      p0.delete();
+      p0 = cv.matFromArray(kept.length / 2, 1, cv.CV_32FC2, kept);
     }
-    gray.copyTo(prevGray);
   }
-
-  if (useWebcam || (!video.paused && !video.ended)) {
-    rafId = requestAnimationFrame(tick);
-  } else {
-    tracking = false;
-  }
+  mats.gray.copyTo(mats.prevGray);
+  rafId = requestAnimationFrame(tick);
 }
 </script>
 <div class="app-year">2026 Accidental Graphics</div>

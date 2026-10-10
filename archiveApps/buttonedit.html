@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Accidental Graphics</title>
-  <meta name="description" content="Tool to make accidental graphics">
+  <title>ButtonEdit · Accidental Graphics</title>
+  <meta name="description" content="Stack image effects by switching buttons on and off.">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,16 +13,28 @@
   <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
   <script defer src="../scripts/navConfig.js"></script>
   <script defer src="../scripts/navMenu.js"></script>
+  <style>
+    /* The slider sits inside its effect card instead of floating in the other column. */
+    .buttonedit-stage .effect-card .effect-slider {
+      padding: 0 2px;
+      border: 0;
+      background: none;
+      box-shadow: none;
+    }
+  </style>
 </head>
 
 <body class="buttonedit-page">
   <div id="main" class="buttonedit">
     <section id="controls" class="buttonedit-controls">
       <h1>ButtonEdit</h1>
-      <p class="app-description">Tape glowing buttons around your canvas, randomize their forces, and bend imported artwork into new neon layouts.</p>
+      <p class="app-description">Switch effects on and off and stack them on an image. Drop an image on the canvas or import one.</p>
 
       <div class="button-row">
         <button id="importBtn" class="primary" type="button">Import</button>
+        <button id="sampleBtn" type="button">Sample</button>
+      </div>
+      <div class="button-row">
         <button id="resetBtn" class="secondary" type="button">Reset</button>
         <button id="exportBtn" class="ghost" type="button">Export</button>
       </div>
@@ -38,9 +50,9 @@
 
       <input type="file" id="fileInput" accept="image/*" hidden>
 
-      <p class="button-lab__indicator">Active toggles:<strong id="activeCount">0</strong></p>
+      <p class="button-lab__indicator">Active effects:<strong id="activeCount">0</strong></p>
       <p class="button-lab__helper">
-        Load an image, toggle effects, and tweak the sliders under each button to dial intensity.
+        Effects stack in the order you switch them on.
       </p>
     </section>
 
@@ -62,6 +74,7 @@
 
   <div class="app-year">2026 Accidental Graphics</div>
 
+  <script src="../scripts/sampleMedia.js"></script>
   <script>
     (() => {
       const CANVAS_SIZE = 720;
@@ -84,7 +97,8 @@
       const baseCanvas = document.createElement('canvas');
       const baseCtx = baseCanvas.getContext('2d');
       const workCanvas = document.createElement('canvas');
-      const workCtx = workCanvas.getContext('2d');
+      // Effects read and write pixels all the time: keep this canvas on the CPU.
+      const workCtx = workCanvas.getContext('2d', { willReadFrequently: true });
       const tempCanvas = document.createElement('canvas');
       const tempCtx = tempCanvas.getContext('2d');
 
@@ -151,23 +165,18 @@
         const imageData = context.getImageData(0, 0, width, height);
         const data = imageData.data;
         const source = options.useCopy ? new Uint8ClampedArray(data) : data;
+        // One pixel object, reused for every pixel (effects only read from it).
+        const px = { r: 0, g: 0, b: 0, a: 0, x: 0, y: 0, idx: 0, width, height, source };
 
-        for (let i = 0; i < data.length; i += 4) {
-          const idx = i / 4;
-          const x = idx % width;
-          const y = Math.floor(idx / width);
-          const result = fn({
-            r: data[i],
-            g: data[i + 1],
-            b: data[i + 2],
-            a: data[i + 3],
-            x,
-            y,
-            idx,
-            width,
-            height,
-            source,
-          });
+        for (let i = 0, idx = 0; i < data.length; i += 4, idx += 1) {
+          px.r = data[i];
+          px.g = data[i + 1];
+          px.b = data[i + 2];
+          px.a = data[i + 3];
+          px.x = idx % width;
+          px.y = (idx - px.x) / width;
+          px.idx = idx;
+          const result = fn(px);
           if (result) {
             data[i] = clamp(result[0]);
             data[i + 1] = clamp(result[1]);
@@ -205,18 +214,15 @@
             let g = 0;
             let b = 0;
             for (let ky = 0; ky < size; ky += 1) {
+              const sy = Math.min(height - 1, Math.max(0, y + ky - half));
               for (let kx = 0; kx < size; kx += 1) {
                 const weight = kernel[ky * size + kx];
-                const [sr, sg, sb] = samplePixel(
-                  source,
-                  width,
-                  height,
-                  x + kx - half,
-                  y + ky - half
-                );
-                r += sr * weight;
-                g += sg * weight;
-                b += sb * weight;
+                if (!weight) continue;
+                const sx = Math.min(width - 1, Math.max(0, x + kx - half));
+                const si = (sy * width + sx) * 4;
+                r += source[si] * weight;
+                g += source[si + 1] * weight;
+                b += source[si + 2] * weight;
               }
             }
             const index = (y * width + x) * 4;
@@ -1708,7 +1714,7 @@
           state.effectValues.set(effect.id, val);
           valueLabel.textContent = formatSliderValue(effect, val);
           if (state.activeEffects.has(effect.id)) {
-            render();
+            scheduleRender();
           }
         });
         wrapper.append(meta, slider);
@@ -1749,10 +1755,10 @@
         updateActiveCount();
         if (state.imageReady) {
           render();
-          setStatus(`Randomized ${target} effect${target === 1 ? '' : 's'}.`);
+          setStatus(`${target} random effect${target === 1 ? '' : 's'}.`);
         } else {
           renderPlaceholder();
-          setStatus(`Queued ${target} random effect${target === 1 ? '' : 's'}. Import an image to apply.`);
+          setStatus(`${target} random effect${target === 1 ? '' : 's'} ready. Import an image.`);
         }
       };
 
@@ -1790,9 +1796,18 @@
         ctx.drawImage(workCanvas, 0, 0, width, height);
         setStatus(
           state.activeEffects.size
-            ? `${state.activeEffects.size} effect(s) bending reality.`
-            : 'Image loaded. Flip switches to mutate it.'
+            ? `${state.activeEffects.size} effect${state.activeEffects.size === 1 ? '' : 's'} on.`
+            : 'Switch effects on left and right.'
         );
+      };
+
+      let renderFrame = 0;
+      const scheduleRender = () => {
+        if (renderFrame) return;
+        renderFrame = requestAnimationFrame(() => {
+          renderFrame = 0;
+          render();
+        });
       };
 
       const toggleEffect = (id) => {
@@ -1819,11 +1834,10 @@
           button.dataset.effect = effect.id;
           button.innerHTML = `<strong>${effect.label}</strong><small>${effect.description}</small>`;
           card.appendChild(button);
-          pool.push(card);
           if (effect.control) {
-            const slider = createSliderControl(effect);
-            pool.push(slider);
+            card.appendChild(createSliderControl(effect));
           }
+          pool.push(card);
           state.buttons.set(effect.id, button);
           state.cards.set(effect.id, card);
           button.addEventListener('click', () => toggleEffect(effect.id));
@@ -1852,25 +1866,44 @@
         baseCtx.drawImage(img, x, y, w, h);
       };
 
+      const loadImageFromUrl = (src, onDone) => {
+        const img = new Image();
+        img.onload = () => {
+          drawBaseImage(img);
+          state.imageReady = true;
+          render();
+          onDone?.();
+        };
+        img.onerror = () => {
+          setStatus('Could not load that image. Try another one.');
+          onDone?.();
+        };
+        img.src = src;
+      };
+
       const handleFiles = (files) => {
-        if (!files.length) return;
+        if (!files || !files.length) return;
         const [file] = files;
         if (!file.type.startsWith('image/')) {
           setStatus('Please import an image file.');
           return;
         }
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const img = new Image();
-          img.onload = () => {
-            drawBaseImage(img);
-            state.imageReady = true;
-            render();
-          };
-          img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
+        const url = URL.createObjectURL(file);
+        loadImageFromUrl(url, () => URL.revokeObjectURL(url));
       };
+
+      const samples = window.SampleMedia?.getList('images') || [];
+      let sampleIndex = Math.floor(Math.random() * Math.max(1, samples.length));
+      const sampleBtn = document.getElementById('sampleBtn');
+      if (sampleBtn && samples.length) {
+        sampleBtn.addEventListener('click', () => {
+          const sample = samples[sampleIndex % samples.length];
+          sampleIndex += 1;
+          loadImageFromUrl(sample.src);
+        });
+      } else if (sampleBtn) {
+        sampleBtn.disabled = true;
+      }
 
       importBtn.addEventListener('click', () => fileInput.click());
       fileInput.addEventListener('change', (event) => handleFiles(event.target.files));
@@ -1887,7 +1920,7 @@
         updateActiveCount();
         if (state.imageReady) {
           render();
-          setStatus('Clean slate. Stack effects again.');
+          setStatus('All effects off.');
         } else {
           renderPlaceholder();
         }
@@ -1906,7 +1939,7 @@
         link.href = canvas.toDataURL('image/png');
         link.download = `drawer-spauwer-${Date.now()}.png`;
         link.click();
-        setStatus('Exported PNG dropped to your downloads.');
+        setStatus('Exported as PNG.');
       });
 
       canvas.addEventListener('dragover', (event) => {
