@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Archived Experiments · Accidental Graphics</title>
-  <meta name="description" content="A resting place for experimental or paused Accidental Graphics projects.">
+  <title>Archive · Accidental Graphics</title>
+  <meta name="description" content="Older Accidental Graphics tools. They still work.">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/nav.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,73 +18,81 @@
   <main class="archive-wrapper">
     <header class="archive-hero">
       <h1>The Archive</h1>
-      <p class="lede">
-        These experiments are still part of Accidental Graphics, but they are on the back shelf.
-        Feel free to explore them as-is.
-      </p>
+      <p class="lede" id="archiveIntro"></p>
     </header>
 
-
-
-    <ul class="archive-list">
-
-      <li>
-        <article class="archive-details">
-          <img class="archive-preview" src="images/page gifs/motiondrawing.gif" alt="MotionDrawing preview">
-          <div>
-            <div class="archive-heading">
-              <strong>MotionDrawing.</strong>
-              <span class="archive-year">Since 2025</span>
-            </div>
-            <p>Optical-flow tracker that paints trails from either uploaded clips or the webcam.</p>
-            <a href="archiveApps/motion_tracker.html">Open MotionDrawing →</a>
-          </div>
-        </article>
-      </li>
-
-      <li>
-        <article class="archive-details">
-          <img class="archive-preview" src="images/page gifs/buttonedit.gif" alt="Button Edit preview">
-          <div>
-            <div class="archive-heading">
-              <strong>ButtonEdit.</strong>
-              <span class="archive-year">Since 2025</span>
-            </div>
-            <p>Prototype interface for stress-testing button styles, gradients and hover states.</p>
-            <a href="archiveApps/buttonedit.html">Open ButtonEdit →</a>
-          </div>
-        </article>
-      </li>
-
-      <li>
-        <article class="archive-details">
-          <img class="archive-preview" src="images/page gifs/2image.gif" alt="Two Images preview">
-          <div>
-            <div class="archive-heading">
-              <strong>2Images.</strong>
-              <span class="archive-year">Since 2025</span>
-            </div>
-            <p>Minimal collage utility that layers and blends a pair of uploaded stills.</p>
-            <a href="archiveApps/2images.html">Open Two-Image Mixer →</a>
-          </div>
-        </article>
-      </li>
-
-      <li>
-        <article class="archive-details">
-          <img class="archive-preview" src="images/page gifs/selectorman.gif" alt="Selectorman preview">
-          <div>
-            <div class="archive-heading">
-              <strong>Selectorman.</strong>
-              <span class="archive-year">Since 2025</span>
-            </div>
-            <p>Image-selection laboratory where carved regions tilt, swell, or spiral inside their masks before export.</p>
-            <a href="archiveApps/selectorman.html">Open Selectorman →</a>
-          </div>
-        </article>
-      </li>
-
-    </ul>
+    <ul class="archive-list" id="archiveList"></ul>
   </main>
+  <div class="app-year">2026 Accidental Graphics</div>
+
+  <script>
+  window.addEventListener('DOMContentLoaded', () => {
+    const list = document.getElementById('archiveList');
+    const intro = document.getElementById('archiveIntro');
+    if (!list || !window.AGContent) return;
+
+    AGContent.load('tools').then(data => {
+      intro.textContent = data.archive_intro || '';
+      intro.hidden = !data.archive_intro;
+      return AGContent.tools();
+    }).then(tools => {
+      list.innerHTML = '';
+      tools.filter(tool => tool.archived).forEach(tool => {
+        const item = document.createElement('li');
+        const article = document.createElement('article');
+        article.className = 'archive-details';
+
+        if (tool.cover && tool.isVideo) {
+          const video = document.createElement('video');
+          video.className = 'archive-preview';
+          ['muted', 'loop', 'autoplay', 'playsinline'].forEach(attr => video.setAttribute(attr, ''));
+          video.muted = true;
+          video.preload = 'metadata';
+          video.setAttribute('aria-hidden', 'true');
+          video.src = `${tool.cover}#t=0.001`;
+          article.appendChild(video);
+        } else if (tool.cover) {
+          const img = document.createElement('img');
+          img.className = 'archive-preview';
+          img.src = tool.cover;
+          img.alt = '';
+          img.loading = 'lazy';
+          article.appendChild(img);
+        }
+
+        const body = document.createElement('div');
+        const heading = document.createElement('div');
+        heading.className = 'archive-heading';
+        const name = document.createElement('strong');
+        name.textContent = tool.name;
+        heading.appendChild(name);
+        if (tool.year) {
+          const year = document.createElement('span');
+          year.className = 'archive-year';
+          year.textContent = `Since ${tool.year}`;
+          heading.appendChild(year);
+        }
+        body.appendChild(heading);
+
+        if (tool.description) {
+          const description = document.createElement('p');
+          description.textContent = tool.description;
+          body.appendChild(description);
+        }
+
+        const link = document.createElement('a');
+        link.href = tool.url;
+        link.textContent = `Open ${tool.name} →`;
+        body.appendChild(link);
+
+        article.appendChild(body);
+        item.appendChild(article);
+        list.appendChild(item);
+      });
+    }).catch(() => {
+      list.innerHTML = '<li><p>The archive could not be loaded. Try again in a moment.</p></li>';
+    });
+  });
+  </script>
 </body>
 </html>

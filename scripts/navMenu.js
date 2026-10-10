@@ -38,13 +38,12 @@ document.addEventListener("DOMContentLoaded", () => {
   dropdown.id = "menuDropdown";
   dropdown.setAttribute("aria-label", "Site navigation");
 
-  // Default static links
+  // Default static links (inspiration.html still exists, but is no longer linked)
   const staticLinks = [
     { name: "Home", url: "index.html" },
     { name: "About", url: "about.html" },
     { name: "Archive", url: "archive.html" },
-    { name: "Gallery", url: "gallery.html" },
-    { name: "Inspiration", url: "inspiration.html" }
+    { name: "Gallery", url: "gallery.html" }
   ];
 
   staticLinks.forEach(link => {
@@ -54,17 +53,29 @@ document.addEventListener("DOMContentLoaded", () => {
     dropdown.appendChild(a);
   });
 
-  // Build nav list from APP_LINKS if available
-  if (window.APP_LINKS) {
-    const navApps = window.APP_LINKS.filter(app => !app.archived).slice(0, 5);
-    navApps.forEach(link => {
+  // Tools in the top bar come from content/tools.json ("Show in the top bar" in the CMS).
+  // The last known list is drawn right away so the bar doesn't flicker between pages.
+  let renderedNav = "";
+  const renderNavTools = tools => {
+    const navTools = tools.filter(tool => tool.inMenu && !tool.archived);
+    const signature = JSON.stringify(navTools.map(tool => [tool.name, tool.url]));
+    if (signature === renderedNav) return;
+    renderedNav = signature;
+    navList.innerHTML = "";
+    navTools.forEach(tool => {
       const li = document.createElement("li");
       const a = document.createElement("a");
-      a.href = resolvePath(link.url);
-      a.textContent = link.name;
+      a.href = tool.url;
+      a.textContent = tool.name;
       li.appendChild(a);
       navList.appendChild(li);
     });
+  };
+
+  if (window.AGContent) {
+    const storedTools = window.AGContent.storedTools();
+    if (storedTools) renderNavTools(storedTools);
+    window.AGContent.tools().then(renderNavTools).catch(() => {});
   }
 
   let menuPinnedOpen = false;

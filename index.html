@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Accidental Graphics</title>
-  <meta name="description" content="Tool to make accidental graphics">
+  <meta name="description" content="Experimental browser tools for making graphics by accident. By Jorne Scholiers.">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/nav.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,7 +16,7 @@
   <script defer src="scripts/navMenu.js"></script>
 </head>
 
-<body>
+<body class="home-page">
   <main class="app-grid-wrapper">
     <div class="app-grid" id="appGrid" role="list" aria-label="Available experiments"></div>
   </main>
@@ -25,67 +25,77 @@
   <script>
   window.addEventListener('DOMContentLoaded', () => {
     const appGrid = document.getElementById('appGrid');
-    if (!appGrid) return;
+    if (!appGrid || !window.AGContent) return;
 
-    const coverMap = {
-      "Isolation": "images/page gifs/isolation.gif",
-      "Color Range": "images/page gifs/colorrange.gif",
-      "Swing": "images/page gifs/swing.gif",
-      "IMAGEine": "images/page gifs/IMAGEine.gif",
-      "PhotoGrid": "images/page gifs/griddistort.gif",
-      "MotionStills": "images/page gifs/motionbrush.gif",
-    };
-    const fallbackCover = "images/icon_Blue.png";
-    const apps = Array.isArray(window.APP_LINKS) ? window.APP_LINKS : [];
-    const activeApps = apps.filter(app => !app.archived);
-
-    if (!activeApps.length) {
-      const emptyState = document.createElement('p');
-      emptyState.className = 'home-empty';
-      emptyState.textContent = 'Experiments coming soon.';
-      appGrid.appendChild(emptyState);
-      return;
-    }
-
-    activeApps.forEach(app => {
+    const makeCard = ({ href, label, meta, cover, isVideo, extraClass }) => {
       const card = document.createElement('a');
-      card.href = app.url;
-      card.className = 'app-card';
+      card.href = href;
+      card.className = `app-card${extraClass ? ` ${extraClass}` : ''}`;
       card.setAttribute('role', 'listitem');
-      card.setAttribute('aria-label', `${app.name} experiment`);
-      card.style.backgroundImage = `url('${coverMap[app.name] || fallbackCover}')`;
+      card.setAttribute('aria-label', label);
 
-      const label = document.createElement('span');
-      label.className = 'app-card__label';
-      label.textContent = app.name;
-      card.appendChild(label);
+      if (cover && isVideo) {
+        const video = document.createElement('video');
+        video.className = 'app-card__media';
+        ['muted', 'loop', 'autoplay', 'playsinline'].forEach(attr => video.setAttribute(attr, ''));
+        video.muted = true;
+        video.preload = 'auto';
+        video.setAttribute('aria-hidden', 'true');
+        video.src = `${cover}#t=0.001`;
+        card.appendChild(video);
+        video.addEventListener('canplay', () => video.play().catch(() => {}), { once: true });
+      } else if (cover) {
+        card.style.backgroundImage = `url("${cover}")`;
+      }
 
-      const yearBadge = document.createElement('span');
-      yearBadge.className = 'app-card__meta';
-      const creationYear = app.year ? `Since ${app.year}` : 'Since 2025';
-      yearBadge.textContent = creationYear;
-      card.appendChild(yearBadge);
+      const labelEl = document.createElement('span');
+      labelEl.className = 'app-card__label';
+      labelEl.textContent = label;
+      card.appendChild(labelEl);
 
-      appGrid.appendChild(card);
+      const metaEl = document.createElement('span');
+      metaEl.className = 'app-card__meta';
+      metaEl.textContent = meta;
+      card.appendChild(metaEl);
+      return card;
+    };
+
+    // The archive card fills the rest of the last row, whatever the number of tools.
+    const fitArchiveCard = () => {
+      const archiveCard = appGrid.querySelector('.app-card--archive');
+      if (!archiveCard) return;
+      const columns = getComputedStyle(appGrid).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+      const tools = appGrid.querySelectorAll('.app-card:not(.app-card--archive)').length;
+      const left = columns - (tools % columns);
+      archiveCard.style.gridColumn = `span ${left}`;
+    };
+
+    AGContent.tools().then(tools => {
+      const activeTools = tools.filter(tool => !tool.archived);
+      appGrid.innerHTML = '';
+
+      activeTools.forEach(tool => {
+        appGrid.appendChild(makeCard({
+          href: tool.url,
+          label: tool.name,
+          meta: tool.year ? `Since ${tool.year}` : '',
+          cover: tool.cover || AGContent.resolve('images/icon_Blue.png'),
+          isVideo: tool.isVideo,
+        }));
+      });
+
+      appGrid.appendChild(makeCard({
+        href: AGContent.resolve('archive.html'),
+        label: 'Archive',
+        meta: 'Older tools',
+        extraClass: 'app-card--archive',
+      }));
+
+      fitArchiveCard();
+      window.addEventListener('resize', fitArchiveCard);
+    }).catch(() => {
+      appGrid.innerHTML = '<p class="home-empty">The tools could not be loaded. Try again in a moment.</p>';
     });
-
-    const archiveCard = document.createElement('a');
-    archiveCard.href = 'archive.html';
-    archiveCard.className = 'app-card app-card--archive';
-    archiveCard.setAttribute('role', 'listitem');
-    archiveCard.setAttribute('aria-label', 'Explore archived experiments');
-
-    const archiveLabel = document.createElement('span');
-    archiveLabel.className = 'app-card__label';
-    archiveLabel.textContent = 'Archive';
-    archiveCard.appendChild(archiveLabel);
-
-    const archiveMeta = document.createElement('span');
-    archiveMeta.className = 'app-card__meta';
-    archiveMeta.textContent = 'Back Shelf';
-    archiveCard.appendChild(archiveMeta);
-
-    appGrid.appendChild(archiveCard);
   });
   </script>
 </body>

@@ -587,8 +587,6 @@ body.buttonedit-page .buttonedit-stage canvas {
   margin-top: 32px;
   list-style: none;
   padding: 0;
-  max-height: calc(100vh - 220px);
-  overflow-y: auto;
   line-height: 1.6;
   text-align: left;
 }
@@ -1973,6 +1971,12 @@ h2 {
    HOME GRID
 ========================================================= */
 
+/* The 72px top padding is part of the body height, so the homepage
+   doesn't scroll into empty space when all tools fit on the screen. */
+body.home-page {
+  box-sizing: border-box;
+}
+
 .app-grid-wrapper {
   width: 100%;
   max-width: none;
@@ -1981,13 +1985,17 @@ h2 {
   padding: 12px 12px 42px;
   box-sizing: border-box;
   display: flex;
+  flex-shrink: 0; /* grow with the cards instead of squeezing them under the footer */
 }
 
+/* Two rows fill the screen. More tools add rows of the same height,
+   and only then the page scrolls. */
 .app-grid {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: max(160px, calc((100dvh - 72px - 54px - 8px) / 2));
+  align-content: start;
   gap: 8px;
   margin: 0;
   padding: 0;
@@ -2009,6 +2017,15 @@ h2 {
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
   transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.app-card__media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
 }
 
 .app-card::after {
@@ -2050,7 +2067,6 @@ h2 {
 }
 
 .app-card--archive {
-  grid-column: span 2;
   background: black;
   border-style: dashed;
   border-color: rgba(255,255,255,0.4);
@@ -2107,11 +2123,7 @@ h2 {
 @media (max-width: 960px) {
   .app-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: repeat(3, minmax(0, 1fr));
-  }
-
-  .app-card--archive {
-    grid-column: span 3;
+    grid-auto-rows: max(160px, calc((100dvh - 72px - 54px - 16px) / 3));
   }
 }
 
@@ -2123,16 +2135,11 @@ h2 {
 
   .app-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: none;
     grid-auto-rows: minmax(180px, 1fr);
   }
 
   .app-card {
     padding: 20px;
-  }
-
-  .app-card--archive {
-    grid-column: span 2;
   }
 }
 

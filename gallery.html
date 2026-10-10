@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gallery | Accidental Graphics</title>
-  <meta name="description" content="Community gallery showcasing outputs from the Accidental Graphics tools.">
+  <title>Gallery · Accidental Graphics</title>
+  <meta name="description" content="Work made with the Accidental Graphics tools.">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/nav.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,74 +18,80 @@
   <main class="gallery-wrapper">
     <section class="gallery-hero">
       <h1>Gallery</h1>
-      <p class="gallery-lede">
-        A living wall for experiments made with Accidental Graphics tools. Share what you discover, how you broke the rules,
-        and any tricks others should try next.
-      </p>
+      <p class="gallery-lede" id="galleryIntro"></p>
       <div class="gallery-actions">
-        <a class="gallery-action" href="https://www.instagram.com/byjorne?igsh=N3M1dWQ1Nm1hbjN4&utm_source=qr" target="_blank" rel="noopener noreferrer">
+        <a class="gallery-action" href="https://www.instagram.com/byjorne/" target="_blank" rel="noopener noreferrer">
           DM&nbsp;@byjorne
         </a>
         <a class="gallery-action" href="https://www.instagram.com/explore/tags/accidentalgraphics/" target="_blank" rel="noopener noreferrer">
           Use&nbsp;#AccidentalGraphics
         </a>
       </div>
-      <ul class="gallery-guidelines">
-        <li>Tag the tool you used</li>
-        <li>Share what surprised you</li>
-      </ul>
     </section>
 
-    <section aria-label="Featured submissions">
-      <div class="gallery-grid">
-        
-        
-        <article class="gallery-card">
-          <img src="images/community outcome/byjorne3.png" alt="Layered vector strokes with a drifting motion trail created in Swing">
-          <div class="gallery-card__meta">
-            <p class="gallery-card__credit">
-              by
-              <a href="https://www.instagram.com/byjorne?igsh=N3M1dWQ1Nm1hbjN4&utm_source=qr" target="_blank" rel="noopener noreferrer">@byjorne</a>
-            </p>
-            <p class="gallery-card__tool">Tool:
-              <a href="apps/Swing.html">Swing</a>
-            </p>
-          </div>
-        </article>
-
-
-        <article class="gallery-card">
-          <img src="images/community outcome/byjorne1.png" alt="Motion blur texture from MotionStills">
-          <div class="gallery-card__meta">
-            <p class="gallery-card__credit">
-              by
-              <a href="https://www.instagram.com/byjorne?igsh=N3M1dWQ1Nm1hbjN4&utm_source=qr" target="_blank" rel="noopener noreferrer">@byjorne</a>
-            </p>
-            <p class="gallery-card__tool">Tool:
-              <a href="apps/MotionStills.html">MotionStills</a>
-            </p>
-          </div>
-        </article>
-
-
-        <article class="gallery-card">
-          <img src="images/community outcome/byjorne2.png" alt="Pixel-sorted gradients made in IMAGEine">
-          <div class="gallery-card__meta">
-            <p class="gallery-card__credit">
-              by
-              <a href="https://www.instagram.com/byjorne?igsh=N3M1dWQ1Nm1hbjN4&utm_source=qr" target="_blank" rel="noopener noreferrer">@byjorne</a>
-            </p>
-            <p class="gallery-card__tool">Tool:
-              <a href="apps/IMAGEine.html">IMAGEine</a>
-            </p>
-          </div>
-        </article>
-
-
-      </div>
-      <p class="gallery-empty">This wall expands as more experiments roll in. Send yours and help fill the feed.</p>
+    <section aria-label="Work made with the tools">
+      <div class="gallery-grid" id="galleryGrid"></div>
     </section>
   </main>
   <div class="app-year">2026 Accidental Graphics</div>
+
+  <script>
+  window.addEventListener('DOMContentLoaded', () => {
+    const grid = document.getElementById('galleryGrid');
+    const intro = document.getElementById('galleryIntro');
+    if (!grid || !window.AGContent) return;
+
+    const link = (href, text) => {
+      const a = document.createElement('a');
+      a.href = href;
+      a.textContent = text;
+      if (/^https?:/i.test(href) && !href.startsWith(location.origin)) {
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+      }
+      return a;
+    };
+
+    Promise.all([AGContent.load('gallery'), AGContent.tools().catch(() => [])]).then(([data, tools]) => {
+      intro.textContent = data.intro || '';
+      intro.hidden = !data.intro;
+      grid.innerHTML = '';
+
+      (Array.isArray(data.items) ? data.items : []).filter(item => item && item.image).forEach(item => {
+        const card = document.createElement('article');
+        card.className = 'gallery-card';
+
+        const img = document.createElement('img');
+        img.src = AGContent.resolve(item.image);
+        img.alt = item.alt || (item.tool ? `Made with ${item.tool}` : 'Made with Accidental Graphics');
+        img.loading = 'lazy';
+        card.appendChild(img);
+
+        const meta = document.createElement('div');
+        meta.className = 'gallery-card__meta';
+
+        if (item.maker) {
+          const credit = document.createElement('p');
+          credit.className = 'gallery-card__credit';
+          credit.append('by ', item.maker_link ? link(item.maker_link, item.maker) : item.maker);
+          meta.appendChild(credit);
+        }
+
+        if (item.tool) {
+          const toolLine = document.createElement('p');
+          toolLine.className = 'gallery-card__tool';
+          const tool = tools.find(t => t.name.toLowerCase() === String(item.tool).toLowerCase());
+          toolLine.append('Tool: ', tool ? link(tool.url, tool.name) : item.tool);
+          meta.appendChild(toolLine);
+        }
+
+        if (meta.childElementCount) card.appendChild(meta);
+        grid.appendChild(card);
+      });
+    }).catch(() => {
+      grid.innerHTML = '<p>The gallery could not be loaded. Try again in a moment.</p>';
+    });
+  });
+  </script>
 </body>
 </html>

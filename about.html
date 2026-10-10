@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Accidental Graphics</title>
-  <meta name="description" content="Tool to make accidental graphics">
+  <title>About · Accidental Graphics</title>
+  <meta name="description" content="Accidental Graphics: small browser tools for making graphics outside Illustrator and Photoshop. By Jorne Scholiers.">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/nav.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -75,16 +75,9 @@
   <!-- Left text column -->
   <div id="controls" >
     <h1>about</h1>
-    <div class="text-block">This project explores what happens when we move beyond traditional graphic software.</div>
-    <div class="text-block">Away from Illustrator and Photoshop.</div>
-    <div class="text-block">Here, graphics aren’t designed on rules, but rather grow accidentally.</div>
-    <div class="text-block">Through errors, code, and unexpected interactions, new forms emerge.</div>
-    <div class="text-block">The goal is not perfection but exploration.</div>
-    <div class="text-block">Created by <a href="https://jornescholiers.be" target="_blank" rel="noopener noreferrer" class="creator-link"><span class="stretch-text">Jorne Scholiers</span></a></div>
-    <ul class="about-links" aria-label="Jorne Scholiers links">
-      <li><a href="https://jornescholiers.be" target="_blank" rel="noopener noreferrer" class="creator-link"><span class="stretch-text">Portfolio</span></a></li>
-      <li><a href="https://www.instagram.com/byjorne?igsh=N3M1dWQ1Nm1hbjN4&utm_source=qr" target="_blank" rel="noopener noreferrer" class="creator-link"><span class="stretch-text">Instagram</span></a></li>
-    </ul>
+    <div id="aboutText" style="display: contents"></div>
+    <div class="text-block">Made by <a href="https://jornescholiers.be" target="_blank" rel="noopener noreferrer" class="creator-link"><span class="stretch-text">Jorne Scholiers</span></a></div>
+    <ul class="about-links" id="aboutLinks" aria-label="Links"></ul>
   </div>
 
   <!-- Right canvas -->
@@ -95,6 +88,35 @@
 </div>
 
 <script>
+// Text and links come from content/about.json (Pages CMS).
+window.addEventListener('DOMContentLoaded', () => {
+  if (!window.AGContent) return;
+  AGContent.load('about').then(data => {
+    const textEl = document.getElementById('aboutText');
+    String(data.text || '').split(/\n\s*\n/).map(part => part.trim()).filter(Boolean).forEach(part => {
+      const block = document.createElement('div');
+      block.className = 'text-block';
+      block.textContent = part;
+      textEl.appendChild(block);
+    });
+    const linksEl = document.getElementById('aboutLinks');
+    (Array.isArray(data.links) ? data.links : []).filter(item => item && item.label && item.url).forEach(item => {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = item.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.className = 'creator-link';
+      const label = document.createElement('span');
+      label.className = 'stretch-text';
+      label.textContent = item.label;
+      a.appendChild(label);
+      li.appendChild(a);
+      linksEl.appendChild(li);
+    });
+  }).catch(() => {});
+});
+
 const canvas = document.getElementById('drawingCanvas');
 const ctx = canvas.getContext('2d');
 const drawPrompt = document.getElementById('drawPrompt');
@@ -125,14 +147,16 @@ function hidePrompt(){
   promptVisible = false;
   drawPrompt.classList.add('hidden');
 }
-canvas.addEventListener('mousedown', () => {
+canvas.style.touchAction = 'none';
+canvas.addEventListener('pointerdown', (e) => {
   drawing = true;
   hidePrompt();
+  canvas.setPointerCapture?.(e.pointerId);
 });
-canvas.addEventListener('mouseup', () => drawing = false);
-canvas.addEventListener('mouseout', () => drawing = false);
+canvas.addEventListener('pointerup', () => drawing = false);
+canvas.addEventListener('pointercancel', () => drawing = false);
 
-canvas.addEventListener('mousemove', (e) => {
+canvas.addEventListener('pointermove', (e) => {
   if (!drawing) return;
   hidePrompt();
   const rect = canvas.getBoundingClientRect();

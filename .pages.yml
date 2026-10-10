@@ -1,0 +1,137 @@
+# Pages CMS configuration (https://pagescms.org).
+# Log in at https://app.pagescms.org with GitHub and open this repository.
+# Every save is a commit to main; GitHub Pages puts the site online a minute later.
+# Manual (Dutch): .github/CMS-HANDLEIDING.md
+
+media:
+  - name: covers
+    label: Covers (homepage & archive)
+    input: images/covers
+    output: images/covers
+    rename: safe
+    categories: [image, video]
+  - name: gallery
+    label: Gallery images
+    input: images/gallery
+    output: images/gallery
+    rename: safe
+    categories: [image]
+
+content:
+  - name: tools
+    label: Tools
+    type: file
+    path: content/tools.json
+    format: json
+    fields:
+      - name: tools
+        label: Tools
+        description: "The order here is the order on the homepage and in the archive. Drag a row to move a tool. Tick 'In the archive' to move a tool from the homepage to the Archive page."
+        type: object
+        list:
+          collapsible:
+            collapsed: true
+            summary: "{index}.  {name}  ·  archive: {archived}  ·  top bar: {in_menu}  ·  hidden: {hidden}"
+        fields:
+          - name: name
+            label: Name
+            type: string
+            required: true
+          - name: link
+            label: Link to the tool
+            description: "Path of the tool's page, e.g. apps/Swing.html or apps/Isolation/index.html. A full https:// link to another site also works."
+            type: string
+            required: true
+          - name: year
+            label: Year
+            description: Shown as "Since 2025".
+            type: string
+          - name: cover
+            label: Cover (GIF, image or video)
+            description: "Shown on the homepage card and in the archive. A short mp4 video is up to 10 times lighter than a GIF and looks the same. Square works best."
+            type: file
+            options:
+              media: covers
+          - name: description
+            label: Short description
+            description: One sentence on what the tool does. Shown on the Archive page.
+            type: text
+          - name: archived
+            label: In the archive
+            description: Off the homepage, listed on the Archive page instead.
+            type: boolean
+          - name: in_menu
+            label: Show in the top bar
+            description: The black bar at the top of every page. Keep it to about 5 tools, otherwise the names get very small.
+            type: boolean
+          - name: hidden
+            label: Hide this tool
+            description: Keeps the tool off the homepage, menu and archive without deleting it. The tool's page itself stays reachable.
+            type: boolean
+      - name: archive_intro
+        label: Archive page intro
+        type: text
+
+  - name: gallery
+    label: Gallery
+    type: file
+    path: content/gallery.json
+    format: json
+    fields:
+      - name: intro
+        label: Intro text
+        type: text
+      - name: items
+        label: Works
+        description: Drag to change the order. Upload the image first under Media → Gallery images.
+        type: object
+        list:
+          collapsible:
+            collapsed: true
+            summary: "{index}.  {maker}  ·  {tool}"
+        fields:
+          - name: image
+            label: Image
+            type: image
+            options:
+              media: gallery
+          - name: alt
+            label: Description for screen readers and Google (alt text)
+            description: What is on the image, e.g. "Red and white lines made in Swing".
+            type: string
+          - name: maker
+            label: Made by
+            description: e.g. @byjorne
+            type: string
+          - name: maker_link
+            label: Link to the maker (optional)
+            description: e.g. https://www.instagram.com/byjorne/
+            type: string
+          - name: tool
+            label: Tool used
+            description: The name exactly as in Tools, e.g. Swing. It becomes a link to that tool.
+            type: string
+
+  - name: about
+    label: About
+    type: file
+    path: content/about.json
+    format: json
+    fields:
+      - name: text
+        label: Text
+        description: Leave an empty line between paragraphs.
+        type: text
+      - name: links
+        label: Links
+        type: object
+        list: true
+        fields:
+          - name: label
+            label: Text
+            type: string
+            required: true
+          - name: url
+            label: Link
+            type: string
+            required: true

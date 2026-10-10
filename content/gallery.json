@@ -1,0 +1,26 @@
+{
+  "intro": "Work made with the Accidental Graphics tools. Made something yourself? Send it over.",
+  "items": [
+    {
+      "image": "images/gallery/byjorne3.png",
+      "alt": "Layered lines and a motion trail made in Swing",
+      "maker": "@byjorne",
+      "maker_link": "https://www.instagram.com/byjorne/",
+      "tool": "Swing"
+    },
+    {
+      "image": "images/gallery/byjorne1.png",
+      "alt": "Motion blur texture made in MotionStills",
+      "maker": "@byjorne",
+      "maker_link": "https://www.instagram.com/byjorne/",
+      "tool": "MotionStills"
+    },
+    {
+      "image": "images/gallery/byjorne2.png",
+      "alt": "Pixel gradients made in IMAGEine",
+      "maker": "@byjorne",
+      "maker_link": "https://www.instagram.com/byjorne/",
+      "tool": "IMAGEine"
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "tools": [
+    {
+      "name": "Isolation",
+      "link": "apps/Isolation/index.html",
+      "year": "2026",
+      "cover": "images/covers/isolation.mp4",
+      "description": "Draw grid compositions with images and lines.",
+      "archived": false,
+      "in_menu": true,
+      "hidden": false
+    },
+    {
+      "name": "Color Range",
+      "link": "apps/ColorRangeLab.html",
+      "year": "2025",
+      "cover": "images/covers/colorrange.mp4",
+      "description": "Pull color bands out of images and paint with them.",
+      "archived": false,
+      "in_menu": true,
+      "hidden": false
+    },
+    {
+      "name": "MotionStills",
+      "link": "apps/MotionStills.html",
+      "year": "2025",
+      "cover": "images/covers/motionstills.mp4",
+      "description": "Paint with the motion trails of a video.",
+      "archived": false,
+      "in_menu": true,
+      "hidden": false
+    },
+    {
+      "name": "Swing",
+      "link": "apps/Swing.html",
+      "year": "2025",
+      "cover": "images/covers/swing.mp4",
+      "description": "Paint with a brush that swings on a rope behind your cursor.",
+      "archived": false,
+      "in_menu": true,
+      "hidden": false
+    },
+    {
+      "name": "IMAGEine",
+      "link": "apps/IMAGEine.html",
+      "year": "2025",
+      "cover": "images/covers/imageine.mp4",
+      "description": "Turn images and webcam video into ASCII mosaics.",
+      "archived": false,
+      "in_menu": true,
+      "hidden": false
+    },
+    {
+      "name": "PhotoGrid",
+      "link": "apps/fotogrid.html",
+      "year": "2025",
+      "cover": "images/covers/photogrid.mp4",
+      "description": "Warp a photo into an animated grid.",
+      "archived": false,
+      "in_menu": false,
+      "hidden": false
+    },
+    {
+      "name": "MotionDrawing",
+      "link": "archiveApps/motion_tracker.html",
+      "year": "2025",
+      "cover": "images/covers/motiondrawing.mp4",
+      "description": "Draws the movement in a video or your webcam as lines.",
+      "archived": true,
+      "in_menu": false,
+      "hidden": false
+    },
+    {
+      "name": "ButtonEdit",
+      "link": "archiveApps/buttonedit.html",
+      "year": "2025",
+      "cover": "images/covers/buttonedit.mp4",
+      "description": "Stack image effects by switching buttons on and off.",
+      "archived": true,
+      "in_menu": false,
+      "hidden": false
+    },
+    {
+      "name": "2Images",
+      "link": "archiveApps/2images.html",
+      "year": "2025",
+      "cover": "images/covers/2images.mp4",
+      "description": "Rebuilds one image out of blocks of a second image, matched by brightness.",
+      "archived": true,
+      "in_menu": false,
+      "hidden": false
+    },
+    {
+      "name": "Selectorman",
+      "link": "archiveApps/selectorman.html",
+      "year": "2025",
+      "cover": "images/covers/selectorman.mp4",
+      "description": "Select parts of an image and let each part move on its own.",
+      "archived": true,
+      "in_menu": false,
+      "hidden": false
+    }
+  ],
+  "archive_intro": "Older tools. They still work, they just get fewer updates."
+}
