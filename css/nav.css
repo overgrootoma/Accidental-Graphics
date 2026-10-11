@@ -231,3 +231,13 @@
     transform: none;
   }
 }
+
+/* Cursor trail (made in navMenu.js). Fixed, so moving the mouse never makes the page longer. */
+.cursor-trail {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
