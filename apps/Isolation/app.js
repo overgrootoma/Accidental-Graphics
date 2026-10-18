@@ -176,6 +176,7 @@
     textFontName: "",
     textSize: 80,
     textTracking: 0,
+    cameraMirror: true,
     showImage: false,
     paths: [],
     animation: {
@@ -249,6 +250,9 @@
     randomLineAdd: document.getElementById("randomLineAdd"),
     imageImport: document.getElementById("imageImport"),
     imageSource: document.getElementById("imageSource"),
+    cameraRow: document.getElementById("cameraRow"),
+    cameraMirror: document.getElementById("cameraMirror"),
+    cameraFreeze: document.getElementById("cameraFreeze"),
     imageFileRow: document.getElementById("imageFileRow"),
     textControls: document.getElementById("textControls"),
     textContent: document.getElementById("textContent"),
@@ -416,6 +420,19 @@
   };
   const state = loadState();
   const TEXT_IMAGE_SIZE = 2048;
+  const CAMERA_MAX_WIDTH = 960;
+  const camera = {
+    stream: null,
+    starting: false,
+    video: Object.assign(document.createElement("video"), { muted: true, playsInline: true }),
+    canvas: document.createElement("canvas"),
+    frame: 0,
+    lastTime: -1,
+    error: "",
+  };
+  const live = {
+    raf: 0,
+  };
   const textImage = {
     key: "",
     canvas: null,
@@ -510,7 +527,9 @@
     merged.imageContrast = clampNumber(merged.imageContrast, -100, 100, base.imageContrast);
     merged.imageInvert = Boolean(merged.imageInvert);
     merged.imageLinesAngle = merged.imageLinesAngle === true;
+    // The camera is never restored on load, so the app does not ask for it by itself.
     merged.imageSource = merged.imageSource === "text" ? "text" : "image";
+    merged.cameraMirror = merged.cameraMirror !== false;
     merged.textContent = typeof merged.textContent === "string" ? merged.textContent.slice(0, MAX_TEXT_LENGTH) : base.textContent;
     merged.textFont = TEXT_FONTS[merged.textFont] ? merged.textFont : base.textFont;
     merged.textFontName = typeof merged.textFontName === "string" ? merged.textFontName.slice(0, 60) : "";
@@ -702,7 +721,7 @@
     ].join(":");
 
     if (importedImage.dirty || importedImage.key !== key) {
-      importedImage.paths = buildThresholdPaths(source.image, grid, layer);
+      importedImage.paths = buildThresholdPaths(source, grid, layer);
       importedImage.key = key;
     }
     importedImage.dirty = false;
@@ -712,10 +731,12 @@
   // Samples the image on a lattice that lies exactly on the grid: Detail samples per grid cell, so every
   // grid row, column and diagonal gets exactly one line of samples. Brightness and contrast are applied
   // here once; line directions (and later layers) only compare against a threshold.
-  function getImageSample(image, grid) {
+  function getImageSample(source, grid) {
+    const image = source.image;
     const detail = Math.max(1, Math.round(state.imageDetail));
     const placement = getImagePlacement(image, grid);
     const key = [
+      source.key,
       detail,
       grid.columns,
       grid.rows,
@@ -783,8 +804,8 @@
     return [layer.threshold, layer.horizontal, layer.vertical, layer.diagonal, layer.angleOn, layer.angle, state.imageInvert].join(":");
   }
 
-  function buildThresholdPaths(image, grid, layer) {
-    const sample = getImageSample(image, grid);
+  function buildThresholdPaths(source, grid, layer) {
+    const sample = getImageSample(source, grid);
     const { width, height, detail, luminance } = sample;
     const threshold = layer.threshold;
     const invert = state.imageInvert;
@@ -1638,6 +1659,10 @@
   function updateImageStatus() {
     const source = importedImage.source;
     if (!source) {
+      if (state.imageSource === "camera") {
+        els.imageStatus.textContent = camera.error || (camera.stream ? "Camera starting" : "Waiting for camera");
+        return;
+      }
       els.imageStatus.textContent = state.imageSource === "text" ? "No text" : "No image";
       return;
     }
@@ -1653,6 +1678,9 @@
       const image = getTextImage(grid);
       return image ? { image, name: "Text", key: textImage.key } : null;
     }
+    if (state.imageSource === "camera") {
+      return camera.frame > 0 ? { image: camera.canvas, name: "Camera", key: `camera-${camera.frame}` } : null;
+    }
     if (!importedImage.image) {
       return null;
     }
@@ -1665,9 +1693,19 @@
 
   function syncSourceControls() {
     const isText = state.imageSource === "text";
+    const isCamera = state.imageSource === "camera";
     els.imageSource.value = state.imageSource;
-    els.imageFileRow.hidden = isText;
-    els.clearImage.hidden = isText;
+    els.imageFileRow.hidden = isText || isCamera;
+    els.clearImage.hidden = isText || isCamera;
+    els.cameraRow.hidden = !isCamera;
+    els.cameraMirror.checked = state.cameraMirror;
+    els.cameraFreeze.disabled = camera.frame === 0;
+    // The camera runs exactly while Camera is the source (also after undo or redo).
+    if (isCamera && !camera.stream && !camera.starting) {
+      startCamera();
+    } else if (!isCamera && (camera.stream || camera.starting)) {
+      stopCamera();
+    }
     els.textControls.hidden = !isText;
     setInputValue(els.textContent, state.textContent);
     els.textFont.value = state.textFont;
@@ -1682,9 +1720,14 @@
 
   function wireSourceControls() {
     els.imageSource.addEventListener("change", () => {
-      state.imageSource = els.imageSource.value === "text" ? "text" : "image";
+      state.imageSource = ["text", "camera"].includes(els.imageSource.value) ? els.imageSource.value : "image";
       commitChange();
     });
+    els.cameraMirror.addEventListener("change", () => {
+      state.cameraMirror = els.cameraMirror.checked;
+      commitChange();
+    });
+    els.cameraFreeze.addEventListener("click", freezeCameraFrame);
     els.textContent.addEventListener("input", () => {
       state.textContent = els.textContent.value.slice(0, MAX_TEXT_LENGTH);
       commitChange({ merge: "textContent" });
@@ -1703,6 +1746,126 @@
     ["textSize", "textTracking"].forEach((key) => {
       els[key].addEventListener("input", () => setRangeState(key, els[key]));
     });
+  }
+
+  // --- camera ---
+
+  async function startCamera() {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+      camera.error = "No camera in this browser";
+      updateImageStatus();
+      return;
+    }
+    camera.starting = true;
+    camera.error = "";
+    updateImageStatus();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      camera.starting = false;
+      if (state.imageSource !== "camera") {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      camera.stream = stream;
+      camera.video.srcObject = stream;
+      await camera.video.play();
+      startLiveLoop();
+    } catch (error) {
+      camera.starting = false;
+      camera.error = error && error.name === "NotAllowedError" ? "Camera not allowed" : "Camera not available";
+      updateImageStatus();
+    }
+  }
+
+  function stopCamera() {
+    camera.starting = false;
+    if (camera.stream) {
+      camera.stream.getTracks().forEach((track) => track.stop());
+    }
+    camera.stream = null;
+    camera.video.srcObject = null;
+    camera.frame = 0;
+    camera.lastTime = -1;
+    camera.error = "";
+  }
+
+  // Copies a new video frame (mirrored if wanted) into the camera canvas, at most 960px wide.
+  function captureCameraFrame() {
+    const video = camera.video;
+    if (!camera.stream || video.readyState < 2 || !video.videoWidth || video.currentTime === camera.lastTime) {
+      return false;
+    }
+    camera.lastTime = video.currentTime;
+    const scale = Math.min(1, CAMERA_MAX_WIDTH / video.videoWidth);
+    const width = Math.round(video.videoWidth * scale);
+    const height = Math.round(video.videoHeight * scale);
+    if (camera.canvas.width !== width || camera.canvas.height !== height) {
+      camera.canvas.width = width;
+      camera.canvas.height = height;
+    }
+    const context = camera.canvas.getContext("2d");
+    context.save();
+    if (state.cameraMirror) {
+      context.translate(width, 0);
+      context.scale(-1, 1);
+    }
+    context.drawImage(video, 0, 0, width, height);
+    context.restore();
+    camera.frame += 1;
+    return true;
+  }
+
+  // Turns the current camera frame into a still image source, like an imported photo.
+  function freezeCameraFrame() {
+    if (!camera.frame) {
+      return;
+    }
+    camera.canvas.toBlob((blob) => {
+      if (!blob) {
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const image = new Image();
+      image.onload = () => {
+        URL.revokeObjectURL(url);
+        importedImage.image = image;
+        importedImage.name = "Camera frame";
+        importedImage.paths = [];
+        importedImage.dirty = true;
+        importedImage.key = "";
+        state.imageSource = "image";
+        commitChange();
+      };
+      image.src = url;
+    }, "image/png");
+  }
+
+  // --- live loop: renders continuously while the camera (or later audio) is live ---
+
+  function isLive() {
+    return Boolean(camera.stream);
+  }
+
+  function startLiveLoop() {
+    if (!live.raf) {
+      live.raf = requestAnimationFrame(liveTick);
+    }
+  }
+
+  function liveTick() {
+    live.raf = 0;
+    if (!isLive()) {
+      return;
+    }
+    const changed = captureCameraFrame();
+    if (camera.frame === 1 && changed) {
+      syncSourceControls();
+    }
+    // Playback and video export render on their own; here only the plain live view.
+    if (changed && !motion.playing && !videoExport.running) {
+      render(ctx, canvas.width, canvas.height, true);
+    }
+    live.raf = requestAnimationFrame(liveTick);
   }
 
   function getTextFontFamily() {
@@ -2603,7 +2766,7 @@
     state.imageLayers.forEach((layer) => {
       const key = `${common}|${getLineLayerKey(layer)}`;
       const cached = !importedImage.dirty && importedImage.layerKeys[layer.id] === key;
-      paths[layer.id] = cached ? importedImage.layerPaths[layer.id] : buildThresholdPaths(source.image, grid, layer);
+      paths[layer.id] = cached ? importedImage.layerPaths[layer.id] : buildThresholdPaths(source, grid, layer);
       keys[layer.id] = key;
     });
     importedImage.layerPaths = paths;

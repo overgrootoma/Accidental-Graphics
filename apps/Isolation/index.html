@@ -187,10 +187,18 @@
           <div class="group-body">
           <div class="source-head">
             <label for="imageSource">Source</label>
-            <select id="imageSource" class="mini-select" title="Make the lines from an image or from text you type">
+            <select id="imageSource" class="mini-select" title="Make the lines from an image, text you type or your camera. The camera image stays on this computer.">
               <option value="image">Image</option>
               <option value="text">Text</option>
+              <option value="camera">Camera</option>
             </select>
+          </div>
+          <div id="cameraRow" class="camera-row" hidden>
+            <label class="check" title="Show the camera like a mirror">
+              <input id="cameraMirror" type="checkbox" checked />
+              <span>Mirror</span>
+            </label>
+            <button id="cameraFreeze" type="button" title="Keep the current camera frame as a still image">Freeze</button>
           </div>
           <div id="imageFileRow" class="file-row">
             <input id="imageImport" type="file" accept="image/*" aria-label="Image" />
