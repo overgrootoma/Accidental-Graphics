@@ -642,6 +642,11 @@
             <input id="audioSelectedOnly" type="checkbox" />
             <span>Selected objects only</span>
           </label>
+          <div class="midi-row">
+            <p id="midiStatus" class="midi-status"></p>
+            <button id="midiConnect" class="mini-button" type="button" title="Connect your MIDI controller again" hidden>Connect</button>
+            <button id="midiForgetAll" class="mini-button" type="button" hidden>Forget all</button>
+          </div>
           </div>
         </details>
       </aside>
@@ -717,6 +722,11 @@
         </div>
       </section>
     </main>
+
+    <div id="midiMenu" class="midi-menu" role="menu" hidden>
+      <button id="midiLearn" type="button" role="menuitem">Learn MIDI</button>
+      <button id="midiForgetOne" type="button" role="menuitem">Forget MIDI</button>
+    </div>
 
     <script src="encoders.js"></script>
     <script src="app.js"></script>

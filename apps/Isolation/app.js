@@ -258,6 +258,12 @@
     imageSource: document.getElementById("imageSource"),
     cameraRow: document.getElementById("cameraRow"),
     micToggle: document.getElementById("micToggle"),
+    midiStatus: document.getElementById("midiStatus"),
+    midiForgetAll: document.getElementById("midiForgetAll"),
+    midiConnect: document.getElementById("midiConnect"),
+    midiMenu: document.getElementById("midiMenu"),
+    midiLearn: document.getElementById("midiLearn"),
+    midiForgetOne: document.getElementById("midiForgetOne"),
     micStatus: document.getElementById("micStatus"),
     audioMeterFill: document.getElementById("audioMeterFill"),
     audio_force_band: document.getElementById("audioForceBand"),
@@ -451,6 +457,14 @@
   };
   const live = {
     raf: 0,
+  };
+  const MIDI_STORAGE_KEY = "isolation-midi";
+  const midi = {
+    access: null,
+    requesting: null,
+    learning: null,
+    menuInput: null,
+    mappings: readMidiMappings(),
   };
   const audioIn = {
     stream: null,
@@ -2053,6 +2067,204 @@
       state.audio.selectedOnly = els.audioSelectedOnly.checked;
       commitChange();
     });
+  }
+
+  // --- MIDI ---
+  // Right-click a slider, choose Learn MIDI, turn a knob: that control (channel + CC number) now moves the
+  // slider through the normal input event, so undo, record and everything else work as with the mouse.
+  // Links belong to this browser and controller, so they are kept here and not in presets.
+
+  function midiSupported() {
+    return typeof navigator.requestMIDIAccess === "function";
+  }
+
+  function readMidiMappings() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(MIDI_STORAGE_KEY) || "{}");
+      return stored && typeof stored === "object" ? stored : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function saveMidiMappings() {
+    try {
+      localStorage.setItem(MIDI_STORAGE_KEY, JSON.stringify(midi.mappings));
+    } catch (error) {
+      // Links only last this visit when storage is blocked.
+    }
+  }
+
+  function ensureMidiAccess() {
+    if (midi.access) {
+      return Promise.resolve(midi.access);
+    }
+    if (!midi.requesting) {
+      midi.requesting = navigator
+        .requestMIDIAccess({ sysex: false })
+        .then((access) => {
+          midi.access = access;
+          const listen = () => access.inputs.forEach((input) => {
+            input.onmidimessage = handleMidiMessage;
+          });
+          listen();
+          access.onstatechange = listen;
+          return access;
+        })
+        .catch((error) => {
+          midi.requesting = null;
+          throw error;
+        });
+    }
+    return midi.requesting;
+  }
+
+  function handleMidiMessage(message) {
+    const [status, controller, value] = message.data || [];
+    // Control change messages only (0xB0-0xBF).
+    if ((status & 0xf0) !== 0xb0) {
+      return;
+    }
+    const key = `${status & 0x0f}:${controller}`;
+    if (midi.learning) {
+      const id = midi.learning.id;
+      Object.keys(midi.mappings).forEach((existing) => {
+        if (midi.mappings[existing] === id) {
+          delete midi.mappings[existing];
+        }
+      });
+      midi.mappings[key] = id;
+      saveMidiMappings();
+      setMidiLearning(null);
+      return;
+    }
+    const input = document.getElementById(midi.mappings[key] || "");
+    if (!input || input.disabled || input.type !== "range") {
+      return;
+    }
+    const min = Number(input.min || 0);
+    const max = Number(input.max || 100);
+    const step = Number(input.step) || 1;
+    const raw = min + (value / 127) * (max - min);
+    input.value = String(Math.round((raw - min) / step) * step + min);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function setMidiLearning(input) {
+    if (midi.learning) {
+      midi.learning.classList.remove("is-learning");
+    }
+    midi.learning = input;
+    if (input) {
+      input.classList.add("is-learning");
+    }
+    syncMidiUi();
+  }
+
+  function syncMidiUi() {
+    document.querySelectorAll(".has-midi").forEach((element) => element.classList.remove("has-midi"));
+    const mapped = new Set(Object.values(midi.mappings));
+    mapped.forEach((id) => {
+      const input = document.getElementById(id);
+      const host = input && input.closest(".control, .audio-row");
+      if (host) {
+        host.classList.add("has-midi");
+      }
+    });
+    if (!midiSupported()) {
+      els.midiStatus.textContent = "MIDI controllers work in Chrome; this browser has no Web MIDI.";
+    } else if (midi.learning) {
+      els.midiStatus.textContent = "Turn a knob or move a fader…";
+    } else if (mapped.size) {
+      els.midiStatus.textContent = `MIDI: ${mapped.size} slider${mapped.size === 1 ? "" : "s"} linked`;
+    } else {
+      els.midiStatus.textContent = "Right-click a slider to link a MIDI knob.";
+    }
+    els.midiForgetAll.hidden = mapped.size === 0;
+    els.midiConnect.hidden = !midiSupported() || mapped.size === 0 || Boolean(midi.access);
+  }
+
+  function showMidiMenu(input, x, y) {
+    midi.menuInput = input;
+    const linked = Object.values(midi.mappings).includes(input.id);
+    els.midiForgetOne.hidden = !linked;
+    els.midiMenu.hidden = false;
+    const width = els.midiMenu.offsetWidth;
+    const height = els.midiMenu.offsetHeight;
+    els.midiMenu.style.left = `${Math.min(x, window.innerWidth - width - 8)}px`;
+    els.midiMenu.style.top = `${Math.min(y, window.innerHeight - height - 8)}px`;
+  }
+
+  function hideMidiMenu() {
+    els.midiMenu.hidden = true;
+    midi.menuInput = null;
+  }
+
+  function wireMidiControls() {
+    syncMidiUi();
+    if (!midiSupported()) {
+      return;
+    }
+    document.querySelector(".panel").addEventListener("contextmenu", (event) => {
+      const input = event.target.closest('input[type="range"]');
+      if (!input || !input.id) {
+        return;
+      }
+      event.preventDefault();
+      showMidiMenu(input, event.clientX, event.clientY);
+    });
+    els.midiLearn.addEventListener("click", () => {
+      const input = midi.menuInput;
+      hideMidiMenu();
+      if (!input) {
+        return;
+      }
+      ensureMidiAccess()
+        .then(() => setMidiLearning(input))
+        .catch(() => {
+          els.midiStatus.textContent = "MIDI access was not allowed.";
+        });
+    });
+    els.midiForgetOne.addEventListener("click", () => {
+      const input = midi.menuInput;
+      hideMidiMenu();
+      Object.keys(midi.mappings).forEach((key) => {
+        if (input && midi.mappings[key] === input.id) {
+          delete midi.mappings[key];
+        }
+      });
+      saveMidiMappings();
+      syncMidiUi();
+    });
+    els.midiForgetAll.addEventListener("click", () => {
+      midi.mappings = {};
+      saveMidiMappings();
+      setMidiLearning(null);
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!els.midiMenu.hidden && !els.midiMenu.contains(event.target)) {
+        hideMidiMenu();
+      }
+    });
+    els.midiConnect.addEventListener("click", () => {
+      ensureMidiAccess()
+        .then(syncMidiUi)
+        .catch(() => {
+          els.midiStatus.textContent = "MIDI access was not allowed.";
+        });
+    });
+    // After a reload, linked knobs reconnect by themselves only when MIDI was already allowed;
+    // otherwise Connect asks, so opening the page never pops up a permission request.
+    if (Object.keys(midi.mappings).length && navigator.permissions && navigator.permissions.query) {
+      navigator.permissions
+        .query({ name: "midi" })
+        .then((result) => {
+          if (result.state === "granted") {
+            ensureMidiAccess().then(syncMidiUi).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }
   }
 
   function getTextFontFamily() {
@@ -6258,6 +6470,7 @@
     wireArrangeControls();
     wireSourceControls();
     wireAudioControls();
+    wireMidiControls();
     els.clearImage.addEventListener("click", clearImportedImage);
 
     els.isolationSelect.addEventListener("change", () => {
@@ -6622,6 +6835,10 @@
 
     if (event.key === "Escape") {
       toggleShortcuts(false);
+      hideMidiMenu();
+      if (midi.learning) {
+        setMidiLearning(null);
+      }
       if (motion.selected.size) {
         motion.selected.clear();
         renderTimeline();
