@@ -185,6 +185,7 @@
     transparentPaper: document.getElementById("transparentPaper"),
     transparentDrawing: document.getElementById("transparentDrawing"),
     exportPng: document.getElementById("exportPng"),
+    exportSvg: document.getElementById("exportSvg"),
     shortcutsToggle: document.getElementById("shortcutsToggle"),
     shortcuts: document.getElementById("shortcuts"),
   };
@@ -1414,13 +1415,26 @@
     return radius;
   }
 
-  function drawGrid(target, grid, geos, width, height) {
-    const alpha = state.transparentDrawing ? 0.1 : 0.18;
-    target.save();
-    target.strokeStyle = withAlpha(state.lineColor, alpha);
-    target.lineWidth = Math.max(0.3, Math.min(width, height) / 4200);
-    target.beginPath();
+  function getGridStyle(width, height) {
+    return {
+      alpha: state.transparentDrawing ? 0.1 : 0.18,
+      width: Math.max(0.3, Math.min(width, height) / 4200),
+    };
+  }
 
+  function drawGrid(target, grid, geos, width, height) {
+    const style = getGridStyle(width, height);
+    target.save();
+    target.strokeStyle = withAlpha(state.lineColor, style.alpha);
+    target.lineWidth = style.width;
+    target.beginPath();
+    addGridPath(target, grid, geos);
+    target.stroke();
+    target.restore();
+  }
+
+  // Works with a canvas context or an SVG pen.
+  function addGridPath(target, grid, geos) {
     for (let xIndex = 0; xIndex < grid.columns; xIndex += 1) {
       const x = grid.x + xIndex * grid.stepX;
       moveSegmentedLine(target, x, grid.y, x, grid.y + grid.height, geos);
@@ -1430,9 +1444,6 @@
       const y = grid.y + yIndex * grid.stepY;
       moveSegmentedLine(target, grid.x, y, grid.x + grid.width, y, geos);
     }
-
-    target.stroke();
-    target.restore();
   }
 
   function moveSegmentedLine(target, x1, y1, x2, y2, geos) {
@@ -1472,11 +1483,33 @@
     }
   }
 
-  function drawStoredLines(target, paths, grid, geos, maxSide) {
-    const alpha = state.transparentDrawing ? 0.42 : 1;
+  function getLineAlpha() {
+    return state.transparentDrawing ? 0.42 : 1;
+  }
+
+  // The strokes every line gets, in drawing order: the outline sits under the fill.
+  function getLineStrokes(maxSide) {
     const scale = maxSide / 2953;
     const fillWidth = Math.max(1, state.fillWeight * scale);
     const outlineWidth = Math.max(0.2, state.strokeWeight * scale);
+    if (state.drawStroke && state.drawFill) {
+      return [
+        { color: state.lineColor, width: fillWidth + outlineWidth * 2 },
+        { color: state.lineFillColor, width: fillWidth },
+      ];
+    }
+    if (state.drawFill) {
+      return [{ color: state.lineFillColor, width: fillWidth }];
+    }
+    if (state.drawStroke) {
+      return [{ color: state.lineColor, width: outlineWidth }];
+    }
+    return [];
+  }
+
+  function drawStoredLines(target, paths, grid, geos, maxSide) {
+    const alpha = getLineAlpha();
+    const strokes = getLineStrokes(maxSide).map((stroke) => ({ ...stroke, style: withAlpha(stroke.color, alpha) }));
     const layerCanvas = document.createElement("canvas");
     layerCanvas.width = target.canvas.width;
     layerCanvas.height = target.canvas.height;
@@ -1489,14 +1522,7 @@
 
     paths.forEach((path) => {
       const line = buildReactiveLine(path.points, grid, geos);
-      if (state.drawStroke && state.drawFill) {
-        strokeLinePath(layer, line, withAlpha(state.lineColor, alpha), fillWidth + outlineWidth * 2);
-        strokeLinePath(layer, line, withAlpha(state.lineFillColor, alpha), fillWidth);
-      } else if (state.drawFill) {
-        strokeLinePath(layer, line, withAlpha(state.lineFillColor, alpha), fillWidth);
-      } else if (state.drawStroke) {
-        strokeLinePath(layer, line, withAlpha(state.lineColor, alpha), outlineWidth);
-      }
+      strokes.forEach((stroke) => strokeLinePath(layer, line, stroke.style, stroke.width));
     });
 
     layer.restore();
@@ -1734,7 +1760,7 @@
       }
 
       if (geo.outline) {
-        target.strokeStyle = withAlpha(geo.strokeColor, state.transparentDrawing ? 0.5 : 1);
+        target.strokeStyle = withAlpha(geo.strokeColor, getObjectStrokeAlpha());
         target.lineWidth = Math.max(0.45, geo.strokeWidth * scale);
         target.beginPath();
         addIsolationPath(target, geo, 0);
@@ -1745,6 +1771,11 @@
     target.restore();
   }
 
+  function getObjectStrokeAlpha() {
+    return state.transparentDrawing ? 0.5 : 1;
+  }
+
+  // Works with a canvas context or an SVG pen.
   function addIsolationPath(target, geo, extra) {
     target.save();
     target.translate(geo.x, geo.y);
@@ -2499,22 +2530,182 @@
         return;
       }
       blob.arrayBuffer().then((buffer) => {
-        const dpiBlob = new Blob([addPngDpi(buffer, state.dpi)], { type: "image/png" });
-        const url = URL.createObjectURL(dpiBlob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = getExportFilename();
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(url);
+        downloadBlob(new Blob([addPngDpi(buffer, state.dpi)], { type: "image/png" }), getExportFilename("png"));
       });
     }, "image/png");
   }
 
-  function getExportFilename() {
+  function downloadSvg() {
+    downloadBlob(new Blob([buildSvg()], { type: "image/svg+xml" }), getExportFilename("svg"));
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function getExportFilename(extension) {
     const baseName = importedImage.name ? stripExtension(importedImage.name) : "drawing";
-    return `${safeFilenamePart(baseName)} isolated ${formatExportTimestamp(new Date())}.png`;
+    return `${safeFilenamePart(baseName)} isolated ${formatExportTimestamp(new Date())}.${extension}`;
+  }
+
+  // The same drawing as render(), as vector paths: paper, grid, lines and objects, each in a named group
+  // (Illustrator turns those into layers). The underlying image is raster, so it is left out.
+  function buildSvg() {
+    const width = canvas.width;
+    const height = canvas.height;
+    const minSide = Math.min(width, height);
+    const maxSide = Math.max(width, height);
+    const grid = getGrid(width, height, minSide * 0.055);
+    const geos = getIsolationGeometries(grid);
+    rebuildImportedImageIfNeeded(grid);
+
+    const out = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${state.widthCm}cm" height="${state.heightCm}cm" viewBox="0 0 ${width} ${height}">`,
+    ];
+
+    if (!state.transparentPaper) {
+      out.push(`<g id="paper"><rect width="${width}" height="${height}" fill="${state.paperColor}"/></g>`);
+    }
+
+    if (state.showGrid) {
+      const style = getGridStyle(width, height);
+      const pen = createSvgPen(width, height);
+      addGridPath(pen, grid, geos);
+      out.push(
+        `<g id="grid"><path d="${pen.data()}" fill="none" stroke="${state.lineColor}" stroke-opacity="${style.alpha}" stroke-width="${svgNumber(style.width)}" stroke-miterlimit="10"/></g>`
+      );
+    }
+
+    const alpha = getLineAlpha();
+    const strokes = getLineStrokes(maxSide);
+    out.push(
+      `<g id="lines" fill="none" stroke-linecap="${state.lineCap}" stroke-linejoin="${state.lineJoin}" stroke-miterlimit="2"${
+        alpha < 1 ? ` stroke-opacity="${alpha}"` : ""
+      }>`
+    );
+    getDrawingPaths().forEach((path) => {
+      const d = lineCommandsToSvg(buildReactiveLine(path.points, grid, geos));
+      if (d) {
+        strokes.forEach((stroke) => {
+          out.push(`<path d="${d}" stroke="${stroke.color}" stroke-width="${svgNumber(stroke.width)}"/>`);
+        });
+      }
+    });
+    out.push("</g>");
+
+    const objectAlpha = getObjectStrokeAlpha();
+    out.push('<g id="objects">');
+    geos.forEach((geo) => {
+      const pen = createSvgPen(width, height);
+      addIsolationPath(pen, geo, 0);
+      const d = pen.data();
+      if (geo.fill) {
+        out.push(`<path d="${d}" fill="${geo.fillColor}" fill-rule="evenodd"/>`);
+      }
+      if (geo.outline) {
+        out.push(
+          `<path d="${d}" fill="none" stroke="${geo.strokeColor}" stroke-width="${svgNumber(
+            Math.max(0.45, geo.strokeWidth * (maxSide / 2953))
+          )}" stroke-miterlimit="10"${objectAlpha < 1 ? ` stroke-opacity="${objectAlpha}"` : ""}/>`
+        );
+      }
+    });
+    out.push("</g>", "</svg>");
+    return out.join("\n");
+  }
+
+  function svgNumber(value) {
+    return String(Number(value.toFixed(2)));
+  }
+
+  function lineCommandsToSvg(commands) {
+    let d = "";
+    for (let index = 0; index < commands.length; index += 3) {
+      d += `${commands[index] ? "M" : "L"}${svgNumber(commands[index + 1])} ${svgNumber(commands[index + 2])}`;
+    }
+    return d;
+  }
+
+  // Records the canvas path calls the drawing code uses (save/restore, translate, rotate, moveTo, lineTo,
+  // ellipse, rect, closePath) as SVG path data, so shapes are built by exactly the same code as on screen.
+  function createSvgPen(width, height) {
+    const parts = [];
+    const stack = [];
+    let originX = 0;
+    let originY = 0;
+    let angle = 0;
+    let hasPoint = false;
+
+    const map = (x, y) => {
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      return [originX + x * cos - y * sin, originY + x * sin + y * cos];
+    };
+    const command = (letter, point) => `${letter}${svgNumber(point[0])} ${svgNumber(point[1])}`;
+
+    return {
+      canvas: { width, height },
+      save() {
+        stack.push([originX, originY, angle]);
+      },
+      restore() {
+        [originX, originY, angle] = stack.pop();
+      },
+      translate(x, y) {
+        [originX, originY] = map(x, y);
+      },
+      rotate(radians) {
+        angle += radians;
+      },
+      moveTo(x, y) {
+        parts.push(command("M", map(x, y)));
+        hasPoint = true;
+      },
+      lineTo(x, y) {
+        parts.push(command(hasPoint ? "L" : "M", map(x, y)));
+        hasPoint = true;
+      },
+      closePath() {
+        parts.push("Z");
+      },
+      rect(x, y, w, h) {
+        this.moveTo(x, y);
+        this.lineTo(x + w, y);
+        this.lineTo(x + w, y + h);
+        this.lineTo(x, y + h);
+        this.closePath();
+      },
+      ellipse(cx, cy, rx, ry, rotation, start, end) {
+        const pointAt = (radians) => {
+          const ex = Math.cos(radians) * rx;
+          const ey = Math.sin(radians) * ry;
+          return map(cx + ex * Math.cos(rotation) - ey * Math.sin(rotation), cy + ex * Math.sin(rotation) + ey * Math.cos(rotation));
+        };
+        // Like canvas: draw a line to the arc start when the path already has a point.
+        parts.push(command(hasPoint ? "L" : "M", pointAt(start)));
+        hasPoint = true;
+        const sweep = end - start;
+        const full = sweep >= Math.PI * 2 - 1e-9;
+        const ends = full ? [start + Math.PI, start + Math.PI * 2] : [end];
+        const tilt = svgNumber(((angle + rotation) * 180) / Math.PI);
+        ends.forEach((radians) => {
+          const large = !full && sweep > Math.PI ? 1 : 0;
+          const point = pointAt(radians);
+          parts.push(`A${svgNumber(rx)} ${svgNumber(ry)} ${tilt} ${large} 1 ${svgNumber(point[0])} ${svgNumber(point[1])}`);
+        });
+      },
+      data() {
+        return parts.join("");
+      },
+    };
   }
 
   function stripExtension(filename) {
@@ -2755,6 +2946,7 @@
     window.addEventListener("resize", updateViewScale);
 
     els.exportPng.addEventListener("click", downloadPng);
+    els.exportSvg.addEventListener("click", downloadSvg);
     els.shortcutsToggle.addEventListener("click", () => toggleShortcuts());
     document.addEventListener("keydown", handleShortcut);
     document.addEventListener("pointerdown", (event) => {
@@ -3010,6 +3202,8 @@
       commitChange();
     } else if (key === "r") {
       randomizeAll();
+    } else if (key === "e" && event.shiftKey) {
+      downloadSvg();
     } else if (key === "e") {
       downloadPng();
     }

@@ -163,7 +163,7 @@ input[type="range"] {
 
 .header-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 0.9fr);
   align-items: stretch;
   gap: 8px;
 }
