@@ -329,6 +329,18 @@
     isolationStrokeWidth: document.getElementById("isolationStrokeWidth"),
     isolationStrokeWidthValue: document.getElementById("isolationStrokeWidthValue"),
     centerIsolation: document.getElementById("centerIsolation"),
+    arrangeSelect: document.getElementById("arrangeSelect"),
+    copiesSelect: document.getElementById("copiesSelect"),
+    copiesRow: document.getElementById("copiesRow"),
+    copiesRingFields: document.getElementById("copiesRingFields"),
+    copiesGridFields: document.getElementById("copiesGridFields"),
+    copiesCount: document.getElementById("copiesCount"),
+    copiesRadius: document.getElementById("copiesRadius"),
+    copiesColumns: document.getElementById("copiesColumns"),
+    copiesRows: document.getElementById("copiesRows"),
+    copiesSpacing: document.getElementById("copiesSpacing"),
+    copiesMake: document.getElementById("copiesMake"),
+    copiesClose: document.getElementById("copiesClose"),
     randomIsolation: document.getElementById("randomIsolation"),
     drawIsolationShape: document.getElementById("drawIsolationShape"),
     clearIsolationShape: document.getElementById("clearIsolationShape"),
@@ -431,6 +443,9 @@
   let pathDrawMode = false;
   // Which line layer the Image controls edit: "base" (layer 1) or an extra layer id.
   let selectedLayerId = "base";
+  // Extra selected objects (Shift+click), see getSelectedIds.
+  const selection = new Set();
+  let duplicateMemory = null;
   const motionPathDraft = {
     active: false,
     points: [],
@@ -1366,6 +1381,260 @@
     applyMask(item, maskFromText(item.maskText, item.maskFont));
   }
 
+  // --- several objects: selection, duplicate, arrange, copies ---
+  // The selection is a view setting (not saved, not in undo). state.selectedIsolationId stays the one whose
+  // settings the panel shows; Shift+click adds or removes others.
+
+  function getSelectedIds() {
+    const ids = state.isolations.map((item) => item.id).filter((id) => selection.has(id));
+    if (!ids.includes(state.selectedIsolationId)) {
+      ids.unshift(state.selectedIsolationId);
+    }
+    return ids;
+  }
+
+  function getSelectedItems() {
+    const ids = new Set(getSelectedIds());
+    return state.isolations.filter((item) => ids.has(item.id));
+  }
+
+  function selectOnly(id) {
+    selection.clear();
+    selection.add(id);
+    state.selectedIsolationId = id;
+  }
+
+  function toggleSelected(id) {
+    getSelectedIds().forEach((selectedId) => selection.add(selectedId));
+    if (selection.has(id) && selection.size > 1) {
+      selection.delete(id);
+      if (state.selectedIsolationId === id) {
+        state.selectedIsolationId = getSelectedIds().find((other) => other !== id) || id;
+      }
+    } else {
+      selection.add(id);
+      state.selectedIsolationId = id;
+    }
+  }
+
+  function syncSelection() {
+    const ids = new Set(state.isolations.map((item) => item.id));
+    Array.from(selection).forEach((id) => {
+      if (!ids.has(id)) {
+        selection.delete(id);
+      }
+    });
+    selection.add(state.selectedIsolationId);
+  }
+
+  // Half the size of an object's rotated box, as fractions of the grid width and height.
+  function getItemExtent(item, grid) {
+    const shortSide = Math.min(grid.width, grid.height);
+    const width = (item.width / 100) * shortSide;
+    const height = (item.height / 100) * shortSide;
+    const angle = (item.rotation / 180) * Math.PI;
+    const boxWidth = Math.abs(width * Math.cos(angle)) + Math.abs(height * Math.sin(angle));
+    const boxHeight = Math.abs(width * Math.sin(angle)) + Math.abs(height * Math.cos(angle));
+    return { x: boxWidth / 2 / grid.width, y: boxHeight / 2 / grid.height };
+  }
+
+  function currentGrid() {
+    return getGrid(canvas.width, canvas.height, Math.min(canvas.width, canvas.height) * 0.055);
+  }
+
+  function arrangeSelection(action) {
+    const items = getSelectedItems();
+    if (items.length < 2) {
+      return;
+    }
+    const grid = currentGrid();
+    const boxes = items.map((item) => {
+      const extent = getItemExtent(item, grid);
+      return { item, extent, left: item.x - extent.x, right: item.x + extent.x, top: item.y - extent.y, bottom: item.y + extent.y };
+    });
+    const place = (box, x, y) => moveIsolationTo(box.item, clamp(x, 0, 1), clamp(y, 0, 1));
+
+    if (action === "left") {
+      const edge = Math.min(...boxes.map((box) => box.left));
+      boxes.forEach((box) => place(box, edge + box.extent.x, box.item.y));
+    } else if (action === "right") {
+      const edge = Math.max(...boxes.map((box) => box.right));
+      boxes.forEach((box) => place(box, edge - box.extent.x, box.item.y));
+    } else if (action === "centerX") {
+      const center = (Math.min(...boxes.map((box) => box.left)) + Math.max(...boxes.map((box) => box.right))) / 2;
+      boxes.forEach((box) => place(box, center, box.item.y));
+    } else if (action === "top") {
+      const edge = Math.min(...boxes.map((box) => box.top));
+      boxes.forEach((box) => place(box, box.item.x, edge + box.extent.y));
+    } else if (action === "bottom") {
+      const edge = Math.max(...boxes.map((box) => box.bottom));
+      boxes.forEach((box) => place(box, box.item.x, edge - box.extent.y));
+    } else if (action === "centerY") {
+      const center = (Math.min(...boxes.map((box) => box.top)) + Math.max(...boxes.map((box) => box.bottom))) / 2;
+      boxes.forEach((box) => place(box, box.item.x, center));
+    } else if (action === "distributeX" || action === "distributeY") {
+      // Equal steps between centres; the outer two stay where they are.
+      const key = action === "distributeX" ? "x" : "y";
+      const sorted = boxes.slice().sort((a, b) => a.item[key] - b.item[key]);
+      const first = sorted[0].item[key];
+      const step = (sorted[sorted.length - 1].item[key] - first) / (sorted.length - 1);
+      sorted.forEach((box, index) => {
+        const value = first + step * index;
+        place(box, key === "x" ? value : box.item.x, key === "y" ? value : box.item.y);
+      });
+    }
+    commitChange();
+  }
+
+  function copyIsolation(source, x, y, rotation) {
+    const id = nextIsolationId();
+    const copy = normalizeIsolation(
+      {
+        ...JSON.parse(JSON.stringify(source)),
+        id,
+        x: clamp(x, 0, 1),
+        y: clamp(y, 0, 1),
+        rotation: typeof rotation === "number" ? ((((rotation + 180) % 360) + 360) % 360) - 180 : source.rotation,
+        motionPath: null,
+      },
+      state.isolations.length
+    );
+    state.isolations.push(copy);
+    return copy;
+  }
+
+  // Cmd/Ctrl+D: copies the selection. Pressed again right after, it repeats the step between the last
+  // originals and their copies, also when you moved the copies in between (like "transform again").
+  function duplicateSelection() {
+    const items = getSelectedItems();
+    if (!items.length || state.isolations.length + items.length > MAX_ISOLATIONS) {
+      return;
+    }
+    let dx = 0.05;
+    let dy = 0.05;
+    const memory = duplicateMemory;
+    const repeating =
+      memory &&
+      memory.copies.length === items.length &&
+      memory.copies.every((id, index) => id === items[index].id) &&
+      memory.sources.every((id) => state.isolations.some((item) => item.id === id));
+    if (repeating) {
+      const source = state.isolations.find((item) => item.id === memory.sources[0]);
+      dx = items[0].x - source.x;
+      dy = items[0].y - source.y;
+    } else if (items.length === 1) {
+      const spot = findSpotNextTo(items[0]);
+      dx = spot.x - items[0].x;
+      dy = spot.y - items[0].y;
+    }
+    const copies = items.map((item) => copyIsolation(item, item.x + dx, item.y + dy));
+    duplicateMemory = { sources: items.map((item) => item.id), copies: copies.map((copy) => copy.id) };
+    selection.clear();
+    copies.forEach((copy) => selection.add(copy.id));
+    state.selectedIsolationId = copies[0].id;
+    commitChange();
+  }
+
+  function setCopiesMode(mode) {
+    els.copiesRow.hidden = !mode;
+    els.copiesRow.dataset.mode = mode || "";
+    els.copiesRingFields.hidden = mode !== "ring";
+    els.copiesGridFields.hidden = mode !== "grid";
+    els.copiesSelect.value = mode || "";
+  }
+
+  // Ring: the object and its copies sit evenly on a circle around where the object is, each turned with
+  // its angle. Grid: the object stays top-left and copies fill the columns and rows. 48 objects at most.
+  function makeCopies() {
+    const mode = els.copiesRow.dataset.mode;
+    const source = getSelectedIsolation();
+    if (!source || !mode) {
+      return;
+    }
+    const grid = currentGrid();
+    const shortSide = Math.min(grid.width, grid.height);
+    const room = MAX_ISOLATIONS - state.isolations.length;
+    const made = [source];
+
+    if (mode === "ring") {
+      const count = Math.round(clampNumber(els.copiesCount.value, 2, MAX_ISOLATIONS, 8));
+      const radius = (clampNumber(els.copiesRadius.value, 1, 100, 30) / 100) * shortSide;
+      const centerX = source.x;
+      const centerY = source.y;
+      const baseRotation = source.rotation;
+      const total = Math.min(count, room + 1);
+      for (let index = 0; index < total; index += 1) {
+        const angle = -Math.PI / 2 + (index / total) * Math.PI * 2;
+        const x = centerX + (Math.cos(angle) * radius) / grid.width;
+        const y = centerY + (Math.sin(angle) * radius) / grid.height;
+        const rotation = baseRotation + (index / total) * 360;
+        if (index === 0) {
+          moveIsolationTo(source, clamp(x, 0, 1), clamp(y, 0, 1));
+        } else {
+          made.push(copyIsolation(source, x, y, rotation));
+        }
+      }
+    } else {
+      const columns = Math.round(clampNumber(els.copiesColumns.value, 1, 12, 3));
+      const rows = Math.round(clampNumber(els.copiesRows.value, 1, 12, 3));
+      const extent = getItemExtent(source, grid);
+      const spacing = (clampNumber(els.copiesSpacing.value, 0, 100, 5) / 100) * shortSide;
+      const stepX = extent.x * 2 + spacing / grid.width;
+      const stepY = extent.y * 2 + spacing / grid.height;
+      for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column < columns; column += 1) {
+          if ((row || column) && made.length <= room) {
+            made.push(copyIsolation(source, source.x + column * stepX, source.y + row * stepY));
+          }
+        }
+      }
+    }
+
+    selection.clear();
+    made.forEach((item) => selection.add(item.id));
+    state.selectedIsolationId = source.id;
+    setCopiesMode("");
+    commitChange();
+  }
+
+  // Dashed boxes around selected objects when more than one is selected. Screen only.
+  function drawSelectionOverlay(target, grid) {
+    const ids = getSelectedIds();
+    if (ids.length < 2) {
+      return;
+    }
+    const width = screenPixels(1);
+    target.save();
+    target.strokeStyle = "rgba(0, 109, 255, 0.9)";
+    target.lineWidth = width;
+    target.setLineDash([width * 4, width * 3]);
+    state.isolations.forEach((item) => {
+      if (!ids.includes(item.id)) {
+        return;
+      }
+      const extent = getItemExtent(item, grid);
+      const pad = width * 4;
+      target.strokeRect(
+        grid.x + (item.x - extent.x) * grid.width - pad,
+        grid.y + (item.y - extent.y) * grid.height - pad,
+        extent.x * 2 * grid.width + pad * 2,
+        extent.y * 2 * grid.height + pad * 2
+      );
+    });
+    target.restore();
+  }
+
+  function wireArrangeControls() {
+    els.arrangeSelect.addEventListener("change", () => {
+      const action = els.arrangeSelect.value;
+      els.arrangeSelect.value = "";
+      arrangeSelection(action);
+    });
+    els.copiesSelect.addEventListener("change", () => setCopiesMode(els.copiesSelect.value));
+    els.copiesMake.addEventListener("click", makeCopies);
+    els.copiesClose.addEventListener("click", () => setCopiesMode(""));
+  }
+
   function updateImageStatus() {
     const source = importedImage.source;
     if (!source) {
@@ -1868,6 +2137,8 @@
     els.isolationSelect.value = state.selectedIsolationId;
     els.removeIsolation.disabled = state.isolations.length <= 1;
     els.addIsolation.disabled = state.isolations.length >= MAX_ISOLATIONS;
+    syncSelection();
+    els.arrangeSelect.disabled = getSelectedIds().length < 2;
   }
 
   function syncOutputs() {
@@ -1952,8 +2223,11 @@
     els.drawIsolationShape.textContent = isolationDrawMode ? "Drawing" : "Draw Shape";
     els.clearIsolationShape.disabled = customPointCount < 3;
 
+    const selectedCount = getSelectedIds().length;
     if (pathDrawMode) {
       els.isolationDrawStatus.textContent = "Draw the path on the canvas";
+    } else if (selectedCount > 1 && !isolationDrawMode) {
+      els.isolationDrawStatus.textContent = `${selectedCount} objects selected`;
     } else if (isolationDrawMode) {
       els.isolationDrawStatus.textContent = customIsolationDraft.active
         ? `${customIsolationDraft.points.length} pts`
@@ -2072,6 +2346,8 @@
     setIsolationDrawMode(false);
     togglePlayback(false);
     motion.time = 0;
+    selection.clear();
+    duplicateMemory = null;
     settleAnimationAfterLoad();
     syncControls();
     applyCanvasSize();
@@ -2179,7 +2455,7 @@
           index
         );
       });
-      state.selectedIsolationId = state.isolations[0].id;
+      selectOnly(state.isolations[0].id);
     }
 
     setIsolationDrawMode(false);
@@ -2303,6 +2579,7 @@
     drawMotionPathDraft(target, grid);
     if (overlays) {
       drawMotionPathOverlay(target, grid);
+      drawSelectionOverlay(target, grid);
     }
     target.restore();
   }
@@ -3461,13 +3738,15 @@
   }
 
   function moveIsolationFromPointer(event) {
-    const item = getSelectedIsolation();
-    if (!item) {
+    if (!pointer.dragItems || !pointer.dragStart) {
       return;
     }
-
     const mapped = pointerToGridRatio(event);
-    moveIsolationTo(item, clamp(mapped.x + pointer.offsetX, 0, 1), clamp(mapped.y + pointer.offsetY, 0, 1));
+    const dx = mapped.x - pointer.dragStart.x;
+    const dy = mapped.y - pointer.dragStart.y;
+    pointer.dragItems.forEach((entry) => {
+      moveIsolationTo(entry.item, clamp(entry.x + dx, 0, 1), clamp(entry.y + dy, 0, 1));
+    });
     syncSelectedIsolationControls();
     scheduleRender();
   }
@@ -3637,9 +3916,12 @@
     const grid = getGrid(canvas.width, canvas.height, Math.min(canvas.width, canvas.height) * 0.055);
     const geos = getIsolationGeometries(grid);
 
-    for (let index = geos.length - 1; index >= 0; index -= 1) {
-      if (isInsideIsolation(point.x, point.y, geos[index], true)) {
-        return geos[index];
+    // The shape itself wins over the silence around a neighbouring object; topmost first in both passes.
+    for (const withGap of [false, true]) {
+      for (let index = geos.length - 1; index >= 0; index -= 1) {
+        if (isInsideIsolation(point.x, point.y, geos[index], withGap)) {
+          return geos[index];
+        }
       }
     }
 
@@ -3884,6 +4166,8 @@
     Object.assign(state, next);
     importedImage.dirty = true;
     setIsolationDrawMode(false);
+    selection.clear();
+    duplicateMemory = null;
     settleAnimationAfterLoad();
     syncControls();
     applyCanvasSizeFromInputs({ noAutoKey: true });
@@ -5618,11 +5902,12 @@
       els[key].addEventListener("input", () => setImageState(key, els[key]));
     });
     wireLayerControls();
+    wireArrangeControls();
     wireSourceControls();
     els.clearImage.addEventListener("click", clearImportedImage);
 
     els.isolationSelect.addEventListener("change", () => {
-      state.selectedIsolationId = els.isolationSelect.value;
+      selectOnly(els.isolationSelect.value);
       commitChange();
     });
 
@@ -5754,14 +6039,21 @@
       const point = pointerToCanvas(event);
       const hit = hitIsolation(point);
       if (hit) {
-        const mapped = pointerToGridRatio(event);
-        state.selectedIsolationId = hit.id;
+        if (event.shiftKey) {
+          toggleSelected(hit.id);
+        } else if (getSelectedIds().includes(hit.id)) {
+          state.selectedIsolationId = hit.id;
+        } else {
+          selectOnly(hit.id);
+        }
         syncControls();
+        scheduleRender();
+        // Dragging moves every selected object by the same amount.
         pointer.mode = "isolation";
-        pointer.offsetX = hit.source.x - mapped.x;
-        pointer.offsetY = hit.source.y - mapped.y;
-        moveIsolationFromPointer(event);
+        pointer.dragStart = pointerToGridRatio(event);
+        pointer.dragItems = getSelectedItems().map((item) => ({ item, x: item.x, y: item.y }));
       } else {
+        selectOnly(state.selectedIsolationId);
         pointer.mode = "line";
         startLine(event);
       }
@@ -5843,7 +6135,7 @@
       state.isolations.length
     );
     state.isolations.push(item);
-    state.selectedIsolationId = id;
+    selectOnly(id);
     commitChange();
   }
 
@@ -5889,23 +6181,26 @@
     );
   }
 
+  // Removes every selected object; one object always stays.
   function removeSelectedIsolation() {
     if (state.isolations.length <= 1) {
       return;
     }
+    let ids = getSelectedIds();
+    if (ids.length >= state.isolations.length) {
+      ids = ids.filter((id) => id !== state.isolations[0].id);
+    }
     const index = state.isolations.findIndex((item) => item.id === state.selectedIsolationId);
-    removeObjectTracks(state.selectedIsolationId);
-    state.isolations = state.isolations.filter((item) => item.id !== state.selectedIsolationId);
-    state.selectedIsolationId = state.isolations[Math.max(0, index - 1)].id;
+    ids.forEach((id) => removeObjectTracks(id));
+    state.isolations = state.isolations.filter((item) => !ids.includes(item.id));
+    selectOnly(state.isolations[Math.max(0, Math.min(index - 1, state.isolations.length - 1))].id);
     commitChange();
   }
 
   function nudgeSelectedIsolation(dx, dy) {
-    const item = getSelectedIsolation();
-    if (!item) {
-      return;
-    }
-    moveIsolationTo(item, clamp(item.x + dx, 0, 1), clamp(item.y + dy, 0, 1));
+    getSelectedItems().forEach((item) => {
+      moveIsolationTo(item, clamp(item.x + dx, 0, 1), clamp(item.y + dy, 0, 1));
+    });
     commitChange({ merge: "nudge" });
   }
 
@@ -5942,6 +6237,11 @@
     if (mod && key === "y" && !isTypingTarget(event.target)) {
       event.preventDefault();
       redo();
+      return;
+    }
+    if (mod && key === "d" && !isTypingTarget(event.target)) {
+      event.preventDefault();
+      duplicateSelection();
       return;
     }
     if (mod && key === "s") {

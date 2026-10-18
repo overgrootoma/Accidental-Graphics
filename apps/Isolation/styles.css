@@ -469,6 +469,45 @@ output,
   margin-top: 10px;
 }
 
+.copies-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.copies-row[hidden],
+.copies-fields[hidden] {
+  display: none;
+}
+
+.copies-fields {
+  display: flex;
+  gap: 8px;
+}
+
+.copies-fields label {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.copies-fields input {
+  width: 64px;
+  min-height: 28px;
+  font-size: 1rem;
+}
+
+.copies-row button {
+  min-height: 28px;
+  padding: 4px 10px;
+}
+
+.copies-row + .button-row {
+  margin-top: 10px;
+}
+
 .button-row-3 {
   grid-template-columns: 1fr 1fr 1fr;
 }
@@ -775,6 +814,7 @@ output,
 }
 
 .button-row + .split,
+.control + .split,
 .field + .file-row {
   margin-top: 10px;
 }

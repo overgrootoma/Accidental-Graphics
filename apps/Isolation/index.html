@@ -35,6 +35,8 @@
               <li><span>Redo</span><kbd>⇧<span class="mod-key">⌘</span>Z</kbd></li>
               <li><span>Add object at mouse</span><kbd>A</kbd></li>
               <li><span>Remove object</span><kbd>⌫</kbd></li>
+              <li><span>Select more objects</span><kbd>⇧ click</kbd></li>
+              <li><span>Duplicate (again)</span><kbd><span class="mod-key">⌘</span>D</kbd></li>
               <li><span>Move object</span><kbd>← ↑ → ↓</kbd></li>
               <li><span>Move further</span><kbd>⇧ ← ↑ → ↓</kbd></li>
               <li><span>Draw shape</span><kbd>D</kbd></li>
@@ -449,6 +451,43 @@
             <label for="isolationStrokeWidth">Stroke</label>
             <input id="isolationStrokeWidth" type="range" min="0.2" max="24" step="0.1" value="1.2" />
             <output id="isolationStrokeWidthValue">1.2</output>
+          </div>
+          <div class="split">
+            <div class="field">
+              <label for="arrangeSelect">Arrange</label>
+              <select id="arrangeSelect" title="Line up or space out the selected objects (Shift+click to select more)">
+                <option value="">Arrange…</option>
+                <option value="left">Align left</option>
+                <option value="centerX">Align centres</option>
+                <option value="right">Align right</option>
+                <option value="top">Align top</option>
+                <option value="centerY">Align middles</option>
+                <option value="bottom">Align bottom</option>
+                <option value="distributeX">Space evenly across</option>
+                <option value="distributeY">Space evenly down</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="copiesSelect">Copies</label>
+              <select id="copiesSelect" title="Make a ring or a grid of copies of the selected object">
+                <option value="">Copies…</option>
+                <option value="ring">Ring</option>
+                <option value="grid">Grid</option>
+              </select>
+            </div>
+          </div>
+          <div id="copiesRow" class="copies-row" hidden>
+            <div id="copiesRingFields" class="copies-fields" hidden>
+              <label>Count <input id="copiesCount" type="number" min="2" max="48" step="1" value="8" /></label>
+              <label title="% of the shorter canvas side">Radius <input id="copiesRadius" type="number" min="1" max="100" step="1" value="30" /></label>
+            </div>
+            <div id="copiesGridFields" class="copies-fields" hidden>
+              <label>Columns <input id="copiesColumns" type="number" min="1" max="12" step="1" value="3" /></label>
+              <label>Rows <input id="copiesRows" type="number" min="1" max="12" step="1" value="3" /></label>
+              <label title="Space between objects, % of the shorter canvas side">Space <input id="copiesSpacing" type="number" min="0" max="100" step="1" value="5" /></label>
+            </div>
+            <button id="copiesMake" type="button">Make</button>
+            <button id="copiesClose" class="mini-button" type="button" aria-label="Close" title="Close">×</button>
           </div>
           <div class="button-row">
             <button id="centerIsolation" type="button">Center</button>
