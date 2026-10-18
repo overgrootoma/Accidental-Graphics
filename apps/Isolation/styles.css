@@ -774,8 +774,13 @@ output,
   display: grid;
 }
 
-.button-row + .split {
+.button-row + .split,
+.field + .file-row {
   margin-top: 10px;
+}
+
+.split[hidden] {
+  display: none;
 }
 
 /* Keyframe buttons next to controls, only while the timeline is open. */

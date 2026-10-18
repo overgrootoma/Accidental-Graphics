@@ -66,7 +66,9 @@
   const TIMELINE_TRACK_LEFT = 158;
   const TIMELINE_TRACK_RIGHT = 8;
   const TIMELINE_OPEN_KEY = "isolation-timeline-open";
-  const SHAPES = ["block", "circle", "diamond", "triangle", "hexagon", "hourglass", "wedge", "cross", "star", "blob", "custom"];
+  const SHAPES = ["block", "circle", "diamond", "triangle", "hexagon", "hourglass", "wedge", "cross", "star", "blob", "custom", "imageMask", "textMask"];
+  const MAX_MASK_POINTS = 400;
+  const MASK_RESOLUTION = 200;
 
   // Parameters that can be keyframed. kind: number (smooth), integer, grid (odd steps), color (smooth RGB),
   // bool and select (step). input is the control id when it differs from the state key.
@@ -296,6 +298,11 @@
     addIsolation: document.getElementById("addIsolation"),
     removeIsolation: document.getElementById("removeIsolation"),
     isolationShape: document.getElementById("isolationShape"),
+    maskImageRow: document.getElementById("maskImageRow"),
+    maskImageInput: document.getElementById("maskImageInput"),
+    maskTextRow: document.getElementById("maskTextRow"),
+    maskText: document.getElementById("maskText"),
+    maskFont: document.getElementById("maskFont"),
     isolationX: document.getElementById("isolationX"),
     isolationY: document.getElementById("isolationY"),
     isolationWidth: document.getElementById("isolationWidth"),
@@ -1105,6 +1112,260 @@
     });
   }
 
+  // --- image and text masks as object shapes ---
+  // A mask is turned into outline loops once (holes included) and stored on the object, so presets and
+  // links keep the shape without the original file. Points are normalised to -0.5..0.5 of the object box.
+
+  function isMaskShape(shape) {
+    return shape === "imageMask" || shape === "textMask";
+  }
+
+  function hasMask(geo) {
+    return isMaskShape(geo.shape) && Array.isArray(geo.maskLoops) && geo.maskLoops.length > 0;
+  }
+
+  function normalizeMaskLoops(loops) {
+    if (!Array.isArray(loops)) {
+      return [];
+    }
+    let total = 0;
+    const output = [];
+    loops.forEach((loop) => {
+      if (!Array.isArray(loop) || total >= MAX_MASK_POINTS) {
+        return;
+      }
+      const points = loop
+        .map((point) => ({ x: clampNumber(point && point.x, -0.5, 0.5, NaN), y: clampNumber(point && point.y, -0.5, 0.5, NaN) }))
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+        .slice(0, MAX_MASK_POINTS - total);
+      if (points.length >= 3) {
+        output.push(points);
+        total += points.length;
+      }
+    });
+    return output;
+  }
+
+  // Inside mask = true per pixel. Images with transparency use the opaque part, others the dark part.
+  function maskFromImage(image) {
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    const scale = MASK_RESOLUTION / Math.max(sourceWidth, sourceHeight);
+    const width = Math.max(2, Math.round(sourceWidth * scale));
+    const height = Math.max(2, Math.round(sourceHeight * scale));
+    const canvasMask = document.createElement("canvas");
+    canvasMask.width = width;
+    canvasMask.height = height;
+    const context = canvasMask.getContext("2d", { willReadFrequently: true });
+    context.drawImage(image, 0, 0, width, height);
+    const data = context.getImageData(0, 0, width, height).data;
+    let transparent = false;
+    for (let index = 3; index < data.length; index += 4) {
+      if (data[index] < 250) {
+        transparent = true;
+        break;
+      }
+    }
+    const inside = new Uint8Array(width * height);
+    for (let index = 0; index < inside.length; index += 1) {
+      const offset = index * 4;
+      const luminance = data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722;
+      inside[index] = transparent ? data[offset + 3] > 127 : data[offset + 3] > 127 && luminance < 128;
+    }
+    return { inside, width, height };
+  }
+
+  function maskFromText(text, fontKey) {
+    const font = TEXT_FONTS[fontKey] && fontKey !== "custom" ? TEXT_FONTS[fontKey] : TEXT_FONTS.sans;
+    const lines = (text || "").split("\n").filter((line) => line.length);
+    if (!lines.length) {
+      return null;
+    }
+    const probe = document.createElement("canvas").getContext("2d");
+    const fontSize = 100;
+    probe.font = `${font.weight} ${fontSize}px ${font.stack}`;
+    const widest = Math.max(...lines.map((line) => probe.measureText(line).width), 1);
+    const lineHeight = fontSize * 1.1;
+    const padding = fontSize * 0.2;
+    const fullWidth = widest + padding * 2;
+    const fullHeight = lineHeight * lines.length + padding * 2;
+    const scale = MASK_RESOLUTION / Math.max(fullWidth, fullHeight);
+    const width = Math.max(2, Math.round(fullWidth * scale));
+    const height = Math.max(2, Math.round(fullHeight * scale));
+    const canvasMask = document.createElement("canvas");
+    canvasMask.width = width;
+    canvasMask.height = height;
+    const context = canvasMask.getContext("2d", { willReadFrequently: true });
+    context.scale(scale, scale);
+    context.font = probe.font;
+    context.textBaseline = "middle";
+    context.textAlign = "center";
+    context.fillStyle = "#000000";
+    lines.forEach((line, index) => {
+      context.fillText(line, fullWidth / 2, padding + lineHeight * (index + 0.5));
+    });
+    const data = context.getImageData(0, 0, width, height).data;
+    const inside = new Uint8Array(width * height);
+    for (let index = 0; index < inside.length; index += 1) {
+      inside[index] = data[index * 4 + 3] > 127 ? 1 : 0;
+    }
+    return { inside, width, height };
+  }
+
+  // Follows the pixel edges between inside and outside into closed loops, then simplifies them.
+  function traceMaskLoops(mask) {
+    const { inside, width, height } = mask;
+    const isIn = (x, y) => x >= 0 && y >= 0 && x < width && y < height && inside[y * width + x] === 1;
+    const vertex = (x, y) => y * (width + 1) + x;
+    const edges = new Map();
+    const addEdge = (x1, y1, x2, y2) => {
+      const from = vertex(x1, y1);
+      if (!edges.has(from)) {
+        edges.set(from, []);
+      }
+      edges.get(from).push(vertex(x2, y2));
+    };
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        if (!isIn(x, y)) {
+          continue;
+        }
+        // Edges run clockwise around inside pixels, so they chain into loops.
+        if (!isIn(x, y - 1)) addEdge(x, y, x + 1, y);
+        if (!isIn(x + 1, y)) addEdge(x + 1, y, x + 1, y + 1);
+        if (!isIn(x, y + 1)) addEdge(x + 1, y + 1, x, y + 1);
+        if (!isIn(x - 1, y)) addEdge(x, y + 1, x, y);
+      }
+    }
+
+    const loops = [];
+    edges.forEach((targets, start) => {
+      while (targets.length) {
+        const loop = [start];
+        let current = targets.pop();
+        let guard = 0;
+        while (current !== start && guard < 1_000_000) {
+          loop.push(current);
+          const next = edges.get(current);
+          if (!next || !next.length) {
+            break;
+          }
+          current = next.pop();
+          guard += 1;
+        }
+        if (current === start && loop.length >= 4) {
+          loops.push(loop.map((id) => [id % (width + 1), Math.floor(id / (width + 1))]));
+        }
+      }
+    });
+
+    // Small specks are dropped; the rest is simplified until the whole mask fits the point budget.
+    const big = loops.filter((loop) => Math.abs(polygonArea(loop)) >= 6);
+    let tolerance = 0.8;
+    let simplified = big.map((loop) => simplifyClosedLoop(loop, tolerance));
+    while (simplified.reduce((sum, loop) => sum + loop.length, 0) > MAX_MASK_POINTS && tolerance < 20) {
+      tolerance *= 1.4;
+      simplified = big.map((loop) => simplifyClosedLoop(loop, tolerance));
+    }
+    return simplified.filter((loop) => loop.length >= 3);
+  }
+
+  function polygonArea(points) {
+    let area = 0;
+    for (let index = 0, previous = points.length - 1; index < points.length; previous = index, index += 1) {
+      area += points[previous][0] * points[index][1] - points[index][0] * points[previous][1];
+    }
+    return area / 2;
+  }
+
+  // Ramer-Douglas-Peucker on a closed loop, split at its two farthest-apart points.
+  function simplifyClosedLoop(points, tolerance) {
+    if (points.length <= 4) {
+      return points;
+    }
+    let far = 0;
+    let farDistance = -1;
+    points.forEach((point, index) => {
+      const distance = (point[0] - points[0][0]) ** 2 + (point[1] - points[0][1]) ** 2;
+      if (distance > farDistance) {
+        farDistance = distance;
+        far = index;
+      }
+    });
+    const first = simplifyOpen(points.slice(0, far + 1), tolerance);
+    const second = simplifyOpen(points.slice(far).concat([points[0]]), tolerance);
+    return first.slice(0, -1).concat(second.slice(0, -1));
+  }
+
+  function simplifyOpen(points, tolerance) {
+    const keep = points.map((point, index) => index === 0 || index === points.length - 1);
+    const stack = [[0, points.length - 1]];
+    while (stack.length) {
+      const [from, to] = stack.pop();
+      const [ax, ay] = points[from];
+      const [bx, by] = points[to];
+      const length = Math.hypot(bx - ax, by - ay) || 1;
+      let worst = -1;
+      let worstDistance = tolerance;
+      for (let index = from + 1; index < to; index += 1) {
+        const [px, py] = points[index];
+        const distance = Math.abs((bx - ax) * (ay - py) - (ax - px) * (by - ay)) / length;
+        if (distance > worstDistance) {
+          worst = index;
+          worstDistance = distance;
+        }
+      }
+      if (worst >= 0) {
+        keep[worst] = true;
+        stack.push([from, worst], [worst, to]);
+      }
+    }
+    return points.filter((point, index) => keep[index]);
+  }
+
+  // Stores traced loops on the object, normalised to its box, and gives the object the mask's proportions.
+  function applyMask(item, mask) {
+    const loops = mask ? traceMaskLoops(mask) : [];
+    if (!loops.length) {
+      item.maskLoops = [];
+      return false;
+    }
+    const all = loops.flat();
+    const minX = Math.min(...all.map((point) => point[0]));
+    const maxX = Math.max(...all.map((point) => point[0]));
+    const minY = Math.min(...all.map((point) => point[1]));
+    const maxY = Math.max(...all.map((point) => point[1]));
+    const boxWidth = Math.max(1, maxX - minX);
+    const boxHeight = Math.max(1, maxY - minY);
+    item.maskLoops = normalizeMaskLoops(
+      loops.map((loop) => loop.map(([x, y]) => ({ x: (x - minX) / boxWidth - 0.5, y: (y - minY) / boxHeight - 0.5 })))
+    );
+    item.height = clamp(item.width * (boxHeight / boxWidth), ISO_SIZE_MIN, ISO_SIZE_MAX);
+    item.aspectRatio = item.width / item.height;
+    return true;
+  }
+
+  function loadMaskImage(file) {
+    const item = getSelectedIsolation();
+    if (!file || !item) {
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      item.shape = "imageMask";
+      applyMask(item, maskFromImage(image));
+      commitChange();
+    };
+    image.onerror = () => URL.revokeObjectURL(url);
+    image.src = url;
+  }
+
+  function updateTextMask(item) {
+    applyMask(item, maskFromText(item.maskText, item.maskFont));
+  }
+
   function updateImageStatus() {
     const source = importedImage.source;
     if (!source) {
@@ -1290,6 +1551,9 @@
       tintColor: validHex(item.tintColor) ? item.tintColor : validHex(item.strokeColor) ? item.strokeColor : "#00ff00",
       customPath: normalizeCustomIsolationPath(item.customPath),
       motionPath: normalizeMotionPath(item.motionPath),
+      maskLoops: normalizeMaskLoops(item.maskLoops),
+      maskText: typeof item.maskText === "string" ? item.maskText.slice(0, 40) : "A",
+      maskFont: TEXT_FONTS[item.maskFont] && item.maskFont !== "custom" ? item.maskFont : "heavy",
     };
   }
 
@@ -1635,6 +1899,10 @@
     }
 
     els.isolationShape.value = item.shape;
+    els.maskImageRow.hidden = item.shape !== "imageMask";
+    els.maskTextRow.hidden = item.shape !== "textMask";
+    setInputValue(els.maskText, item.maskText);
+    els.maskFont.value = item.maskFont;
     els.isolationEnabled.checked = item.enabled;
     els.isolationOutline.checked = item.outline;
     els.isolationFill.checked = item.fill;
@@ -2143,6 +2411,7 @@
         fillColor: item.fillColor,
         shape: item.shape,
         customPath: item.customPath || [],
+        maskLoops: item.maskLoops || [],
         x: grid.x + grid.width * item.x,
         y: grid.y + grid.height * item.y,
         width,
@@ -2638,6 +2907,10 @@
       addBlobPath(target, geo.width / 2 + extra, geo.height / 2 + extra);
     } else if (geo.shape === "custom" && geo.customPath && geo.customPath.length >= 3) {
       addCustomIsolationPath(target, geo, extra);
+    } else if (hasMask(geo)) {
+      getIsolationLocalLoops(geo, 0).forEach((loop) => {
+        addPolygonPath(target, loop);
+      });
     } else {
       const width = geo.width + extra * 2;
       const height = geo.height + extra * 2;
@@ -2766,6 +3039,10 @@
 
     if (geo.shape === "custom" && geo.customPath && geo.customPath.length >= 3) {
       return [geo.customPath.map((point) => [point.x * geo.width, point.y * geo.height])];
+    }
+
+    if (hasMask(geo)) {
+      return geo.maskLoops.map((loop) => loop.map((point) => [point.x * geo.width, point.y * geo.height]));
     }
 
     if (geo.shape === "circle") {
@@ -2922,6 +3199,11 @@
 
     if (geo.shape === "custom" && geo.customPath && geo.customPath.length >= 3) {
       return pointInPolygon(x, y, getIsolationLocalLoops(geo, 32)[0]);
+    }
+
+    if (hasMask(geo)) {
+      // Even-odd over all loops, so holes (an O, a ring) stay open.
+      return getIsolationLocalLoops(geo, 0).reduce((inside, loop) => (pointInPolygon(x, y, loop) ? !inside : inside), false);
     }
 
     if (geo.shape === "circle") {
@@ -5357,6 +5639,11 @@
         item.aspectRatio = 1;
       } else if (item.shape === "custom" && (!item.customPath || item.customPath.length < 3)) {
         setIsolationDrawMode(true);
+      } else if (item.shape === "textMask") {
+        updateTextMask(item);
+      } else if (item.shape === "imageMask" && !item.maskLoops.length) {
+        // Ask for the image straight away; until then the object stays a block.
+        els.maskImageInput.click();
       }
       if (!item.lockAspect && item.height > 0) {
         item.aspectRatio = item.width / item.height;
@@ -5364,6 +5651,22 @@
       commitChange();
     });
     els.drawIsolationShape.addEventListener("click", () => setIsolationDrawMode(!isolationDrawMode));
+    els.maskImageInput.addEventListener("change", () => {
+      loadMaskImage(els.maskImageInput.files && els.maskImageInput.files[0]);
+      els.maskImageInput.value = "";
+    });
+    els.maskText.addEventListener("input", () => {
+      const item = getSelectedIsolation();
+      item.maskText = els.maskText.value.slice(0, 40);
+      updateTextMask(item);
+      commitChange({ merge: "maskText" });
+    });
+    els.maskFont.addEventListener("change", () => {
+      const item = getSelectedIsolation();
+      item.maskFont = TEXT_FONTS[els.maskFont.value] ? els.maskFont.value : "heavy";
+      updateTextMask(item);
+      commitChange();
+    });
     els.clearIsolationShape.addEventListener("click", clearCustomIsolationShape);
     els.isolationX.addEventListener("input", () => updateSelectedIsolation("x", clampNumber(els.isolationX.value, 0, 100, 50) / 100, "isolationX"));
     els.isolationY.addEventListener("input", () => updateSelectedIsolation("y", clampNumber(els.isolationY.value, 0, 100, 50) / 100, "isolationY"));

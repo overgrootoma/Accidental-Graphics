@@ -340,7 +340,28 @@
               <option value="star">Star</option>
               <option value="blob">Blob</option>
               <option value="custom">Custom</option>
+              <option value="imageMask">Image Mask</option>
+              <option value="textMask">Text Mask</option>
             </select>
+          </div>
+          <div id="maskImageRow" class="file-row" hidden>
+            <input id="maskImageInput" type="file" accept="image/*" aria-label="Mask image" title="A PNG with transparency uses its opaque part as the shape; other images use their dark part" />
+          </div>
+          <div id="maskTextRow" class="split" hidden>
+            <div class="field">
+              <label for="maskText">Mask Text</label>
+              <input id="maskText" type="text" value="A" />
+            </div>
+            <div class="field">
+              <label for="maskFont">Font</label>
+              <select id="maskFont">
+                <option value="sans">Sans</option>
+                <option value="serif">Serif</option>
+                <option value="mono">Mono</option>
+                <option value="heavy">Heavy</option>
+                <option value="rounded">Rounded</option>
+              </select>
+            </div>
           </div>
           <div class="button-row">
             <button id="drawIsolationShape" type="button">Draw Shape</button>
