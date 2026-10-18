@@ -463,6 +463,10 @@
                 <span>Duration</span>
                 <input id="animationDuration" type="number" min="0.5" max="600" step="0.5" value="10" />
               </label>
+              <label class="check timeline-loop" title="The end runs back into the start, so exported video loops seamlessly">
+                <input id="animationLoop" type="checkbox" />
+                <span>Loop</span>
+              </label>
               <select id="keyEase" title="Easing from the selected keyframes to the next ones" hidden>
                 <option value="" disabled>Mixed</option>
                 <option value="linear">Linear</option>

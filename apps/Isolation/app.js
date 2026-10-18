@@ -278,6 +278,7 @@
     timeDisplay: document.getElementById("timeDisplay"),
     animationDuration: document.getElementById("animationDuration"),
     keyEase: document.getElementById("keyEase"),
+    animationLoop: document.getElementById("animationLoop"),
   };
 
   const motion = {
@@ -3256,7 +3257,8 @@
 
   // Value of a track at time t. With Loop on, the stretch after the last key runs back to the first key,
   // so the value at the end equals the value at the start.
-  function evaluateTrack(def, keys, t) {
+  function evaluateTrack(def, allKeys, t) {
+    const keys = getActiveKeys(allKeys);
     const first = keys[0];
     const last = keys[keys.length - 1];
     if (keys.length === 1 || t <= first.t) {
@@ -3288,6 +3290,19 @@
       return last.v;
     }
     return mixMotionValue(def, last.v, first.v, easeAmount(last.e, clamp((t - last.t) / span, 0, 1)));
+  }
+
+  // With Loop on, the end is the start: keys at the very end are left out so the seam stays seamless.
+  function getActiveKeys(keys) {
+    if (!state.animation.loop) {
+      return keys;
+    }
+    const active = keys.filter((frame) => !isKeyAtLoopEnd(frame));
+    return active.length ? active : keys.slice(0, 1);
+  }
+
+  function isKeyAtLoopEnd(frame) {
+    return state.animation.loop && frame.t >= state.animation.duration - KEY_TIME_EPSILON && frame.t > KEY_TIME_EPSILON;
   }
 
   function hasAnimation() {
@@ -3895,6 +3910,7 @@
     els.recordToggle.textContent = motion.recording ? "Stop" : "Rec";
     els.recordToggle.classList.toggle("is-recording", Boolean(motion.recording));
     setInputValue(els.animationDuration, state.animation.duration);
+    els.animationLoop.checked = state.animation.loop;
     const trackCount = Object.keys(state.animation.tracks).length;
     els.timelineToggle.textContent = trackCount && !motion.timelineOpen ? `Timeline · ${trackCount} animated` : "Timeline";
     updateEaseSelect();
@@ -3970,10 +3986,11 @@
         const dot = document.createElement("span");
         dot.className = "key-dot";
         dot.classList.toggle("is-selected", motion.selected.has(frame));
+        dot.classList.toggle("is-ignored", isKeyAtLoopEnd(frame));
         dot.style.left = `${(frame.t / duration) * 100}%`;
         dot.dataset.track = key;
         dot.dataset.index = String(index);
-        dot.title = `${frame.t.toFixed(2)}s`;
+        dot.title = isKeyAtLoopEnd(frame) ? `${frame.t.toFixed(2)}s · not used with Loop: the end is the start` : `${frame.t.toFixed(2)}s`;
         track.appendChild(dot);
       });
       row.appendChild(label);
@@ -4214,6 +4231,11 @@
     els.motionPathEnd.addEventListener("change", () => setMotionPathTime("end", els.motionPathEnd.value));
     els.animationDuration.addEventListener("change", () => {
       state.animation.duration = clampNumber(els.animationDuration.value, MIN_DURATION, MAX_DURATION, state.animation.duration);
+      applyAnimationAt(motion.time, { sync: false, render: false });
+      commitChange({ noAutoKey: true });
+    });
+    els.animationLoop.addEventListener("change", () => {
+      state.animation.loop = els.animationLoop.checked;
       applyAnimationAt(motion.time, { sync: false, render: false });
       commitChange({ noAutoKey: true });
     });

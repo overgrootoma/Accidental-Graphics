@@ -595,6 +595,14 @@ output,
   background: #006dff;
 }
 
+.key-dot.is-ignored {
+  opacity: 0.3;
+}
+
+.timeline-loop {
+  min-height: 24px;
+}
+
 .timeline-empty {
   padding: 8px 10px;
   color: #555;
