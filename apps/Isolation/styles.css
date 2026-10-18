@@ -33,6 +33,7 @@ select {
 
 button,
 input[type="number"],
+input[type="text"],
 input[type="color"],
 input[type="file"],
 select {
@@ -54,6 +55,7 @@ button:active {
 }
 
 input[type="number"],
+input[type="text"],
 input[type="file"],
 select {
   width: 100%;
@@ -333,6 +335,49 @@ output,
 .meter {
   font-size: 12px;
   line-height: 1.2;
+}
+
+.source-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.text-controls[hidden],
+.file-row[hidden],
+.field[hidden] {
+  display: none;
+}
+
+.text-controls textarea {
+  width: 100%;
+  min-height: 52px;
+  padding: 4px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
+input[type="text"].is-missing {
+  border-style: dashed;
+}
+
+.text-controls textarea:focus-visible {
+  outline: 2px solid #006dff;
+  outline-offset: 2px;
+}
+
+.text-controls .split,
+.text-controls .control {
+  margin-top: 10px;
+}
+
+.text-controls + .image-line-options {
+  margin-top: 10px;
 }
 
 .image-line-head {

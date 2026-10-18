@@ -10,6 +10,16 @@
   const MAX_IMAGE_RUNS = 150000;
   const MAX_ISOLATIONS = 48;
   const MAX_LINE_LAYERS = 6;
+  const MAX_TEXT_LENGTH = 400;
+  // System fonts only, so nothing has to be downloaded. "custom" uses a font installed on this computer.
+  const TEXT_FONTS = {
+    sans: { stack: '"Helvetica Neue", Helvetica, Arial, sans-serif', weight: 700 },
+    serif: { stack: 'Georgia, "Times New Roman", serif', weight: 700 },
+    mono: { stack: 'Menlo, Monaco, "Courier New", monospace', weight: 700 },
+    heavy: { stack: '"Arial Black", "Helvetica Neue", Arial, sans-serif', weight: 900 },
+    rounded: { stack: 'ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", sans-serif', weight: 700 },
+    custom: { stack: "", weight: 400 },
+  };
   const LAYER_COLORS = ["#ff3b30", "#0a84ff", "#34c759", "#ff9f0a", "#bf5af2"];
   // Layer settings of the base layer (layer 1) live in the existing state keys.
   const BASE_LAYER_FIELDS = {
@@ -76,6 +86,8 @@
     imageLinesDiagonal: { label: "Diagonal", kind: "bool" },
     imageLinesAngle: { label: "Angle Lines", kind: "bool" },
     imageAngle: { label: "Angle", kind: "number" },
+    textSize: { label: "Text Size", kind: "number" },
+    textTracking: { label: "Tracking", kind: "number" },
     imageThreshold: { label: "Threshold", kind: "number" },
     imageDetail: { label: "Detail", kind: "integer" },
     imageScale: { label: "Image Scale", kind: "number" },
@@ -152,6 +164,12 @@
     imageLinesAngle: false,
     imageAngle: 30,
     imageLayers: [],
+    imageSource: "image",
+    textContent: "ISOLATION",
+    textFont: "sans",
+    textFontName: "",
+    textSize: 80,
+    textTracking: 0,
     showImage: false,
     paths: [],
     animation: {
@@ -221,6 +239,17 @@
     randomizeDrawing: document.getElementById("randomizeDrawing"),
     randomLineAdd: document.getElementById("randomLineAdd"),
     imageImport: document.getElementById("imageImport"),
+    imageSource: document.getElementById("imageSource"),
+    imageFileRow: document.getElementById("imageFileRow"),
+    textControls: document.getElementById("textControls"),
+    textContent: document.getElementById("textContent"),
+    textFont: document.getElementById("textFont"),
+    textFontNameField: document.getElementById("textFontNameField"),
+    textFontName: document.getElementById("textFontName"),
+    textSize: document.getElementById("textSize"),
+    textSizeValue: document.getElementById("textSizeValue"),
+    textTracking: document.getElementById("textTracking"),
+    textTrackingValue: document.getElementById("textTrackingValue"),
     imageLinesHorizontal: document.getElementById("imageLinesHorizontal"),
     imageLinesVertical: document.getElementById("imageLinesVertical"),
     imageLinesDiagonal: document.getElementById("imageLinesDiagonal"),
@@ -356,6 +385,11 @@
     recording: null,
   };
   const state = loadState();
+  const TEXT_IMAGE_SIZE = 2048;
+  const textImage = {
+    key: "",
+    canvas: null,
+  };
   const importedImage = {
     image: null,
     name: "",
@@ -443,6 +477,12 @@
     merged.imageContrast = clampNumber(merged.imageContrast, -100, 100, base.imageContrast);
     merged.imageInvert = Boolean(merged.imageInvert);
     merged.imageLinesAngle = merged.imageLinesAngle === true;
+    merged.imageSource = merged.imageSource === "text" ? "text" : "image";
+    merged.textContent = typeof merged.textContent === "string" ? merged.textContent.slice(0, MAX_TEXT_LENGTH) : base.textContent;
+    merged.textFont = TEXT_FONTS[merged.textFont] ? merged.textFont : base.textFont;
+    merged.textFontName = typeof merged.textFontName === "string" ? merged.textFontName.slice(0, 60) : "";
+    merged.textSize = clampNumber(merged.textSize, 5, 100, base.textSize);
+    merged.textTracking = clampNumber(merged.textTracking, -200, 800, base.textTracking);
     merged.imageAngle = clampNumber(merged.imageAngle, -90, 90, base.imageAngle);
     if (typeof saved.imageLinesHorizontal === "boolean" || typeof saved.imageLinesVertical === "boolean" || typeof saved.imageLinesDiagonal === "boolean") {
       merged.imageLinesHorizontal = Boolean(saved.imageLinesHorizontal);
@@ -590,15 +630,21 @@
   }
 
   function rebuildImportedImageIfNeeded(grid) {
-    if (!importedImage.image) {
+    const source = getLineSource(grid);
+    importedImage.source = source;
+    if (!source) {
+      importedImage.paths = [];
+      importedImage.key = "";
       importedImage.layerPaths = {};
       importedImage.layerKeys = {};
+      updateImageStatus();
       return;
     }
-    rebuildLineLayers(grid);
+    rebuildLineLayers(grid, source);
 
     const layer = getBaseLineLayer();
     const key = [
+      source.key,
       state.imageDetail,
       state.imageScale,
       state.imageOffsetX,
@@ -612,7 +658,7 @@
     ].join(":");
 
     if (importedImage.dirty || importedImage.key !== key) {
-      importedImage.paths = buildThresholdPaths(importedImage.image, grid, layer);
+      importedImage.paths = buildThresholdPaths(source.image, grid, layer);
       importedImage.key = key;
     }
     importedImage.dirty = false;
@@ -1038,12 +1084,157 @@
   }
 
   function updateImageStatus() {
-    if (!importedImage.image) {
-      els.imageStatus.textContent = "No image";
+    const source = importedImage.source;
+    if (!source) {
+      els.imageStatus.textContent = state.imageSource === "text" ? "No text" : "No image";
       return;
     }
     const layerLines = Object.values(importedImage.layerPaths).reduce((sum, paths) => sum + paths.length, 0);
-    els.imageStatus.textContent = `${importedImage.name || "Image"} ${importedImage.paths.length + layerLines}`;
+    els.imageStatus.textContent = `${source.name} ${importedImage.paths.length + layerLines}`;
+  }
+
+  // --- line source: an imported image or typed text ---
+
+  // What the image lines are made from right now, with a key that changes whenever it does.
+  function getLineSource(grid) {
+    if (state.imageSource === "text") {
+      const image = getTextImage(grid);
+      return image ? { image, name: "Text", key: textImage.key } : null;
+    }
+    if (!importedImage.image) {
+      return null;
+    }
+    if (!importedImage.sourceKey || importedImage.sourceImage !== importedImage.image) {
+      importedImage.sourceImage = importedImage.image;
+      importedImage.sourceKey = `image-${(importedImage.sourceSerial = (importedImage.sourceSerial || 0) + 1)}`;
+    }
+    return { image: importedImage.image, name: importedImage.name || "Image", key: importedImage.sourceKey };
+  }
+
+  function syncSourceControls() {
+    const isText = state.imageSource === "text";
+    els.imageSource.value = state.imageSource;
+    els.imageFileRow.hidden = isText;
+    els.clearImage.hidden = isText;
+    els.textControls.hidden = !isText;
+    setInputValue(els.textContent, state.textContent);
+    els.textFont.value = state.textFont;
+    els.textFontNameField.hidden = state.textFont !== "custom";
+    setInputValue(els.textFontName, state.textFontName);
+    els.textSize.value = state.textSize;
+    els.textTracking.value = state.textTracking;
+    const name = state.textFontName.trim();
+    els.textFontName.title = state.textFont === "custom" && name && !isFontInstalled(name) ? `"${name}" is not installed here, so Sans is used` : "The name of a font installed on this computer";
+    els.textFontName.classList.toggle("is-missing", state.textFont === "custom" && Boolean(name) && !isFontInstalled(name));
+  }
+
+  function wireSourceControls() {
+    els.imageSource.addEventListener("change", () => {
+      state.imageSource = els.imageSource.value === "text" ? "text" : "image";
+      commitChange();
+    });
+    els.textContent.addEventListener("input", () => {
+      state.textContent = els.textContent.value.slice(0, MAX_TEXT_LENGTH);
+      commitChange({ merge: "textContent" });
+    });
+    els.textFont.addEventListener("change", () => {
+      state.textFont = TEXT_FONTS[els.textFont.value] ? els.textFont.value : "sans";
+      commitChange();
+      if (state.textFont === "custom" && !state.textFontName) {
+        els.textFontName.focus();
+      }
+    });
+    els.textFontName.addEventListener("input", () => {
+      state.textFontName = els.textFontName.value.slice(0, 60);
+      commitChange({ merge: "textFontName" });
+    });
+    ["textSize", "textTracking"].forEach((key) => {
+      els[key].addEventListener("input", () => setRangeState(key, els[key]));
+    });
+  }
+
+  function getTextFontFamily() {
+    if (state.textFont === "custom" && state.textFontName.trim()) {
+      return `"${state.textFontName.trim().replace(/"/g, "")}", ${TEXT_FONTS.sans.stack}`;
+    }
+    return (TEXT_FONTS[state.textFont] || TEXT_FONTS.sans).stack || TEXT_FONTS.sans.stack;
+  }
+
+  // The text rendered black on white at the grid's proportions, so it fills the grid like a photo would.
+  // Size 100 is as big as the text fits; tracking is in thousandths of an em.
+  function getTextImage(grid) {
+    const content = state.textContent.replace(/\s+$/, "");
+    if (!content.trim()) {
+      return null;
+    }
+    const aspect = grid.width / grid.height;
+    const width = aspect >= 1 ? TEXT_IMAGE_SIZE : Math.max(2, Math.round(TEXT_IMAGE_SIZE * aspect));
+    const height = aspect >= 1 ? Math.max(2, Math.round(TEXT_IMAGE_SIZE / aspect)) : TEXT_IMAGE_SIZE;
+    const family = getTextFontFamily();
+    const weight = state.textFont === "custom" ? 400 : (TEXT_FONTS[state.textFont] || TEXT_FONTS.sans).weight;
+    const key = ["text", content, family, weight, state.textSize, state.textTracking, width, height].join("|");
+    if (textImage.key === key && textImage.canvas) {
+      return textImage.canvas;
+    }
+
+    const canvasText = document.createElement("canvas");
+    canvasText.width = width;
+    canvasText.height = height;
+    const context = canvasText.getContext("2d");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = "#000000";
+    context.textBaseline = "alphabetic";
+    const lines = content.split("\n");
+    // Everything scales with the font size, so measure once at 100px and scale to fit 92% of the canvas.
+    context.font = `${weight} 100px ${family}`;
+    const capAt100 = context.measureText("H").actualBoundingBoxAscent || 72;
+    const widestAt100 = Math.max(
+      ...lines.map((line) => {
+        const characters = Array.from(line);
+        const advances = characters.reduce((sum, character) => sum + context.measureText(character).width, 0);
+        return advances + state.textTracking / 10 * Math.max(0, characters.length - 1);
+      }),
+      1
+    );
+    const tallAt100 = capAt100 + 108 * (lines.length - 1);
+    const fitSize = Math.min((width * 0.92) / widestAt100, (height * 0.92) / tallAt100) * 100;
+    const fontSize = Math.max(4, (fitSize * state.textSize) / 100);
+    context.font = `${weight} ${fontSize}px ${family}`;
+    const tracking = (state.textTracking / 1000) * fontSize;
+    const lineHeight = fontSize * 1.08;
+    const capHeight = (capAt100 * fontSize) / 100;
+    const blockHeight = capHeight + lineHeight * (lines.length - 1);
+    let baseline = (height - blockHeight) / 2 + capHeight;
+
+    lines.forEach((line) => {
+      const characters = Array.from(line);
+      const advances = characters.map((character) => context.measureText(character).width);
+      const total = advances.reduce((sum, advance) => sum + advance, 0) + tracking * Math.max(0, characters.length - 1);
+      let x = (width - total) / 2;
+      // Drawn letter by letter so tracking works in every browser.
+      characters.forEach((character, index) => {
+        context.fillText(character, x, baseline);
+        x += advances[index] + tracking;
+      });
+      baseline += lineHeight;
+    });
+
+    textImage.key = key;
+    textImage.canvas = canvasText;
+    return canvasText;
+  }
+
+  // An installed font draws differently from the fallbacks; if it doesn't, it isn't there.
+  function isFontInstalled(name) {
+    const probe = document.createElement("canvas").getContext("2d");
+    const sample = "abcdefghijklmnopqrstuvwxyz0123456789 WMiI";
+    return ["monospace", "serif"].some((fallback) => {
+      probe.font = `40px ${fallback}`;
+      const plain = probe.measureText(sample).width;
+      probe.font = `40px "${name.replace(/"/g, "")}", ${fallback}`;
+      return probe.measureText(sample).width !== plain;
+    });
   }
 
   function normalizeIsolation(item, index) {
@@ -1349,6 +1540,7 @@
     els.randomLineAdd.checked = state.randomLineAdd;
     els.randomLineLength.value = state.randomLineLength;
     syncLayerControls();
+    syncSourceControls();
     els.imageDetail.value = state.imageDetail;
     els.imageScale.value = state.imageScale;
     els.imageOffsetX.value = state.imageOffsetX;
@@ -1403,6 +1595,8 @@
     els.imageOffsetYValue.textContent = Math.round(state.imageOffsetY);
     els.imageBrightnessValue.textContent = Math.round(state.imageBrightness);
     els.imageContrastValue.textContent = Math.round(state.imageContrast);
+    els.textSizeValue.textContent = Math.round(state.textSize);
+    els.textTrackingValue.textContent = Math.round(state.textTracking);
     els.imageAngleValue.textContent = `${Math.round(getLayerValue(selectedLayerId, "angle"))}°`;
     els.layerSizeValue.textContent = Math.round(getLayerValue(selectedLayerId, "fillWeight"));
     updateImageStatus();
@@ -1478,7 +1672,7 @@
 
   // Leaves a number field alone while someone is typing in it.
   function setInputValue(input, value) {
-    if (input === document.activeElement && input.type === "number") {
+    if (input === document.activeElement && ["number", "text", "textarea"].includes(input.type)) {
       return;
     }
     input.value = value;
@@ -1642,7 +1836,7 @@
       if (!state.imageLinesHorizontal && !state.imageLinesVertical && !state.imageLinesDiagonal && !state.imageLinesAngle) {
         state.imageLinesHorizontal = true;
       }
-      state.showImage = Boolean(importedImage.image && random() > 0.45);
+      state.showImage = Boolean((importedImage.image || state.imageSource === "text") && random() > 0.45);
       importedImage.dirty = true;
     }
 
@@ -1816,8 +2010,9 @@
   }
 
   // Extra line layers each keep their own image lines, rebuilt only when their own settings change.
-  function rebuildLineLayers(grid) {
+  function rebuildLineLayers(grid, source) {
     const common = [
+      source.key,
       state.imageDetail,
       state.imageScale,
       state.imageOffsetX,
@@ -1833,7 +2028,7 @@
     state.imageLayers.forEach((layer) => {
       const key = `${common}|${getLineLayerKey(layer)}`;
       const cached = !importedImage.dirty && importedImage.layerKeys[layer.id] === key;
-      paths[layer.id] = cached ? importedImage.layerPaths[layer.id] : buildThresholdPaths(importedImage.image, grid, layer);
+      paths[layer.id] = cached ? importedImage.layerPaths[layer.id] : buildThresholdPaths(source.image, grid, layer);
       keys[layer.id] = key;
     });
     importedImage.layerPaths = paths;
@@ -1843,7 +2038,7 @@
   // Every set of lines in drawing order: the base layer (drawn and image lines), then each extra layer.
   function getLineSets(maxSide) {
     const sets = [{ id: "lines", paths: getDrawingPaths(), strokes: getLineStrokes(maxSide) }];
-    if (importedImage.image) {
+    if (importedImage.source) {
       state.imageLayers.forEach((layer, index) => {
         sets.push({
           id: `lines-layer-${index + 2}`,
@@ -1860,15 +2055,16 @@
   }
 
   function drawUnderlyingImage(target, grid) {
-    if (!state.showImage || !importedImage.image) {
+    const source = state.showImage ? getLineSource(grid) : null;
+    if (!source) {
       return;
     }
 
-    const placement = getImagePlacement(importedImage.image, grid);
+    const placement = getImagePlacement(source.image, grid);
     target.save();
     target.globalAlpha = state.transparentDrawing ? 0.28 : 0.55;
     target.drawImage(
-      importedImage.image,
+      source.image,
       grid.x + grid.width * placement.x,
       grid.y + grid.height * placement.y,
       grid.width * placement.width,
@@ -3098,7 +3294,7 @@
   }
 
   function getExportFilename(extension) {
-    const baseName = importedImage.name ? stripExtension(importedImage.name) : "drawing";
+    const baseName = state.imageSource === "text" ? "text" : importedImage.name ? stripExtension(importedImage.name) : "drawing";
     return `${safeFilenamePart(baseName)} isolated ${formatExportTimestamp(new Date())}.${extension}`;
   }
 
@@ -5038,6 +5234,7 @@
       els[key].addEventListener("input", () => setImageState(key, els[key]));
     });
     wireLayerControls();
+    wireSourceControls();
     els.clearImage.addEventListener("click", clearImportedImage);
 
     els.isolationSelect.addEventListener("change", () => {

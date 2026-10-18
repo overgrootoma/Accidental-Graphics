@@ -183,9 +183,45 @@
         <details class="control-group">
           <summary>Image</summary>
           <div class="group-body">
-          <div class="file-row">
-            <label for="imageImport">Image</label>
-            <input id="imageImport" type="file" accept="image/*" />
+          <div class="source-head">
+            <label for="imageSource">Source</label>
+            <select id="imageSource" class="mini-select" title="Make the lines from an image or from text you type">
+              <option value="image">Image</option>
+              <option value="text">Text</option>
+            </select>
+          </div>
+          <div id="imageFileRow" class="file-row">
+            <input id="imageImport" type="file" accept="image/*" aria-label="Image" />
+          </div>
+          <div id="textControls" class="text-controls" hidden>
+            <textarea id="textContent" rows="2" aria-label="Text" spellcheck="false">ISOLATION</textarea>
+            <div class="split">
+              <div class="field">
+                <label for="textFont">Font</label>
+                <select id="textFont">
+                  <option value="sans">Sans</option>
+                  <option value="serif">Serif</option>
+                  <option value="mono">Mono</option>
+                  <option value="heavy">Heavy</option>
+                  <option value="rounded">Rounded</option>
+                  <option value="custom">Installed font…</option>
+                </select>
+              </div>
+              <div id="textFontNameField" class="field" hidden>
+                <label for="textFontName">Font name</label>
+                <input id="textFontName" type="text" placeholder="e.g. Futura" title="The name of a font installed on this computer" />
+              </div>
+            </div>
+            <div class="control">
+              <label for="textSize">Text Size</label>
+              <input id="textSize" type="range" min="5" max="100" step="1" value="80" title="100 is as big as the text fits on the canvas" />
+              <output id="textSizeValue">80</output>
+            </div>
+            <div class="control">
+              <label for="textTracking">Tracking</label>
+              <input id="textTracking" type="range" min="-200" max="800" step="10" value="0" title="Space between letters" />
+              <output id="textTrackingValue">0</output>
+            </div>
           </div>
           <div class="image-line-options" role="group" aria-label="Image lines">
             <div class="image-line-head">
