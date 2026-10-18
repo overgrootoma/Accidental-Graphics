@@ -1238,8 +1238,20 @@
       };
       geo.localLoops = makeIsolationLocalLoops(geo, 96);
       geo.boundaryLoops = makeIsolationBoundaryLoops(geo, 96);
+      geo.boundRadius = getIsolationBoundRadius(geo);
       return geo;
     });
+  }
+
+  // Radius of a circle around the centre that contains the whole shape, used to skip far-away points.
+  function getIsolationBoundRadius(geo) {
+    let radius = Math.hypot(Math.max(1, geo.width / 2), Math.max(1, geo.height / 2));
+    geo.localLoops.forEach((loop) => {
+      loop.forEach((point) => {
+        radius = Math.max(radius, Math.hypot(point[0], point[1]));
+      });
+    });
+    return radius;
   }
 
   function drawGrid(target, grid, geos, width, height) {
@@ -1316,13 +1328,14 @@
     layer.miterLimit = 2;
 
     paths.forEach((path) => {
+      const line = buildReactiveLine(path.points, grid, geos);
       if (state.drawStroke && state.drawFill) {
-        strokeReactiveLine(layer, path.points, grid, geos, withAlpha(state.lineColor, alpha), fillWidth + outlineWidth * 2);
-        strokeReactiveLine(layer, path.points, grid, geos, withAlpha(state.lineFillColor, alpha), fillWidth);
+        strokeLinePath(layer, line, withAlpha(state.lineColor, alpha), fillWidth + outlineWidth * 2);
+        strokeLinePath(layer, line, withAlpha(state.lineFillColor, alpha), fillWidth);
       } else if (state.drawFill) {
-        strokeReactiveLine(layer, path.points, grid, geos, withAlpha(state.lineFillColor, alpha), fillWidth);
+        strokeLinePath(layer, line, withAlpha(state.lineFillColor, alpha), fillWidth);
       } else if (state.drawStroke) {
-        strokeReactiveLine(layer, path.points, grid, geos, withAlpha(state.lineColor, alpha), outlineWidth);
+        strokeLinePath(layer, line, withAlpha(state.lineColor, alpha), outlineWidth);
       }
     });
 
@@ -1330,26 +1343,22 @@
     target.drawImage(layerCanvas, 0, 0);
   }
 
-  function strokeReactiveLine(target, points, grid, geos, color, weight) {
+  // Reacted line as a flat list of commands: [isMove (1/0), x, y, ...]. Computed once, stroked once per style.
+  function buildReactiveLine(points, grid, geos) {
+    const commands = [];
     if (!points.length) {
-      return;
+      return commands;
     }
 
     const minStep = Math.min(grid.stepX, grid.stepY) * 0.38;
-    target.strokeStyle = color;
-    target.lineWidth = weight;
-    target.beginPath();
-
     let drawing = false;
     let last = null;
 
     if (points.length === 1) {
       const single = gridRatioToCanvas(points[0], grid);
       const reacted = reactPoint(single.x, single.y, geos, minStep);
-      target.moveTo(reacted.x - 0.01, reacted.y);
-      target.lineTo(reacted.x + 0.01, reacted.y);
-      target.stroke();
-      return;
+      commands.push(1, reacted.x - 0.01, reacted.y, 0, reacted.x + 0.01, reacted.y);
+      return commands;
     }
 
     for (let index = 0; index < points.length - 1; index += 1) {
@@ -1385,15 +1394,33 @@
 
         const jump = last ? Math.hypot(reacted.x - last.x, reacted.y - last.y) : 0;
         if (!drawing || jump > minStep * 5.5) {
-          target.moveTo(reacted.x, reacted.y);
+          commands.push(1, reacted.x, reacted.y);
           drawing = true;
         } else {
-          target.lineTo(reacted.x, reacted.y);
+          commands.push(0, reacted.x, reacted.y);
         }
         last = reacted;
       }
     }
 
+    return commands;
+  }
+
+  function strokeLinePath(target, commands, color, weight) {
+    if (!commands.length) {
+      return;
+    }
+
+    target.strokeStyle = color;
+    target.lineWidth = weight;
+    target.beginPath();
+    for (let index = 0; index < commands.length; index += 3) {
+      if (commands[index]) {
+        target.moveTo(commands[index + 1], commands[index + 2]);
+      } else {
+        target.lineTo(commands[index + 1], commands[index + 2]);
+      }
+    }
     target.stroke();
   }
 
@@ -1420,10 +1447,15 @@
     let output = { x, y };
 
     geos.forEach((geo, index) => {
-      const field = getIsolationField(output.x, output.y, geo);
-      const distance = Math.max(field.signedDistance, 0);
       const shapeRadius = Math.max(geo.width, geo.height) / 2;
       const reach = geo.gap + (geo.gap * 2.3 + shapeRadius * 0.55) * reaction * geo.force;
+      const minDistance = Math.hypot(output.x - geo.x, output.y - geo.y) - geo.boundRadius;
+      if (minDistance > geo.gap && minDistance >= reach) {
+        return;
+      }
+
+      const field = getIsolationField(output.x, output.y, geo);
+      const distance = Math.max(field.signedDistance, 0);
 
       if (field.signedDistance <= geo.gap) {
         output = projectOutsideIsolation(output.x, output.y, geo, geo.gap + step * 0.9);
@@ -1480,39 +1512,36 @@
 
   function closestPointOnIsolationBoundary(x, y, geo) {
     const loops = geo.boundaryLoops && geo.boundaryLoops.length ? geo.boundaryLoops : makeIsolationBoundaryLoops(geo, 96);
-    let best = null;
+    let bestX = geo.x;
+    let bestY = geo.y;
     let bestDistance = Infinity;
 
-    loops.forEach((loop) => {
+    // Closest point on each segment, inlined without allocations because this runs for every line sample.
+    for (let loopIndex = 0; loopIndex < loops.length; loopIndex += 1) {
+      const loop = loops[loopIndex];
       if (!loop || loop.length < 2) {
-        return;
+        continue;
       }
 
       for (let index = 0; index < loop.length; index += 1) {
         const start = loop[index];
         const end = loop[(index + 1) % loop.length];
-        const point = closestPointOnSegment(x, y, start, end);
-        const distance = (x - point.x) * (x - point.x) + (y - point.y) * (y - point.y);
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const length = dx * dx + dy * dy;
+        const t = length > 0 ? clamp(((x - start.x) * dx + (y - start.y) * dy) / length, 0, 1) : 0;
+        const px = start.x + dx * t;
+        const py = start.y + dy * t;
+        const distance = (x - px) * (x - px) + (y - py) * (y - py);
         if (distance < bestDistance) {
-          best = point;
+          bestX = px;
+          bestY = py;
           bestDistance = distance;
         }
       }
-    });
+    }
 
-    return best || { x: geo.x, y: geo.y };
-  }
-
-  function closestPointOnSegment(x, y, start, end) {
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
-    const length = dx * dx + dy * dy;
-    const t = length > 0 ? clamp(((x - start.x) * dx + (y - start.y) * dy) / length, 0, 1) : 0;
-
-    return {
-      x: start.x + dx * t,
-      y: start.y + dy * t,
-    };
+    return { x: bestX, y: bestY };
   }
 
   function fallbackIsolationNormal(x, y, geo) {
@@ -1856,6 +1885,10 @@
   }
 
   function isInsideIsolation(x, y, geo, withGap) {
+    if (geo.boundRadius && Math.hypot(x - geo.x, y - geo.y) > geo.boundRadius + (withGap ? geo.gap : 0) + 1) {
+      return false;
+    }
+
     const local = toLocalPoint(x, y, geo);
     if (isInsideLocalShape(local.x, local.y, geo)) {
       return true;
@@ -1952,8 +1985,13 @@
   function toLocalPoint(x, y, geo) {
     const dx = x - geo.x;
     const dy = y - geo.y;
-    const cos = Math.cos(-geo.rotation);
-    const sin = Math.sin(-geo.rotation);
+    if (geo.localRotation !== geo.rotation) {
+      geo.localRotation = geo.rotation;
+      geo.localCos = Math.cos(-geo.rotation);
+      geo.localSin = Math.sin(-geo.rotation);
+    }
+    const cos = geo.localCos;
+    const sin = geo.localSin;
     return {
       x: dx * cos - dy * sin,
       y: dx * sin + dy * cos,
