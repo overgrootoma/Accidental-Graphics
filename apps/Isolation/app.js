@@ -9,6 +9,19 @@
   const MAX_CUSTOM_ISOLATION_POINTS = 900;
   const MAX_IMAGE_RUNS = 150000;
   const MAX_ISOLATIONS = 48;
+  const MAX_LINE_LAYERS = 6;
+  const LAYER_COLORS = ["#ff3b30", "#0a84ff", "#34c759", "#ff9f0a", "#bf5af2"];
+  // Layer settings of the base layer (layer 1) live in the existing state keys.
+  const BASE_LAYER_FIELDS = {
+    threshold: "imageThreshold",
+    horizontal: "imageLinesHorizontal",
+    vertical: "imageLinesVertical",
+    diagonal: "imageLinesDiagonal",
+    angleOn: "imageLinesAngle",
+    angle: "imageAngle",
+    fillColor: "lineFillColor",
+    fillWeight: "fillWeight",
+  };
   const GRID_SIZE_MIN = 9;
   const GRID_SIZE_MAX = 201;
   const STORAGE_KEY = "isolation-field-state";
@@ -91,9 +104,20 @@
     strokeColor: { label: "Stroke Color", kind: "color", input: "isolationStrokeColor" },
     strokeWidth: { label: "Stroke", kind: "number", input: "isolationStrokeWidth" },
   };
+  // Per line layer. For the base layer these are the global keys in BASE_LAYER_FIELDS.
+  const LAYER_MOTION_PARAMS = {
+    horizontal: { label: "Horizontal", kind: "bool", input: "imageLinesHorizontal" },
+    vertical: { label: "Vertical", kind: "bool", input: "imageLinesVertical" },
+    diagonal: { label: "Diagonal", kind: "bool", input: "imageLinesDiagonal" },
+    angleOn: { label: "Angle Lines", kind: "bool", input: "imageLinesAngle" },
+    angle: { label: "Angle", kind: "number", input: "imageAngle" },
+    threshold: { label: "Threshold", kind: "number", input: "imageThreshold" },
+    fillColor: { label: "Color", kind: "color", input: "layerColor" },
+    fillWeight: { label: "Size", kind: "number", input: "layerSize" },
+  };
 
   const DEFAULT_STATE = {
-    isolationModelVersion: 7,
+    isolationModelVersion: 8,
     widthCm: 25,
     heightCm: 25,
     dpi: 300,
@@ -127,6 +151,7 @@
     imageLinesDiagonal: true,
     imageLinesAngle: false,
     imageAngle: 30,
+    imageLayers: [],
     showImage: false,
     paths: [],
     animation: {
@@ -200,6 +225,14 @@
     imageLinesVertical: document.getElementById("imageLinesVertical"),
     imageLinesDiagonal: document.getElementById("imageLinesDiagonal"),
     imageLinesAngle: document.getElementById("imageLinesAngle"),
+    addLayer: document.getElementById("addLayer"),
+    removeLayer: document.getElementById("removeLayer"),
+    layerSelect: document.getElementById("layerSelect"),
+    layerColorRow: document.getElementById("layerColorRow"),
+    layerColor: document.getElementById("layerColor"),
+    layerSizeRow: document.getElementById("layerSizeRow"),
+    layerSize: document.getElementById("layerSize"),
+    layerSizeValue: document.getElementById("layerSizeValue"),
     imageAngle: document.getElementById("imageAngle"),
     imageAngleValue: document.getElementById("imageAngleValue"),
     imageAngleRow: document.getElementById("imageAngleRow"),
@@ -329,6 +362,8 @@
     paths: [],
     dirty: false,
     key: "",
+    layerPaths: {},
+    layerKeys: {},
   };
   let raf = 0;
   const pointer = {
@@ -342,6 +377,8 @@
   };
   let isolationDrawMode = false;
   let pathDrawMode = false;
+  // Which line layer the Image controls edit: "base" (layer 1) or an extra layer id.
+  let selectedLayerId = "base";
   const motionPathDraft = {
     active: false,
     points: [],
@@ -487,9 +524,10 @@
         };
       });
     }
-    // Version 7 adds the animation; older saves simply have none.
-    merged.animation = normalizeAnimation(saved.animation, merged.isolations);
-    merged.isolationModelVersion = 7;
+    // Version 7 adds the animation and version 8 extra line layers; older saves simply have none.
+    merged.imageLayers = normalizeLineLayers(saved.imageLayers);
+    merged.animation = normalizeAnimation(saved.animation, merged.isolations, merged.imageLayers);
+    merged.isolationModelVersion = 8;
 
     if (!merged.isolations.some((item) => item.id === merged.selectedIsolationId)) {
       merged.selectedIsolationId = merged.isolations[0].id;
@@ -553,8 +591,11 @@
 
   function rebuildImportedImageIfNeeded(grid) {
     if (!importedImage.image) {
+      importedImage.layerPaths = {};
+      importedImage.layerKeys = {};
       return;
     }
+    rebuildLineLayers(grid);
 
     const layer = getBaseLineLayer();
     const key = [
@@ -570,13 +611,11 @@
       Math.round(grid.height),
     ].join(":");
 
-    if (!importedImage.dirty && importedImage.key === key) {
-      return;
+    if (importedImage.dirty || importedImage.key !== key) {
+      importedImage.paths = buildThresholdPaths(importedImage.image, grid, layer);
+      importedImage.key = key;
     }
-
-    importedImage.paths = buildThresholdPaths(importedImage.image, grid, layer);
     importedImage.dirty = false;
-    importedImage.key = key;
     updateImageStatus();
   }
 
@@ -826,12 +865,185 @@
     });
   }
 
+  // --- line layers ---
+  // Layer 1 (the base) is the drawing as it always was. Extra layers add image lines with their own
+  // threshold, directions, colour and size, drawn on top; image placement and tone are shared.
+
+  function normalizeLineLayers(layers) {
+    if (!Array.isArray(layers)) {
+      return [];
+    }
+    const used = new Set();
+    return layers
+      .slice(0, MAX_LINE_LAYERS - 1)
+      .map((layer, index) => {
+        layer = layer || {};
+        let id = typeof layer.id === "string" && /^[\w-]+$/.test(layer.id) ? layer.id : `layer-${index + 2}`;
+        while (used.has(id)) {
+          id = `${id}-b`;
+        }
+        used.add(id);
+        return {
+          id,
+          threshold: clampNumber(layer.threshold, 0, 255, 64),
+          horizontal: layer.horizontal !== false,
+          vertical: layer.vertical === true,
+          diagonal: layer.diagonal === true,
+          angleOn: layer.angleOn === true,
+          angle: clampNumber(layer.angle, -90, 90, 30),
+          fillColor: validHex(layer.fillColor) ? layer.fillColor : LAYER_COLORS[index % LAYER_COLORS.length],
+          fillWeight: clampNumber(layer.fillWeight, 1, 80, 8),
+        };
+      });
+  }
+
+  function layerParamKey(id, prop) {
+    return `layer:${id}:${prop}`;
+  }
+
+  function findLineLayer(id) {
+    return state.imageLayers.find((layer) => layer.id === id) || null;
+  }
+
+  function getLayerValue(id, field) {
+    if (id === "base") {
+      return state[BASE_LAYER_FIELDS[field]];
+    }
+    const layer = findLineLayer(id);
+    return layer ? layer[field] : state[BASE_LAYER_FIELDS[field]];
+  }
+
+  function setLayerValue(id, field, value) {
+    const layer = id === "base" ? null : findLineLayer(id);
+    if (layer) {
+      layer[field] = value;
+    } else {
+      state[BASE_LAYER_FIELDS[field]] = value;
+    }
+  }
+
+  function addLineLayer() {
+    if (state.imageLayers.length >= MAX_LINE_LAYERS - 1) {
+      return;
+    }
+    let number = state.imageLayers.length + 2;
+    while (findLineLayer(`layer-${number}`)) {
+      number += 1;
+    }
+    const from = (field) => getLayerValue(selectedLayerId, field);
+    // A new layer picks out the darker half of the current one, in its own colour and a finer line.
+    const layer = normalizeLineLayers([
+      {
+        id: `layer-${number}`,
+        threshold: Math.round(from("threshold") / 2),
+        horizontal: from("horizontal"),
+        vertical: from("vertical"),
+        diagonal: from("diagonal"),
+        angleOn: from("angleOn"),
+        angle: from("angle"),
+        fillColor: LAYER_COLORS[state.imageLayers.length % LAYER_COLORS.length],
+        fillWeight: Math.max(1, Math.round(from("fillWeight") * 0.6)),
+      },
+    ])[0];
+    state.imageLayers.push(layer);
+    selectedLayerId = layer.id;
+    commitChange();
+  }
+
+  function removeLineLayer() {
+    if (selectedLayerId === "base") {
+      return;
+    }
+    const index = state.imageLayers.findIndex((layer) => layer.id === selectedLayerId);
+    Object.keys(state.animation.tracks).forEach((key) => {
+      if (key.startsWith(`layer:${selectedLayerId}:`)) {
+        delete state.animation.tracks[key];
+      }
+    });
+    state.imageLayers = state.imageLayers.filter((layer) => layer.id !== selectedLayerId);
+    selectedLayerId = index > 0 ? state.imageLayers[index - 1].id : "base";
+    commitChange();
+  }
+
+  function syncLayerControls() {
+    if (selectedLayerId !== "base" && !findLineLayer(selectedLayerId)) {
+      selectedLayerId = "base";
+    }
+    const hasLayers = state.imageLayers.length > 0;
+    els.layerSelect.hidden = !hasLayers;
+    els.removeLayer.hidden = !hasLayers;
+    els.layerColorRow.hidden = !hasLayers;
+    els.layerSizeRow.hidden = !hasLayers;
+    els.addLayer.disabled = state.imageLayers.length >= MAX_LINE_LAYERS - 1;
+    els.removeLayer.disabled = selectedLayerId === "base";
+
+    const options = ["base", ...state.imageLayers.map((layer) => layer.id)];
+    const signature = options.join("|");
+    if (els.layerSelect.dataset.signature !== signature) {
+      els.layerSelect.dataset.signature = signature;
+      while (els.layerSelect.firstChild) {
+        els.layerSelect.removeChild(els.layerSelect.firstChild);
+      }
+      options.forEach((id, index) => {
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = `Layer ${index + 1}`;
+        els.layerSelect.appendChild(option);
+      });
+    }
+    els.layerSelect.value = selectedLayerId;
+
+    const value = (field) => getLayerValue(selectedLayerId, field);
+    els.imageLinesHorizontal.checked = value("horizontal");
+    els.imageLinesVertical.checked = value("vertical");
+    els.imageLinesDiagonal.checked = value("diagonal");
+    els.imageLinesAngle.checked = value("angleOn");
+    els.imageAngle.value = value("angle");
+    els.imageAngleRow.hidden = !value("angleOn");
+    els.imageThreshold.value = value("threshold");
+    els.layerColor.value = value("fillColor");
+    els.layerSize.value = value("fillWeight");
+  }
+
+  function wireLayerControls() {
+    els.addLayer.addEventListener("click", addLineLayer);
+    els.removeLayer.addEventListener("click", removeLineLayer);
+    els.layerSelect.addEventListener("change", () => {
+      selectedLayerId = els.layerSelect.value;
+      syncControls();
+      updateKeyButtons();
+    });
+    [
+      ["imageLinesHorizontal", "horizontal"],
+      ["imageLinesVertical", "vertical"],
+      ["imageLinesDiagonal", "diagonal"],
+      ["imageLinesAngle", "angleOn"],
+    ].forEach(([input, field]) => {
+      els[input].addEventListener("change", () => {
+        setLayerValue(selectedLayerId, field, els[input].checked);
+        commitChange();
+      });
+    });
+    [
+      ["imageThreshold", "threshold", Number],
+      ["imageAngle", "angle", Number],
+      ["layerSize", "fillWeight", Number],
+      ["layerColor", "fillColor", String],
+    ].forEach(([input, field, parse]) => {
+      els[input].addEventListener("input", () => {
+        setLayerValue(selectedLayerId, field, parse(els[input].value));
+        commitChange({ merge: `${input}:${selectedLayerId}` });
+      });
+    });
+  }
+
   function updateImageStatus() {
     if (!importedImage.image) {
       els.imageStatus.textContent = "No image";
       return;
     }
-    els.imageStatus.textContent = `${importedImage.name || "Image"} ${importedImage.paths.length}`;
+    const layerLines = Object.values(importedImage.layerPaths).reduce((sum, paths) => sum + paths.length, 0);
+    els.imageStatus.textContent = `${importedImage.name || "Image"} ${importedImage.paths.length + layerLines}`;
   }
 
   function normalizeIsolation(item, index) {
@@ -1136,13 +1348,7 @@
     els.randomLineCount.value = state.randomLineCount;
     els.randomLineAdd.checked = state.randomLineAdd;
     els.randomLineLength.value = state.randomLineLength;
-    els.imageLinesHorizontal.checked = state.imageLinesHorizontal;
-    els.imageLinesVertical.checked = state.imageLinesVertical;
-    els.imageLinesDiagonal.checked = state.imageLinesDiagonal;
-    els.imageLinesAngle.checked = state.imageLinesAngle;
-    els.imageAngle.value = state.imageAngle;
-    els.imageAngleRow.hidden = !state.imageLinesAngle;
-    els.imageThreshold.value = state.imageThreshold;
+    syncLayerControls();
     els.imageDetail.value = state.imageDetail;
     els.imageScale.value = state.imageScale;
     els.imageOffsetX.value = state.imageOffsetX;
@@ -1190,14 +1396,15 @@
     els.strokeWeightValue.textContent = Number(state.strokeWeight).toFixed(1);
     els.randomLineCountValue.textContent = Math.round(state.randomLineCount);
     els.randomLineLengthValue.textContent = Math.round(state.randomLineLength);
-    els.imageThresholdValue.textContent = Math.round(state.imageThreshold);
+    els.imageThresholdValue.textContent = Math.round(getLayerValue(selectedLayerId, "threshold"));
     els.imageDetailValue.textContent = Math.round(state.imageDetail);
     els.imageScaleValue.textContent = Math.round(state.imageScale);
     els.imageOffsetXValue.textContent = Math.round(state.imageOffsetX);
     els.imageOffsetYValue.textContent = Math.round(state.imageOffsetY);
     els.imageBrightnessValue.textContent = Math.round(state.imageBrightness);
     els.imageContrastValue.textContent = Math.round(state.imageContrast);
-    els.imageAngleValue.textContent = `${Math.round(state.imageAngle)}°`;
+    els.imageAngleValue.textContent = `${Math.round(getLayerValue(selectedLayerId, "angle"))}°`;
+    els.layerSizeValue.textContent = Math.round(getLayerValue(selectedLayerId, "fillWeight"));
     updateImageStatus();
     syncSelectedIsolationControls();
   }
@@ -1598,7 +1805,7 @@
       drawGrid(target, grid, geos, width, height);
     }
     rebuildImportedImageIfNeeded(grid);
-    drawStoredLines(target, getDrawingPaths(), grid, geos, maxSide);
+    drawStoredLines(target, grid, geos, maxSide);
     drawIsolationObjects(target, geos, maxSide);
     drawCustomIsolationDraft(target, grid, maxSide);
     drawMotionPathDraft(target, grid);
@@ -1606,6 +1813,46 @@
       drawMotionPathOverlay(target, grid);
     }
     target.restore();
+  }
+
+  // Extra line layers each keep their own image lines, rebuilt only when their own settings change.
+  function rebuildLineLayers(grid) {
+    const common = [
+      state.imageDetail,
+      state.imageScale,
+      state.imageOffsetX,
+      state.imageOffsetY,
+      state.imageBrightness,
+      state.imageContrast,
+      state.gridSize,
+      Math.round(grid.width),
+      Math.round(grid.height),
+    ].join(":");
+    const paths = {};
+    const keys = {};
+    state.imageLayers.forEach((layer) => {
+      const key = `${common}|${getLineLayerKey(layer)}`;
+      const cached = !importedImage.dirty && importedImage.layerKeys[layer.id] === key;
+      paths[layer.id] = cached ? importedImage.layerPaths[layer.id] : buildThresholdPaths(importedImage.image, grid, layer);
+      keys[layer.id] = key;
+    });
+    importedImage.layerPaths = paths;
+    importedImage.layerKeys = keys;
+  }
+
+  // Every set of lines in drawing order: the base layer (drawn and image lines), then each extra layer.
+  function getLineSets(maxSide) {
+    const sets = [{ id: "lines", paths: getDrawingPaths(), strokes: getLineStrokes(maxSide) }];
+    if (importedImage.image) {
+      state.imageLayers.forEach((layer, index) => {
+        sets.push({
+          id: `lines-layer-${index + 2}`,
+          paths: importedImage.layerPaths[layer.id] || [],
+          strokes: getLineStrokes(maxSide, layer.fillColor, layer.fillWeight),
+        });
+      });
+    }
+    return sets;
   }
 
   function getDrawingPaths() {
@@ -1771,18 +2018,19 @@
   }
 
   // The strokes every line gets, in drawing order: the outline sits under the fill.
-  function getLineStrokes(maxSide) {
+  function getLineStrokes(maxSide, fillColor, fillWeight) {
+    const lineFillColor = fillColor || state.lineFillColor;
     const scale = maxSide / 2953;
-    const fillWidth = Math.max(1, state.fillWeight * scale * motion.lineScale);
+    const fillWidth = Math.max(1, (fillWeight || state.fillWeight) * scale * motion.lineScale);
     const outlineWidth = Math.max(0.2, state.strokeWeight * scale * motion.lineScale);
     if (state.drawStroke && state.drawFill) {
       return [
         { color: state.lineColor, width: fillWidth + outlineWidth * 2 },
-        { color: state.lineFillColor, width: fillWidth },
+        { color: lineFillColor, width: fillWidth },
       ];
     }
     if (state.drawFill) {
-      return [{ color: state.lineFillColor, width: fillWidth }];
+      return [{ color: lineFillColor, width: fillWidth }];
     }
     if (state.drawStroke) {
       return [{ color: state.lineColor, width: outlineWidth }];
@@ -1790,9 +2038,8 @@
     return [];
   }
 
-  function drawStoredLines(target, paths, grid, geos, maxSide) {
+  function drawStoredLines(target, grid, geos, maxSide) {
     const alpha = getLineAlpha();
-    const strokes = getLineStrokes(maxSide).map((stroke) => ({ ...stroke, style: withAlpha(stroke.color, alpha) }));
     const layerCanvas = document.createElement("canvas");
     layerCanvas.width = target.canvas.width;
     layerCanvas.height = target.canvas.height;
@@ -1803,9 +2050,12 @@
     layer.lineJoin = state.lineJoin;
     layer.miterLimit = 2;
 
-    paths.forEach((path) => {
-      const line = buildReactiveLine(path.points, grid, geos);
-      strokes.forEach((stroke) => strokeLinePath(layer, line, stroke.style, stroke.width));
+    getLineSets(maxSide).forEach((set) => {
+      const strokes = set.strokes.map((stroke) => ({ ...stroke, style: withAlpha(stroke.color, alpha) }));
+      set.paths.forEach((path) => {
+        const line = buildReactiveLine(path.points, grid, geos);
+        strokes.forEach((stroke) => strokeLinePath(layer, line, stroke.style, stroke.width));
+      });
     });
 
     layer.restore();
@@ -2882,21 +3132,22 @@
     }
 
     const alpha = getLineAlpha();
-    const strokes = getLineStrokes(maxSide);
-    out.push(
-      `<g id="lines" fill="none" stroke-linecap="${state.lineCap}" stroke-linejoin="${state.lineJoin}" stroke-miterlimit="2"${
-        alpha < 1 ? ` stroke-opacity="${alpha}"` : ""
-      }>`
-    );
-    getDrawingPaths().forEach((path) => {
-      const d = lineCommandsToSvg(buildReactiveLine(path.points, grid, geos));
-      if (d) {
-        strokes.forEach((stroke) => {
-          out.push(`<path d="${d}" stroke="${stroke.color}" stroke-width="${svgNumber(stroke.width)}"/>`);
-        });
-      }
+    getLineSets(maxSide).forEach((set) => {
+      out.push(
+        `<g id="${set.id}" fill="none" stroke-linecap="${state.lineCap}" stroke-linejoin="${state.lineJoin}" stroke-miterlimit="2"${
+          alpha < 1 ? ` stroke-opacity="${alpha}"` : ""
+        }>`
+      );
+      set.paths.forEach((path) => {
+        const d = lineCommandsToSvg(buildReactiveLine(path.points, grid, geos));
+        if (d) {
+          set.strokes.forEach((stroke) => {
+            out.push(`<path d="${d}" stroke="${stroke.color}" stroke-width="${svgNumber(stroke.width)}"/>`);
+          });
+        }
+      });
+      out.push("</g>");
     });
-    out.push("</g>");
 
     const objectAlpha = getObjectStrokeAlpha();
     out.push('<g id="objects">');
@@ -3278,6 +3529,11 @@
       const def = OBJECT_MOTION_PARAMS[parts[2]];
       return parts.length === 3 && def ? { ...def, key, objectId: parts[1], prop: parts[2] } : null;
     }
+    if (key.startsWith("layer:")) {
+      const parts = key.split(":");
+      const def = LAYER_MOTION_PARAMS[parts[2]];
+      return parts.length === 3 && def ? { ...def, key, layerId: parts[1], prop: parts[2] } : null;
+    }
     const def = GLOBAL_MOTION_PARAMS[key];
     return def ? { ...def, key, prop: key } : null;
   }
@@ -3286,14 +3542,15 @@
     return `iso:${id}:${prop}`;
   }
 
-  function normalizeAnimation(animation, isolations) {
+  function normalizeAnimation(animation, isolations, layers) {
     const source = animation && typeof animation === "object" ? animation : {};
     const ids = new Set(isolations.map((item) => item.id));
+    const layerIds = new Set((layers || []).map((layer) => layer.id));
     const tracks = {};
     if (source.tracks && typeof source.tracks === "object") {
       Object.keys(source.tracks).forEach((key) => {
         const def = getMotionParam(key);
-        if (!def || (def.objectId && !ids.has(def.objectId)) || !Array.isArray(source.tracks[key])) {
+        if (!def || (def.objectId && !ids.has(def.objectId)) || (def.layerId && !layerIds.has(def.layerId)) || !Array.isArray(source.tracks[key])) {
           return;
         }
         const keys = source.tracks[key]
@@ -3337,6 +3594,10 @@
   }
 
   function readMotionValue(def) {
+    if (def.layerId) {
+      const layer = findLineLayer(def.layerId);
+      return layer ? layer[def.prop] : undefined;
+    }
     if (def.objectId) {
       const item = state.isolations.find((entry) => entry.id === def.objectId);
       return item ? item[def.prop] : undefined;
@@ -3345,6 +3606,13 @@
   }
 
   function writeMotionValue(def, value) {
+    if (def.layerId) {
+      const layer = findLineLayer(def.layerId);
+      if (layer) {
+        layer[def.prop] = value;
+      }
+      return;
+    }
     if (def.objectId) {
       const item = state.isolations.find((entry) => entry.id === def.objectId);
       if (item) {
@@ -3361,6 +3629,9 @@
     Object.keys(GLOBAL_MOTION_PARAMS).forEach((key) => values.set(key, state[key]));
     state.isolations.forEach((item) => {
       Object.keys(OBJECT_MOTION_PARAMS).forEach((prop) => values.set(objectParamKey(item.id, prop), item[prop]));
+    });
+    state.imageLayers.forEach((layer) => {
+      Object.keys(LAYER_MOTION_PARAMS).forEach((prop) => values.set(layerParamKey(layer.id, prop), layer[prop]));
     });
     return values;
   }
@@ -4076,6 +4347,14 @@
   function getTimelineTrackKeys() {
     const tracks = state.animation.tracks;
     const ordered = Object.keys(GLOBAL_MOTION_PARAMS).filter((key) => tracks[key]);
+    state.imageLayers.forEach((layer) => {
+      Object.keys(LAYER_MOTION_PARAMS).forEach((prop) => {
+        const key = layerParamKey(layer.id, prop);
+        if (tracks[key]) {
+          ordered.push(key);
+        }
+      });
+    });
     state.isolations.forEach((item) => {
       Object.keys(OBJECT_MOTION_PARAMS).forEach((prop) => {
         const key = objectParamKey(item.id, prop);
@@ -4095,6 +4374,10 @@
     if (def.objectId) {
       const index = state.isolations.findIndex((item) => item.id === def.objectId);
       return `Object ${index + 1} · ${def.label}`;
+    }
+    if (def.layerId) {
+      const index = state.imageLayers.findIndex((layer) => layer.id === def.layerId);
+      return `Layer ${index + 2} · ${def.label}`;
     }
     return def.label;
   }
@@ -4158,32 +4441,44 @@
     els.keyEase.value = eases.size === 1 ? selected[0].e : "";
   }
 
+  // Keyframe buttons resolve their track at click time: object buttons follow the selected object,
+  // layer buttons the selected line layer (the base layer uses the global keys).
   function createKeyButtons() {
-    const params = [
-      ...Object.keys(GLOBAL_MOTION_PARAMS).map((key) => ({ param: key, input: GLOBAL_MOTION_PARAMS[key].input || key, object: false })),
-      ...Object.keys(OBJECT_MOTION_PARAMS).map((prop) => ({ param: prop, input: OBJECT_MOTION_PARAMS[prop].input, object: true })),
+    const layerInputs = new Set(Object.values(LAYER_MOTION_PARAMS).map((def) => def.input));
+    const entries = [
+      ...Object.keys(GLOBAL_MOTION_PARAMS)
+        .filter((key) => !layerInputs.has(GLOBAL_MOTION_PARAMS[key].input || key))
+        .map((key) => ({ def: GLOBAL_MOTION_PARAMS[key], input: GLOBAL_MOTION_PARAMS[key].input || key, resolve: () => key })),
+      ...Object.keys(OBJECT_MOTION_PARAMS).map((prop) => ({
+        def: OBJECT_MOTION_PARAMS[prop],
+        input: OBJECT_MOTION_PARAMS[prop].input,
+        resolve: () => objectParamKey(state.selectedIsolationId, prop),
+      })),
+      ...Object.keys(LAYER_MOTION_PARAMS).map((prop) => ({
+        def: LAYER_MOTION_PARAMS[prop],
+        input: LAYER_MOTION_PARAMS[prop].input,
+        resolve: () => (selectedLayerId === "base" ? BASE_LAYER_FIELDS[prop] : layerParamKey(selectedLayerId, prop)),
+      })),
     ];
-    params.forEach(({ param, input, object }) => {
+    entries.forEach(({ def, input, resolve }) => {
       const element = document.getElementById(input);
       const host = element && element.closest(".control, .check, .color-row, .field");
       if (!host) {
         return;
       }
-      const def = object ? OBJECT_MOTION_PARAMS[param] : GLOBAL_MOTION_PARAMS[param];
       const button = document.createElement("button");
       button.type = "button";
       button.className = "key-button";
-      button.dataset.param = param;
-      button.dataset.object = object ? "1" : "";
+      button.dataset.input = input;
       button.title = `Keyframe ${def.label} at the playhead`;
       button.setAttribute("aria-label", `Keyframe ${def.label}`);
       button.addEventListener("click", (event) => {
         event.preventDefault();
-        toggleKeyframe(object ? objectParamKey(state.selectedIsolationId, param) : param);
+        toggleKeyframe(resolve());
       });
       const label = host.classList.contains("field") ? host.querySelector("label") : null;
       (label || host).appendChild(button);
-      motion.keyButtons.push(button);
+      motion.keyButtons.push({ button, resolve });
     });
   }
 
@@ -4191,9 +4486,8 @@
     if (!motion.timelineOpen) {
       return;
     }
-    motion.keyButtons.forEach((button) => {
-      const key = button.dataset.object ? objectParamKey(state.selectedIsolationId, button.dataset.param) : button.dataset.param;
-      const keys = state.animation.tracks[key];
+    motion.keyButtons.forEach(({ button, resolve }) => {
+      const keys = state.animation.tracks[resolve()];
       const onKey = Boolean(keys) && findKeyIndex(keys, motion.time) >= 0;
       button.classList.toggle("is-animated", Boolean(keys));
       button.classList.toggle("has-key", onKey);
@@ -4736,15 +5030,14 @@
     });
 
     els.imageImport.addEventListener("change", handleImageImport);
-    ["imageLinesHorizontal", "imageLinesVertical", "imageLinesDiagonal", "imageLinesAngle", "imageInvert"].forEach((key) => {
-      els[key].addEventListener("change", () => {
-        state[key] = els[key].checked;
-        commitChange({ image: true });
-      });
+    els.imageInvert.addEventListener("change", () => {
+      state.imageInvert = els.imageInvert.checked;
+      commitChange({ image: true });
     });
-    ["imageThreshold", "imageAngle", "imageDetail", "imageScale", "imageOffsetX", "imageOffsetY", "imageBrightness", "imageContrast"].forEach((key) => {
+    ["imageDetail", "imageScale", "imageOffsetX", "imageOffsetY", "imageBrightness", "imageContrast"].forEach((key) => {
       els[key].addEventListener("input", () => setImageState(key, els[key]));
     });
+    wireLayerControls();
     els.clearImage.addEventListener("click", clearImportedImage);
 
     els.isolationSelect.addEventListener("change", () => {

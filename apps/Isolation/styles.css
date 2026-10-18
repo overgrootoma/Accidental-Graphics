@@ -335,6 +335,46 @@ output,
   line-height: 1.2;
 }
 
+.image-line-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.image-line-head .image-line-title {
+  margin-bottom: 0;
+}
+
+.mini-button {
+  min-height: 22px;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.layer-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.layer-controls [hidden],
+.color-row[hidden] {
+  display: none;
+}
+
+.mini-select {
+  width: auto;
+  min-height: 22px;
+  height: 22px;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
 .image-line-title {
   margin-bottom: 4px;
   font-size: 12px;
@@ -761,6 +801,13 @@ output,
   border: 1px solid var(--rule);
   touch-action: none;
   image-rendering: auto;
+}
+
+@media (max-width: 480px) {
+  /* Four header buttons do not fit next to each other on a phone. */
+  .header-actions {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 780px) {

@@ -188,7 +188,14 @@
             <input id="imageImport" type="file" accept="image/*" />
           </div>
           <div class="image-line-options" role="group" aria-label="Image lines">
-            <p class="image-line-title">Image Lines</p>
+            <div class="image-line-head">
+              <p class="image-line-title">Image Lines</p>
+              <div class="layer-controls">
+                <select id="layerSelect" class="mini-select" aria-label="Line layer" title="The layer these settings belong to. Layer 1 uses Fill Color and Fill Size from Draw." hidden></select>
+                <button id="addLayer" class="mini-button" type="button" title="Add a line layer with its own threshold, colour and size, drawn on top">+ Layer</button>
+                <button id="removeLayer" class="mini-button" type="button" title="Remove this layer" hidden>Remove</button>
+              </div>
+            </div>
             <label class="check">
               <input id="imageLinesHorizontal" type="checkbox" checked />
               <span>Horizontal</span>
@@ -215,6 +222,15 @@
             <label for="imageThreshold">Threshold</label>
             <input id="imageThreshold" type="range" min="0" max="255" step="1" value="128" />
             <output id="imageThresholdValue">128</output>
+          </div>
+          <div id="layerColorRow" class="color-row" hidden>
+            <label for="layerColor">Layer Color</label>
+            <input id="layerColor" type="color" value="#ffffff" />
+          </div>
+          <div id="layerSizeRow" class="control" hidden>
+            <label for="layerSize">Layer Size</label>
+            <input id="layerSize" type="range" min="1" max="80" step="1" value="16" />
+            <output id="layerSizeValue">16</output>
           </div>
           <div class="control">
             <label for="imageDetail">Detail</label>
