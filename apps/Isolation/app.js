@@ -47,6 +47,7 @@
   // Object width and height are % of the shorter grid side, so a circle stays round on any canvas.
   const ISO_SIZE_MIN = 3;
   const ISO_SIZE_MAX = 200;
+  const FORCE_MAX = 500;
   const HISTORY_LIMIT = 100;
   const PRESET_APP = "isolation";
   // Longer links break in chat apps and mail; above this the drawn lines are left out of the link.
@@ -110,6 +111,7 @@
     height: { label: "Height", kind: "number", input: "isolationHeight" },
     rotation: { label: "Rotate", kind: "number", input: "isolationRotation" },
     force: { label: "Force", kind: "number", input: "isolationForce" },
+    swirl: { label: "Swirl", kind: "number", input: "isolationSwirl" },
     gap: { label: "Silence", kind: "number", input: "isolationGap" },
     fill: { label: "Fill", kind: "bool", input: "isolationFill" },
     fillColor: { label: "Fill Color", kind: "color", input: "isolationFillColor" },
@@ -129,7 +131,7 @@
   };
 
   const DEFAULT_STATE = {
-    isolationModelVersion: 8,
+    isolationModelVersion: 9,
     widthCm: 25,
     heightCm: 25,
     dpi: 300,
@@ -194,6 +196,7 @@
         height: 17,
         rotation: 0,
         force: 100,
+        swirl: 100,
         gap: 10,
         strokeColor: "#00ff00",
         strokeWidth: 1.2,
@@ -303,6 +306,8 @@
     isolationRotationValue: document.getElementById("isolationRotationValue"),
     isolationForce: document.getElementById("isolationForce"),
     isolationForceValue: document.getElementById("isolationForceValue"),
+    isolationSwirl: document.getElementById("isolationSwirl"),
+    isolationSwirlValue: document.getElementById("isolationSwirlValue"),
     isolationGap: document.getElementById("isolationGap"),
     isolationGapValue: document.getElementById("isolationGapValue"),
     isolationFill: document.getElementById("isolationFill"),
@@ -547,6 +552,17 @@
         strokeColor: base.isolations[0].strokeColor,
       }));
     }
+    if (savedIsolationVersion < 9) {
+      // Up to version 8 the swirl direction alternated with the object's place among the enabled objects.
+      let enabledIndex = 0;
+      merged.isolations = merged.isolations.map((item) => {
+        const swirl = enabledIndex % 2 === 0 ? 100 : -100;
+        if (item.enabled !== false) {
+          enabledIndex += 1;
+        }
+        return { ...item, swirl };
+      });
+    }
     if (savedIsolationVersion < 6) {
       // Up to version 5 width was % of the grid width and height % of the grid height.
       const pixels = getCanvasPixelSize(merged.widthCm, merged.heightCm, merged.dpi);
@@ -567,7 +583,7 @@
     // Version 7 adds the animation and version 8 extra line layers; older saves simply have none.
     merged.imageLayers = normalizeLineLayers(saved.imageLayers);
     merged.animation = normalizeAnimation(saved.animation, merged.isolations, merged.imageLayers);
-    merged.isolationModelVersion = 8;
+    merged.isolationModelVersion = 9;
 
     if (!merged.isolations.some((item) => item.id === merged.selectedIsolationId)) {
       merged.selectedIsolationId = merged.isolations[0].id;
@@ -1259,7 +1275,8 @@
       width,
       height,
       rotation: clampNumber(item.rotation, -180, 180, 0),
-      force: clampNumber(item.force, 0, 250, 100),
+      force: clampNumber(item.force, -FORCE_MAX, FORCE_MAX, 100),
+      swirl: clampNumber(item.swirl, -100, 100, 100),
       gap: clampNumber(item.gap, 0, 35, 10),
       strokeColor: validHex(item.strokeColor) ? item.strokeColor : "#00ff00",
       strokeWidth: clampNumber(item.strokeWidth, 0.2, 24, 1.2),
@@ -1628,6 +1645,8 @@
     els.isolationRotationValue.textContent = Math.round(item.rotation);
     els.isolationForce.value = item.force;
     els.isolationForceValue.textContent = Math.round(item.force);
+    els.isolationSwirl.value = item.swirl;
+    els.isolationSwirlValue.textContent = Math.round(item.swirl);
     els.isolationGap.value = item.gap;
     els.isolationGapValue.textContent = formatControlValue(item.gap);
     els.isolationStrokeColor.value = item.strokeColor;
@@ -1874,6 +1893,7 @@
             height: shape === "circle" ? width : height,
             rotation: Math.round(-180 + random() * 360),
             force: Math.round(random() * 250),
+            swirl: random() > 0.5 ? 100 : -100,
             gap: Number((random() * 35).toFixed(1)),
             strokeColor: keepColors ? previousIsolations[index]?.strokeColor || state.isolations[0]?.strokeColor || "#00ff00" : randomHexColor(random),
             strokeWidth: Number((0.2 + random() * 23.8).toFixed(1)),
@@ -2119,6 +2139,7 @@
         height,
         rotation: (item.rotation / 180) * Math.PI,
         force: item.force / 100,
+        swirl: item.swirl / 100,
         gap,
         strokeColor: item.strokeColor,
         strokeWidth: item.strokeWidth,
@@ -2361,9 +2382,9 @@
     const reaction = state.reaction / 100;
     let output = { x, y };
 
-    geos.forEach((geo, index) => {
+    geos.forEach((geo) => {
       const shapeRadius = Math.max(geo.width, geo.height) / 2;
-      const reach = geo.gap + (geo.gap * 2.3 + shapeRadius * 0.55) * reaction * geo.force;
+      const reach = geo.gap + (geo.gap * 2.3 + shapeRadius * 0.55) * reaction * Math.abs(geo.force);
       const minDistance = Math.hypot(output.x - geo.x, output.y - geo.y) - geo.boundRadius;
       if (minDistance > geo.gap && minDistance >= reach) {
         return;
@@ -2383,11 +2404,12 @@
 
       const falloff = Math.pow(1 - distance / reach, 2);
       const normal = field.normal;
-      const spin = index % 2 === 0 ? 1 : -1;
+      const spin = geo.swirl;
       const tangent = { x: -normal.y * spin, y: normal.x * spin };
       const push = falloff * geo.force * reaction;
-      const radial = push * geo.gap * 1.4;
-      const lateral = push * geo.gap * 1.9;
+      // Negative force pulls lines in, but never across the silence around the shape.
+      const radial = push < 0 ? Math.max(push * geo.gap * 1.4, -(distance - geo.gap) * 0.9) : push * geo.gap * 1.4;
+      const lateral = Math.abs(push) * geo.gap * 1.9;
 
       output = {
         x: output.x + normal.x * radial + tangent.x * lateral,
@@ -5273,6 +5295,7 @@
     els.isolationRatioNumber.addEventListener("input", () => setIsolationAspectRatio(Number(els.isolationRatioNumber.value)));
     els.isolationRotation.addEventListener("input", () => updateSelectedIsolation("rotation", Number(els.isolationRotation.value), "isolationRotation"));
     els.isolationForce.addEventListener("input", () => updateSelectedIsolation("force", Number(els.isolationForce.value), "isolationForce"));
+    els.isolationSwirl.addEventListener("input", () => updateSelectedIsolation("swirl", Number(els.isolationSwirl.value), "isolationSwirl"));
     els.isolationGap.addEventListener("input", () => updateSelectedIsolation("gap", Number(els.isolationGap.value), "isolationGap"));
     els.isolationFill.addEventListener("change", () => updateSelectedIsolation("fill", els.isolationFill.checked));
     els.isolationFillColor.addEventListener("input", () => updateSelectedIsolation("fillColor", els.isolationFillColor.value, "isolationFillColor"));
