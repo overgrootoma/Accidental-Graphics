@@ -43,6 +43,8 @@
               <li><span>Randomize</span><kbd>R</kbd></li>
               <li><span>Export PNG</span><kbd>E</kbd></li>
               <li><span>Export SVG</span><kbd>⇧E</kbd></li>
+              <li><span>Save preset</span><kbd><span class="mod-key">⌘</span>S</kbd></li>
+              <li><span>Load preset</span><kbd><span class="mod-key">⌘</span>O</kbd></li>
               <li><span>Stop drawing / close</span><kbd>Esc</kbd></li>
             </ul>
           </div>
@@ -411,6 +413,19 @@
             <input id="transparentDrawing" type="checkbox" />
             <span>Transparent Drawing</span>
           </label>
+          </div>
+        </details>
+
+        <details class="control-group">
+          <summary>Presets</summary>
+          <div class="group-body">
+          <div class="button-row button-row-3">
+            <button id="savePreset" type="button" title="Save all settings, objects and drawn lines as a .json file (⌘S)">Save Preset</button>
+            <button id="loadPreset" type="button" title="Open a .json preset (⌘O)">Load Preset</button>
+            <button id="copyLink" type="button" title="Copy a link with these settings. The imported image is not included.">Copy Link</button>
+          </div>
+          <p id="presetStatus" class="meter"></p>
+          <input id="presetFile" type="file" accept=".json,application/json" hidden />
           </div>
         </details>
       </aside>

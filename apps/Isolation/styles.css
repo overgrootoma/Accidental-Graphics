@@ -373,6 +373,18 @@ output,
   gap: 12px;
 }
 
+.button-row-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.button-row + .meter {
+  margin-top: 10px;
+}
+
+.meter:empty {
+  display: none;
+}
+
 .color-row {
   display: flex;
   align-items: center;

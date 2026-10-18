@@ -24,6 +24,9 @@
   const ISO_SIZE_MIN = 3;
   const ISO_SIZE_MAX = 200;
   const HISTORY_LIMIT = 100;
+  const PRESET_APP = "isolation";
+  // Longer links break in chat apps and mail; above this the drawn lines are left out of the link.
+  const LINK_MAX_LENGTH = 16000;
   const HISTORY_MERGE_MS = 1000;
 
   const DEFAULT_STATE = {
@@ -186,6 +189,11 @@
     transparentDrawing: document.getElementById("transparentDrawing"),
     exportPng: document.getElementById("exportPng"),
     exportSvg: document.getElementById("exportSvg"),
+    savePreset: document.getElementById("savePreset"),
+    loadPreset: document.getElementById("loadPreset"),
+    presetFile: document.getElementById("presetFile"),
+    copyLink: document.getElementById("copyLink"),
+    presetStatus: document.getElementById("presetStatus"),
     shortcutsToggle: document.getElementById("shortcutsToggle"),
     shortcuts: document.getElementById("shortcuts"),
   };
@@ -2708,6 +2716,155 @@
     };
   }
 
+  function setPresetStatus(text) {
+    els.presetStatus.textContent = text;
+  }
+
+  function savePreset() {
+    const data = {
+      app: PRESET_APP,
+      version: state.isolationModelVersion,
+      state: JSON.parse(JSON.stringify(state)),
+    };
+    downloadBlob(
+      new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+      `isolation preset ${formatExportTimestamp(new Date())}.json`
+    );
+    setPresetStatus("Preset saved");
+  }
+
+  function loadPresetFile(file) {
+    file
+      .text()
+      .then((text) => {
+        applyLoadedState(readPresetData(JSON.parse(text)));
+        setPresetStatus(`Loaded ${file.name}`);
+      })
+      .catch(() => setPresetStatus("Not an Isolation preset"));
+  }
+
+  // Accepts a saved preset file, or a bare settings object.
+  function readPresetData(data) {
+    const saved = data && data.app === PRESET_APP && data.state ? data.state : data;
+    if (!saved || typeof saved !== "object" || !Array.isArray(saved.isolations)) {
+      throw new Error("Not an Isolation preset");
+    }
+    if (!saved.isolationModelVersion && data.version) {
+      saved.isolationModelVersion = data.version;
+    }
+    return saved;
+  }
+
+  // Replaces the settings as one undo step; the imported image stays.
+  function applyLoadedState(saved) {
+    const next = normalizeState(saved);
+    Object.keys(state).forEach((key) => {
+      delete state[key];
+    });
+    Object.assign(state, next);
+    importedImage.dirty = true;
+    setIsolationDrawMode(false);
+    syncControls();
+    applyCanvasSizeFromInputs();
+  }
+
+  async function copyLink() {
+    const linkState = JSON.parse(JSON.stringify(state));
+    let encoded = await encodeLinkState(linkState);
+    let note = "Link copied";
+    if (encoded.length > LINK_MAX_LENGTH && linkState.paths.length) {
+      linkState.paths = [];
+      encoded = await encodeLinkState(linkState);
+      note = "Link copied without drawn lines (too long)";
+    }
+
+    const url = `${location.origin}${location.pathname}#s=${encoded}`;
+    if (await copyText(url)) {
+      setPresetStatus(note);
+      els.copyLink.textContent = "Copied";
+      setTimeout(() => {
+        els.copyLink.textContent = "Copy Link";
+      }, 1500);
+    } else {
+      setPresetStatus("Could not copy the link");
+    }
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (error) {
+      const field = document.createElement("textarea");
+      field.value = text;
+      field.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(field);
+      field.select();
+      const copied = document.execCommand("copy");
+      field.remove();
+      return copied;
+    }
+  }
+
+  // Opening a link applies its settings on top of your own saved work, as one undo step,
+  // then clears the link from the address bar so a reload shows your own work again.
+  async function loadStateFromLink() {
+    const match = location.hash.match(/^#s=(.+)$/);
+    if (!match) {
+      return;
+    }
+    try {
+      applyLoadedState(readPresetData(await decodeLinkState(match[1])));
+      setPresetStatus("Loaded from link. Undo to go back to your own work.");
+    } catch (error) {
+      setPresetStatus("This link could not be read");
+    }
+    window.history.replaceState(null, "", location.pathname + location.search);
+  }
+
+  // Numbers are rounded to 6 decimals to keep links short; lines snap to the grid anyway.
+  async function encodeLinkState(linkState) {
+    const json = JSON.stringify(linkState, (key, value) => (typeof value === "number" ? Number(value.toFixed(6)) : value));
+    const bytes = new TextEncoder().encode(json);
+    if (typeof CompressionStream === "function") {
+      const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+      return `z${base64UrlEncode(new Uint8Array(await new Response(stream).arrayBuffer()))}`;
+    }
+    return `j${base64UrlEncode(bytes)}`;
+  }
+
+  async function decodeLinkState(text) {
+    const bytes = base64UrlDecode(text.slice(1));
+    let json;
+    if (text[0] === "z") {
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+      json = await new Response(stream).text();
+    } else if (text[0] === "j") {
+      json = new TextDecoder().decode(bytes);
+    } else {
+      throw new Error("Unknown link format");
+    }
+    return JSON.parse(json);
+  }
+
+  function base64UrlEncode(bytes) {
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 0x8000));
+    }
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function base64UrlDecode(text) {
+    const base64 = text.replace(/-/g, "+").replace(/_/g, "/");
+    const binary = atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  }
+
   function stripExtension(filename) {
     return filename.replace(/\.[^/.]+$/, "");
   }
@@ -2947,6 +3104,17 @@
 
     els.exportPng.addEventListener("click", downloadPng);
     els.exportSvg.addEventListener("click", downloadSvg);
+    els.savePreset.addEventListener("click", savePreset);
+    els.loadPreset.addEventListener("click", () => els.presetFile.click());
+    els.presetFile.addEventListener("change", () => {
+      const file = els.presetFile.files && els.presetFile.files[0];
+      if (file) {
+        loadPresetFile(file);
+      }
+      els.presetFile.value = "";
+    });
+    els.copyLink.addEventListener("click", copyLink);
+    window.addEventListener("hashchange", loadStateFromLink);
     els.shortcutsToggle.addEventListener("click", () => toggleShortcuts());
     document.addEventListener("keydown", handleShortcut);
     document.addEventListener("pointerdown", (event) => {
@@ -3159,6 +3327,16 @@
       redo();
       return;
     }
+    if (mod && key === "s") {
+      event.preventDefault();
+      savePreset();
+      return;
+    }
+    if (mod && key === "o") {
+      event.preventDefault();
+      els.presetFile.click();
+      return;
+    }
     if (mod || event.altKey || isTypingTarget(event.target)) {
       return;
     }
@@ -3226,4 +3404,5 @@
   applyCanvasSize();
   history.current = makeSnapshot();
   wireControls();
+  loadStateFromLink();
 })();
