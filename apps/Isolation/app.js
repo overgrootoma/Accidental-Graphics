@@ -9,11 +9,14 @@
   const GRID_SIZE_MIN = 9;
   const GRID_SIZE_MAX = 201;
   const STORAGE_KEY = "isolation-field-state";
+  // Object width and height are % of the shorter grid side, so a circle stays round on any canvas.
+  const ISO_SIZE_MIN = 3;
+  const ISO_SIZE_MAX = 200;
   const HISTORY_LIMIT = 100;
   const HISTORY_MERGE_MS = 1000;
 
   const DEFAULT_STATE = {
-    isolationModelVersion: 5,
+    isolationModelVersion: 6,
     widthCm: 25,
     heightCm: 25,
     dpi: 300,
@@ -314,7 +317,24 @@
         strokeColor: base.isolations[0].strokeColor,
       }));
     }
-    merged.isolationModelVersion = 5;
+    if (savedIsolationVersion < 6) {
+      // Up to version 5 width was % of the grid width and height % of the grid height.
+      const pixels = getCanvasPixelSize(merged.widthCm, merged.heightCm, merged.dpi);
+      const grid = getGridBox(pixels.width, pixels.height);
+      const shortSide = Math.min(grid.width, grid.height);
+      merged.isolations = merged.isolations.map((item) => {
+        const width = clamp((item.width * grid.width) / shortSide, ISO_SIZE_MIN, ISO_SIZE_MAX);
+        // Old circles were ovals on non-square canvases; they become real circles with the same width.
+        const height = item.shape === "circle" ? width : clamp((item.height * grid.height) / shortSide, ISO_SIZE_MIN, ISO_SIZE_MAX);
+        return {
+          ...item,
+          width,
+          height,
+          aspectRatio: item.shape === "circle" ? 1 : clampNumber(width / height, 0.05, 20, 1),
+        };
+      });
+    }
+    merged.isolationModelVersion = 6;
 
     if (!merged.isolations.some((item) => item.id === merged.selectedIsolationId)) {
       merged.selectedIsolationId = merged.isolations[0].id;
@@ -568,9 +588,9 @@
       "custom",
     ];
     const shape = validShapes.includes(item.shape) ? item.shape : "block";
-    const width = clampNumber(item.width || item.size, 3, 60, 17);
+    const width = clampNumber(item.width || item.size, ISO_SIZE_MIN, ISO_SIZE_MAX, 17);
     const fallbackHeight = width;
-    const height = shape === "circle" ? width : clampNumber(item.height, 3, 60, fallbackHeight);
+    const height = shape === "circle" ? width : clampNumber(item.height, ISO_SIZE_MIN, ISO_SIZE_MAX, fallbackHeight);
     const aspectRatio = shape === "circle" ? 1 : clampNumber(item.aspectRatio || width / height, 0.05, 20, 1);
 
     return {
@@ -760,14 +780,9 @@
     state.heightCm = numberFromInput(els.heightCm, state.heightCm);
     state.dpi = Math.round(numberFromInput(els.dpi, state.dpi));
 
-    let width = cmToPixels(state.widthCm, state.dpi);
-    let height = cmToPixels(state.heightCm, state.dpi);
-    const pixelCount = width * height;
+    const { width, height, clamped } = getCanvasPixelSize(state.widthCm, state.heightCm, state.dpi);
 
-    if (pixelCount > MAX_PIXELS) {
-      const ratio = Math.sqrt(MAX_PIXELS / pixelCount);
-      width = Math.floor(width * ratio);
-      height = Math.floor(height * ratio);
+    if (clamped) {
       const pxPerCm = state.dpi / CM_PER_INCH;
       state.widthCm = Number((width / pxPerCm).toFixed(2));
       state.heightCm = Number((height / pxPerCm).toFixed(2));
@@ -783,6 +798,19 @@
     updateViewScale();
     scheduleRender();
     saveState();
+  }
+
+  function getCanvasPixelSize(widthCm, heightCm, dpi) {
+    let width = cmToPixels(widthCm, dpi);
+    let height = cmToPixels(heightCm, dpi);
+    const pixelCount = width * height;
+    if (pixelCount <= MAX_PIXELS) {
+      return { width, height, clamped: false };
+    }
+    const ratio = Math.sqrt(MAX_PIXELS / pixelCount);
+    width = Math.floor(width * ratio);
+    height = Math.floor(height * ratio);
+    return { width, height, clamped: true };
   }
 
   function updatePixelMeter() {
@@ -962,7 +990,7 @@
     if (!item) {
       return;
     }
-    const nextValue = clampNumber(value, 3, 60, item[key]);
+    const nextValue = clampNumber(value, ISO_SIZE_MIN, ISO_SIZE_MAX, item[key]);
 
     if (key === "width") {
       item.width = nextValue;
@@ -970,7 +998,7 @@
         item.height = nextValue;
         item.aspectRatio = 1;
       } else if (item.lockAspect) {
-        item.height = clamp(item.width / item.aspectRatio, 3, 60);
+        item.height = clamp(item.width / item.aspectRatio, ISO_SIZE_MIN, ISO_SIZE_MAX);
       }
     } else {
       item.height = nextValue;
@@ -978,7 +1006,7 @@
         item.width = nextValue;
         item.aspectRatio = 1;
       } else if (item.lockAspect) {
-        item.width = clamp(item.height * item.aspectRatio, 3, 60);
+        item.width = clamp(item.height * item.aspectRatio, ISO_SIZE_MIN, ISO_SIZE_MAX);
       }
     }
 
@@ -1008,7 +1036,7 @@
     }
     item.aspectRatio = item.shape === "circle" ? 1 : clampNumber(value, 0.05, 20, item.aspectRatio || 1);
     item.lockAspect = true;
-    item.height = item.shape === "circle" ? item.width : clamp(item.width / item.aspectRatio, 3, 60);
+    item.height = item.shape === "circle" ? item.width : clamp(item.width / item.aspectRatio, ISO_SIZE_MIN, ISO_SIZE_MAX);
     commitChange({ merge: "isolationRatioNumber" });
   }
 
@@ -1281,6 +1309,15 @@
     target.restore();
   }
 
+  // Grid area inside the canvas margin, without columns and rows.
+  function getGridBox(width, height) {
+    const margin = Math.min(width, height) * 0.055;
+    return {
+      width: width - margin * 2,
+      height: height - margin * 2,
+    };
+  }
+
   function getGrid(width, height, margin) {
     const columns = state.gridSize;
     const rows = Math.max(3, Math.round((height / width) * columns));
@@ -1300,9 +1337,8 @@
     const minSide = Math.min(grid.width, grid.height);
     const step = Math.max(grid.stepX, grid.stepY);
     return state.isolations.filter((item) => item.enabled !== false).map((item) => {
-      const size = getIsolationRatioSize(item, grid);
-      const width = grid.width * size.width;
-      const height = grid.height * size.height;
+      const width = minSide * (item.width / 100);
+      const height = minSide * (item.height / 100);
       const gap = minSide * (item.gap / 100) + step * 0.45;
 
       const geo = {
@@ -1328,14 +1364,6 @@
       geo.boundRadius = getIsolationBoundRadius(geo);
       return geo;
     });
-  }
-
-  // Object size as a fraction of the grid width and height.
-  function getIsolationRatioSize(item) {
-    return {
-      width: item.width / 100,
-      height: item.height / 100,
-    };
   }
 
   // Radius of a circle around the centre that contains the whole shape, used to skip far-away points.
@@ -2331,8 +2359,10 @@
     const bounds = getPointBounds(points);
     const rawWidth = Math.max(0.0001, bounds.maxX - bounds.minX);
     const rawHeight = Math.max(0.0001, bounds.maxY - bounds.minY);
-    const width = clamp(rawWidth, 0.03, 0.6);
-    const height = clamp(rawHeight, 0.03, 0.6);
+    const grid = getGrid(canvas.width, canvas.height, Math.min(canvas.width, canvas.height) * 0.055);
+    const shortSide = Math.min(grid.width, grid.height);
+    const width = clamp((Math.max(rawWidth, 0.03) * grid.width * 100) / shortSide, ISO_SIZE_MIN, ISO_SIZE_MAX);
+    const height = clamp((Math.max(rawHeight, 0.03) * grid.height * 100) / shortSide, ISO_SIZE_MIN, ISO_SIZE_MAX);
     const pathWidth = Math.max(rawWidth, 0.03);
     const pathHeight = Math.max(rawHeight, 0.03);
     const centerX = clamp((bounds.minX + bounds.maxX) / 2, 0, 1);
@@ -2341,8 +2371,8 @@
     item.shape = "custom";
     item.x = centerX;
     item.y = centerY;
-    item.width = width * 100;
-    item.height = height * 100;
+    item.width = width;
+    item.height = height;
     item.rotation = 0;
     item.lockAspect = false;
     item.aspectRatio = width / height;
@@ -2802,12 +2832,13 @@
   // Next free spot beside an object: right, left, below, above. Positions are in grid ratio.
   function findSpotNextTo(item) {
     const grid = getGrid(canvas.width, canvas.height, Math.min(canvas.width, canvas.height) * 0.055);
-    const size = getIsolationRatioSize(item, grid);
-    const extent = Math.max(size.width, size.height);
-    const stepX = extent + 0.03;
-    const stepY = extent * (grid.width / grid.height) + 0.03;
-    const halfX = size.width / 2;
-    const halfY = size.height / 2;
+    const shortSide = Math.min(grid.width, grid.height);
+    const extent = (Math.max(item.width, item.height) / 100) * shortSide;
+    const spacing = extent + shortSide * 0.03;
+    const stepX = spacing / grid.width;
+    const stepY = spacing / grid.height;
+    const halfX = extent / 2 / grid.width;
+    const halfY = extent / 2 / grid.height;
     const candidates = [
       { x: item.x + stepX, y: item.y },
       { x: item.x - stepX, y: item.y },
