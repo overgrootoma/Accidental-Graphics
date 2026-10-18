@@ -117,6 +117,8 @@
     fillColor: { label: "Fill Color", kind: "color", input: "isolationFillColor" },
     strokeColor: { label: "Stroke Color", kind: "color", input: "isolationStrokeColor" },
     strokeWidth: { label: "Stroke", kind: "number", input: "isolationStrokeWidth" },
+    tintLines: { label: "Tint Lines", kind: "bool", input: "isolationTint" },
+    tintColor: { label: "Tint Color", kind: "color", input: "isolationTintColor" },
   };
   // Per line layer. For the base layer these are the global keys in BASE_LAYER_FIELDS.
   const LAYER_MOTION_PARAMS = {
@@ -198,6 +200,8 @@
         force: 100,
         swirl: 100,
         gap: 10,
+        tintLines: false,
+        tintColor: "#00ff00",
         strokeColor: "#00ff00",
         strokeWidth: 1.2,
         customPath: [],
@@ -313,6 +317,8 @@
     isolationFill: document.getElementById("isolationFill"),
     isolationFillColor: document.getElementById("isolationFillColor"),
     isolationStrokeColor: document.getElementById("isolationStrokeColor"),
+    isolationTint: document.getElementById("isolationTint"),
+    isolationTintColor: document.getElementById("isolationTintColor"),
     isolationStrokeWidth: document.getElementById("isolationStrokeWidth"),
     isolationStrokeWidthValue: document.getElementById("isolationStrokeWidthValue"),
     centerIsolation: document.getElementById("centerIsolation"),
@@ -1280,6 +1286,8 @@
       gap: clampNumber(item.gap, 0, 35, 10),
       strokeColor: validHex(item.strokeColor) ? item.strokeColor : "#00ff00",
       strokeWidth: clampNumber(item.strokeWidth, 0.2, 24, 1.2),
+      tintLines: item.tintLines === true,
+      tintColor: validHex(item.tintColor) ? item.tintColor : validHex(item.strokeColor) ? item.strokeColor : "#00ff00",
       customPath: normalizeCustomIsolationPath(item.customPath),
       motionPath: normalizeMotionPath(item.motionPath),
     };
@@ -1650,6 +1658,8 @@
     els.isolationGap.value = item.gap;
     els.isolationGapValue.textContent = formatControlValue(item.gap);
     els.isolationStrokeColor.value = item.strokeColor;
+    els.isolationTint.checked = item.tintLines;
+    els.isolationTintColor.value = item.tintColor;
     els.isolationStrokeWidth.value = item.strokeWidth;
     els.isolationStrokeWidthValue.textContent = Number(item.strokeWidth).toFixed(1);
     updateIsolationDrawUi();
@@ -2120,7 +2130,7 @@
   function getIsolationGeometries(grid) {
     const minSide = Math.min(grid.width, grid.height);
     const step = Math.max(grid.stepX, grid.stepY);
-    return state.isolations.filter((item) => item.enabled !== false).map((item) => {
+    const geos = state.isolations.filter((item) => item.enabled !== false).map((item) => {
       const width = minSide * (item.width / 100);
       const height = minSide * (item.height / 100);
       const gap = minSide * (item.gap / 100) + step * 0.45;
@@ -2140,6 +2150,8 @@
         rotation: (item.rotation / 180) * Math.PI,
         force: item.force / 100,
         swirl: item.swirl / 100,
+        tint: item.tintLines === true,
+        tintColor: item.tintColor,
         gap,
         strokeColor: item.strokeColor,
         strokeWidth: item.strokeWidth,
@@ -2149,6 +2161,8 @@
       geo.boundRadius = getIsolationBoundRadius(geo);
       return geo;
     });
+    geos.tinted = geos.some((geo) => geo.tint);
+    return geos;
   }
 
   // Radius of a circle around the centre that contains the whole shape, used to skip far-away points.
@@ -2243,14 +2257,14 @@
     if (state.drawStroke && state.drawFill) {
       return [
         { color: state.lineColor, width: fillWidth + outlineWidth * 2 },
-        { color: lineFillColor, width: fillWidth },
+        { color: lineFillColor, width: fillWidth, tint: true },
       ];
     }
     if (state.drawFill) {
-      return [{ color: lineFillColor, width: fillWidth }];
+      return [{ color: lineFillColor, width: fillWidth, tint: true }];
     }
     if (state.drawStroke) {
-      return [{ color: state.lineColor, width: outlineWidth }];
+      return [{ color: state.lineColor, width: outlineWidth, tint: true }];
     }
     return [];
   }
@@ -2268,10 +2282,13 @@
     layer.miterLimit = 2;
 
     getLineSets(maxSide).forEach((set) => {
-      const strokes = set.strokes.map((stroke) => ({ ...stroke, style: withAlpha(stroke.color, alpha) }));
       set.paths.forEach((path) => {
         const line = buildReactiveLine(path.points, grid, geos);
-        strokes.forEach((stroke) => strokeLinePath(layer, line, stroke.style, stroke.width));
+        set.strokes.forEach((stroke) => {
+          getStrokePieces(line, stroke, geos).forEach((piece) => {
+            strokeLinePath(layer, piece.commands, withAlpha(piece.color, alpha), stroke.width);
+          });
+        });
       });
     });
 
@@ -2282,6 +2299,8 @@
   // Reacted line as a flat list of commands: [isMove (1/0), x, y, ...]. Computed once, stroked once per style.
   function buildReactiveLine(points, grid, geos) {
     const commands = [];
+    // With tinting objects, owners[n] is the influencing object of the n-th point (see reactPoint).
+    const owners = geos.tinted ? (commands.owners = []) : null;
     if (!points.length) {
       return commands;
     }
@@ -2294,6 +2313,9 @@
       const single = gridRatioToCanvas(points[0], grid);
       const reacted = reactPoint(single.x, single.y, geos, minStep);
       commands.push(1, reacted.x - 0.01, reacted.y, 0, reacted.x + 0.01, reacted.y);
+      if (owners) {
+        owners.push(reacted.owner, reacted.owner);
+      }
       return commands;
     }
 
@@ -2335,11 +2357,51 @@
         } else {
           commands.push(0, reacted.x, reacted.y);
         }
+        if (owners) {
+          owners.push(reacted.owner);
+        }
         last = reacted;
       }
     }
 
     return commands;
+  }
+
+  // Splits a line into pieces per influencing object: Map(owner -> commands). Owner -1 keeps the line colour.
+  function splitLineByOwner(commands) {
+    const owners = commands.owners;
+    const parts = new Map();
+    const lastPoint = new Map();
+    for (let index = 0, point = 0; index < commands.length; index += 3, point += 1) {
+      if (commands[index]) {
+        continue;
+      }
+      const owner = owners[point];
+      let part = parts.get(owner);
+      if (!part) {
+        part = [];
+        parts.set(owner, part);
+      }
+      if (lastPoint.get(owner) !== point - 1) {
+        part.push(1, commands[index - 2], commands[index - 1]);
+      }
+      part.push(0, commands[index + 1], commands[index + 2]);
+      lastPoint.set(owner, point);
+    }
+    return parts;
+  }
+
+  // Line pieces with their colours for one stroke. Only the stroke that carries the colour (the fill, or the
+  // outline when Fill is off) takes an object's tint; the outline under a fill stays one piece.
+  function getStrokePieces(line, stroke, geos) {
+    if (!stroke.tint || !line.owners || !line.owners.some((owner) => owner >= 0)) {
+      return [{ commands: line, color: stroke.color }];
+    }
+    const pieces = [];
+    splitLineByOwner(line).forEach((commands, owner) => {
+      pieces.push({ commands, color: owner >= 0 ? geos[owner].tintColor : stroke.color });
+    });
+    return pieces;
   }
 
   function strokeLinePath(target, commands, color, weight) {
@@ -2378,11 +2440,15 @@
     };
   }
 
+  // With Tint Lines on any object, the result also says which object influences the point most
+  // (owner: its index in geos, or -1 when that object doesn't tint).
   function reactPoint(x, y, geos, step) {
     const reaction = state.reaction / 100;
     let output = { x, y };
+    let owner = -1;
+    let strongest = 0;
 
-    geos.forEach((geo) => {
+    geos.forEach((geo, index) => {
       const shapeRadius = Math.max(geo.width, geo.height) / 2;
       const reach = geo.gap + (geo.gap * 2.3 + shapeRadius * 0.55) * reaction * Math.abs(geo.force);
       const minDistance = Math.hypot(output.x - geo.x, output.y - geo.y) - geo.boundRadius;
@@ -2395,6 +2461,10 @@
 
       if (field.signedDistance <= geo.gap) {
         output = projectOutsideIsolation(output.x, output.y, geo, geo.gap + step * 0.9);
+        if (geos.tinted && strongest < 2) {
+          strongest = 2;
+          owner = index;
+        }
         return;
       }
 
@@ -2403,6 +2473,10 @@
       }
 
       const falloff = Math.pow(1 - distance / reach, 2);
+      if (geos.tinted && falloff > strongest) {
+        strongest = falloff;
+        owner = index;
+      }
       const normal = field.normal;
       const spin = geo.swirl;
       const tangent = { x: -normal.y * spin, y: normal.x * spin };
@@ -2417,6 +2491,9 @@
       };
     });
 
+    if (geos.tinted) {
+      output.owner = owner >= 0 && geos[owner].tint ? owner : -1;
+    }
     return output;
   }
 
@@ -3357,12 +3434,15 @@
         }>`
       );
       set.paths.forEach((path) => {
-        const d = lineCommandsToSvg(buildReactiveLine(path.points, grid, geos));
-        if (d) {
-          set.strokes.forEach((stroke) => {
-            out.push(`<path d="${d}" stroke="${stroke.color}" stroke-width="${svgNumber(stroke.width)}"/>`);
+        const line = buildReactiveLine(path.points, grid, geos);
+        set.strokes.forEach((stroke) => {
+          getStrokePieces(line, stroke, geos).forEach((piece) => {
+            const d = lineCommandsToSvg(piece.commands);
+            if (d) {
+              out.push(`<path d="${d}" stroke="${piece.color}" stroke-width="${svgNumber(stroke.width)}"/>`);
+            }
           });
-        }
+        });
       });
       out.push("</g>");
     });
@@ -5300,6 +5380,8 @@
     els.isolationFill.addEventListener("change", () => updateSelectedIsolation("fill", els.isolationFill.checked));
     els.isolationFillColor.addEventListener("input", () => updateSelectedIsolation("fillColor", els.isolationFillColor.value, "isolationFillColor"));
     els.isolationStrokeColor.addEventListener("input", () => updateSelectedIsolation("strokeColor", els.isolationStrokeColor.value, "isolationStrokeColor"));
+    els.isolationTint.addEventListener("change", () => updateSelectedIsolation("tintLines", els.isolationTint.checked));
+    els.isolationTintColor.addEventListener("input", () => updateSelectedIsolation("tintColor", els.isolationTintColor.value, "isolationTintColor"));
     els.isolationStrokeWidth.addEventListener("input", () => updateSelectedIsolation("strokeWidth", Number(els.isolationStrokeWidth.value), "isolationStrokeWidth"));
 
     els.centerIsolation.addEventListener("click", () => {
