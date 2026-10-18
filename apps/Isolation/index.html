@@ -593,6 +593,57 @@
           <input id="presetFile" type="file" accept=".json,application/json" hidden />
           </div>
         </details>
+
+        <details class="control-group">
+          <summary>Live</summary>
+          <div class="group-body">
+          <div class="mic-row">
+            <button id="micToggle" type="button" title="Let the sound around you move the objects. The sound stays on this computer.">Microphone</button>
+            <div class="audio-meter" aria-hidden="true"><span id="audioMeterFill"></span></div>
+          </div>
+          <p id="micStatus" class="meter"></p>
+          <div class="audio-row" title="Pushes harder on the beat">
+            <label for="audioForceBand">Force</label>
+            <select id="audioForceBand" aria-label="Force follows">
+              <option value="off">Off</option>
+              <option value="volume">Volume</option>
+              <option value="bass">Bass</option>
+              <option value="mid">Mid</option>
+              <option value="high">High</option>
+            </select>
+            <input id="audioForceAmount" type="range" min="0" max="100" step="1" value="50" aria-label="Force amount" />
+            <output id="audioForceValue">50</output>
+          </div>
+          <div class="audio-row" title="Opens more space around objects">
+            <label for="audioGapBand">Silence</label>
+            <select id="audioGapBand" aria-label="Silence follows">
+              <option value="off">Off</option>
+              <option value="volume">Volume</option>
+              <option value="bass">Bass</option>
+              <option value="mid">Mid</option>
+              <option value="high">High</option>
+            </select>
+            <input id="audioGapAmount" type="range" min="0" max="100" step="1" value="50" aria-label="Silence amount" />
+            <output id="audioGapValue">50</output>
+          </div>
+          <div class="audio-row" title="Makes objects grow">
+            <label for="audioSizeBand">Size</label>
+            <select id="audioSizeBand" aria-label="Size follows">
+              <option value="off">Off</option>
+              <option value="volume">Volume</option>
+              <option value="bass">Bass</option>
+              <option value="mid">Mid</option>
+              <option value="high">High</option>
+            </select>
+            <input id="audioSizeAmount" type="range" min="0" max="100" step="1" value="50" aria-label="Size amount" />
+            <output id="audioSizeValue">50</output>
+          </div>
+          <label class="check">
+            <input id="audioSelectedOnly" type="checkbox" />
+            <span>Selected objects only</span>
+          </label>
+          </div>
+        </details>
       </aside>
 
       <section class="stage" aria-label="drawing area">

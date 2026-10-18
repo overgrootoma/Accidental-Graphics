@@ -337,6 +337,43 @@ output,
   line-height: 1.2;
 }
 
+.mic-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.audio-meter {
+  height: 8px;
+  border: 1px solid var(--rule);
+}
+
+.audio-meter span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--ink);
+}
+
+.audio-row {
+  display: grid;
+  grid-template-columns: 64px 80px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  margin-top: 6px;
+}
+
+.audio-row select {
+  min-height: 26px;
+  padding: 2px 4px;
+}
+
+.audio-row + .check {
+  margin-top: 10px;
+}
+
 .camera-row {
   display: flex;
   align-items: center;

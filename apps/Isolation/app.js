@@ -177,6 +177,12 @@
     textSize: 80,
     textTracking: 0,
     cameraMirror: true,
+    audio: {
+      force: { band: "off", amount: 50 },
+      gap: { band: "off", amount: 50 },
+      size: { band: "off", amount: 50 },
+      selectedOnly: false,
+    },
     showImage: false,
     paths: [],
     animation: {
@@ -251,6 +257,19 @@
     imageImport: document.getElementById("imageImport"),
     imageSource: document.getElementById("imageSource"),
     cameraRow: document.getElementById("cameraRow"),
+    micToggle: document.getElementById("micToggle"),
+    micStatus: document.getElementById("micStatus"),
+    audioMeterFill: document.getElementById("audioMeterFill"),
+    audio_force_band: document.getElementById("audioForceBand"),
+    audio_force_amount: document.getElementById("audioForceAmount"),
+    audio_force_value: document.getElementById("audioForceValue"),
+    audio_gap_band: document.getElementById("audioGapBand"),
+    audio_gap_amount: document.getElementById("audioGapAmount"),
+    audio_gap_value: document.getElementById("audioGapValue"),
+    audio_size_band: document.getElementById("audioSizeBand"),
+    audio_size_amount: document.getElementById("audioSizeAmount"),
+    audio_size_value: document.getElementById("audioSizeValue"),
+    audioSelectedOnly: document.getElementById("audioSelectedOnly"),
     cameraMirror: document.getElementById("cameraMirror"),
     cameraFreeze: document.getElementById("cameraFreeze"),
     imageFileRow: document.getElementById("imageFileRow"),
@@ -433,6 +452,16 @@
   const live = {
     raf: 0,
   };
+  const audioIn = {
+    stream: null,
+    context: null,
+    input: null,
+    analyser: null,
+    frequencies: null,
+    waveform: null,
+    levels: { volume: 0, bass: 0, mid: 0, high: 0 },
+    error: "",
+  };
   const textImage = {
     key: "",
     canvas: null,
@@ -530,6 +559,7 @@
     // The camera is never restored on load, so the app does not ask for it by itself.
     merged.imageSource = merged.imageSource === "text" ? "text" : "image";
     merged.cameraMirror = merged.cameraMirror !== false;
+    merged.audio = normalizeAudioSettings(saved.audio);
     merged.textContent = typeof merged.textContent === "string" ? merged.textContent.slice(0, MAX_TEXT_LENGTH) : base.textContent;
     merged.textFont = TEXT_FONTS[merged.textFont] ? merged.textFont : base.textFont;
     merged.textFontName = typeof merged.textFontName === "string" ? merged.textFontName.slice(0, 60) : "";
@@ -1843,7 +1873,7 @@
   // --- live loop: renders continuously while the camera (or later audio) is live ---
 
   function isLive() {
-    return Boolean(camera.stream);
+    return Boolean(camera.stream || audioIn.stream);
   }
 
   function startLiveLoop() {
@@ -1861,11 +1891,168 @@
     if (camera.frame === 1 && changed) {
       syncSourceControls();
     }
+    const listening = readAudioLevels();
     // Playback and video export render on their own; here only the plain live view.
-    if (changed && !motion.playing && !videoExport.running) {
+    if ((changed || listening) && !motion.playing && !videoExport.running) {
       render(ctx, canvas.width, canvas.height, true);
     }
     live.raf = requestAnimationFrame(liveTick);
+  }
+
+  // --- audio ---
+  // The microphone is analysed in this browser only. Levels are smoothed 0..1 values per band; each
+  // mapping row turns one into a multiplier (1 to 3 at full amount) for force, silence or size.
+
+  const AUDIO_BANDS = {
+    bass: [20, 250],
+    mid: [250, 2000],
+    high: [2000, 8000],
+  };
+
+  function normalizeAudioSettings(audio) {
+    const source = audio && typeof audio === "object" ? audio : {};
+    const row = (value) => ({
+      band: value && ["off", "volume", "bass", "mid", "high"].includes(value.band) ? value.band : "off",
+      amount: clampNumber(value && value.amount, 0, 100, 50),
+    });
+    return { force: row(source.force), gap: row(source.gap), size: row(source.size), selectedOnly: source.selectedOnly === true };
+  }
+
+  function getAudioBoost(item) {
+    const boost = { force: 1, gap: 1, size: 1 };
+    if (!audioIn.stream || (state.audio.selectedOnly && !getSelectedIds().includes(item.id))) {
+      return boost;
+    }
+    Object.keys(boost).forEach((key) => {
+      const mapping = state.audio[key];
+      if (mapping.band !== "off") {
+        boost[key] = 1 + (mapping.amount / 100) * 2 * (audioIn.levels[mapping.band] || 0);
+      }
+    });
+    return boost;
+  }
+
+  async function toggleMicrophone() {
+    if (audioIn.stream) {
+      stopMicrophone();
+      return;
+    }
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+      audioIn.error = "No microphone in this browser";
+      syncAudioControls();
+      return;
+    }
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      const context = audioIn.context || new AudioContextClass();
+      audioIn.context = context;
+      await context.resume();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.5;
+      // Only analysed, never played back, so there is no feedback.
+      audioIn.input = context.createMediaStreamSource(stream);
+      audioIn.input.connect(analyser);
+      audioIn.analyser = analyser;
+      audioIn.frequencies = new Uint8Array(analyser.frequencyBinCount);
+      audioIn.waveform = new Uint8Array(analyser.fftSize);
+      audioIn.stream = stream;
+      audioIn.error = "";
+      startLiveLoop();
+    } catch (error) {
+      audioIn.error = error && error.name === "NotAllowedError" ? "Microphone not allowed" : "Microphone not available";
+    }
+    syncAudioControls();
+  }
+
+  function stopMicrophone() {
+    if (audioIn.stream) {
+      audioIn.stream.getTracks().forEach((track) => track.stop());
+    }
+    if (audioIn.input) {
+      audioIn.input.disconnect();
+    }
+    audioIn.stream = null;
+    audioIn.input = null;
+    audioIn.analyser = null;
+    audioIn.levels = { volume: 0, bass: 0, mid: 0, high: 0 };
+    syncAudioControls();
+    scheduleRender();
+  }
+
+  // Reads the analyser once per frame; returns true while the microphone is on.
+  function readAudioLevels() {
+    const analyser = audioIn.analyser;
+    if (!audioIn.stream || !analyser) {
+      return false;
+    }
+    analyser.getByteFrequencyData(audioIn.frequencies);
+    analyser.getByteTimeDomainData(audioIn.waveform);
+    const binWidth = audioIn.context.sampleRate / analyser.fftSize;
+    const band = ([low, high]) => {
+      const from = Math.max(1, Math.floor(low / binWidth));
+      const to = Math.min(audioIn.frequencies.length - 1, Math.ceil(high / binWidth));
+      let sum = 0;
+      for (let index = from; index <= to; index += 1) {
+        sum += audioIn.frequencies[index];
+      }
+      return Math.min(1, (sum / Math.max(1, to - from + 1) / 255) * 1.5);
+    };
+    let square = 0;
+    for (let index = 0; index < audioIn.waveform.length; index += 1) {
+      const value = (audioIn.waveform[index] - 128) / 128;
+      square += value * value;
+    }
+    const next = {
+      volume: Math.min(1, Math.sqrt(square / audioIn.waveform.length) * 3),
+      bass: band(AUDIO_BANDS.bass),
+      mid: band(AUDIO_BANDS.mid),
+      high: band(AUDIO_BANDS.high),
+    };
+    // Quick to rise, slower to fall, so shapes pulse instead of flicker.
+    Object.keys(next).forEach((key) => {
+      const previous = audioIn.levels[key] || 0;
+      audioIn.levels[key] = next[key] > previous ? previous + (next[key] - previous) * 0.6 : previous + (next[key] - previous) * 0.15;
+    });
+    els.audioMeterFill.style.width = `${Math.round(audioIn.levels.volume * 100)}%`;
+    return true;
+  }
+
+  function syncAudioControls() {
+    const on = Boolean(audioIn.stream);
+    els.micToggle.textContent = on ? "Microphone on" : "Microphone";
+    els.micToggle.classList.toggle("is-active", on);
+    els.micStatus.textContent = audioIn.error;
+    if (!on) {
+      els.audioMeterFill.style.width = "0%";
+    }
+    ["force", "gap", "size"].forEach((key) => {
+      const mapping = state.audio[key];
+      els[`audio_${key}_band`].value = mapping.band;
+      els[`audio_${key}_amount`].value = mapping.amount;
+      els[`audio_${key}_amount`].disabled = mapping.band === "off";
+      els[`audio_${key}_value`].textContent = Math.round(mapping.amount);
+    });
+    els.audioSelectedOnly.checked = state.audio.selectedOnly;
+  }
+
+  function wireAudioControls() {
+    els.micToggle.addEventListener("click", toggleMicrophone);
+    ["force", "gap", "size"].forEach((key) => {
+      els[`audio_${key}_band`].addEventListener("change", () => {
+        state.audio[key].band = els[`audio_${key}_band`].value;
+        commitChange();
+      });
+      els[`audio_${key}_amount`].addEventListener("input", () => {
+        state.audio[key].amount = Number(els[`audio_${key}_amount`].value);
+        commitChange({ merge: `audio_${key}_amount` });
+      });
+    });
+    els.audioSelectedOnly.addEventListener("change", () => {
+      state.audio.selectedOnly = els.audioSelectedOnly.checked;
+      commitChange();
+    });
   }
 
   function getTextFontFamily() {
@@ -2262,6 +2449,7 @@
     els.randomLineLength.value = state.randomLineLength;
     syncLayerControls();
     syncSourceControls();
+    syncAudioControls();
     els.imageDetail.value = state.imageDetail;
     els.imageScale.value = state.imageScale;
     els.imageOffsetX.value = state.imageOffsetX;
@@ -2839,9 +3027,11 @@
     const minSide = Math.min(grid.width, grid.height);
     const step = Math.max(grid.stepX, grid.stepY);
     const geos = state.isolations.filter((item) => item.enabled !== false).map((item) => {
-      const width = minSide * (item.width / 100);
-      const height = minSide * (item.height / 100);
-      const gap = minSide * (item.gap / 100) + step * 0.45;
+      // Live audio can push force, silence and size up for a moment without changing the drawing itself.
+      const audio = getAudioBoost(item);
+      const width = minSide * (item.width / 100) * audio.size;
+      const height = minSide * (item.height / 100) * audio.size;
+      const gap = minSide * (item.gap / 100) * audio.gap + step * 0.45;
 
       const geo = {
         id: item.id,
@@ -2857,7 +3047,7 @@
         width,
         height,
         rotation: (item.rotation / 180) * Math.PI,
-        force: item.force / 100,
+        force: (item.force / 100) * audio.force,
         swirl: item.swirl / 100,
         tint: item.tintLines === true,
         tintColor: item.tintColor,
@@ -6067,6 +6257,7 @@
     wireLayerControls();
     wireArrangeControls();
     wireSourceControls();
+    wireAudioControls();
     els.clearImage.addEventListener("click", clearImportedImage);
 
     els.isolationSelect.addEventListener("change", () => {
