@@ -6,6 +6,7 @@
   const MAX_PATHS = 120;
   const MAX_POINTS_PER_PATH = 1800;
   const MAX_CUSTOM_ISOLATION_POINTS = 900;
+  const MAX_IMAGE_RUNS = 150000;
   const GRID_SIZE_MIN = 9;
   const GRID_SIZE_MAX = 201;
   const STORAGE_KEY = "isolation-field-state";
@@ -430,30 +431,37 @@
     updateImageStatus();
   }
 
+  // Samples the image on a lattice that lies exactly on the grid: Detail samples per grid cell,
+  // so every grid row, column and diagonal gets exactly one line of samples.
   function buildThresholdPaths(image, grid) {
-    const imageWidth = image.naturalWidth || image.width;
-    const imageHeight = image.naturalHeight || image.height;
-    const imageAspect = imageWidth / imageHeight;
-    const longSide = clamp(Math.round(state.gridSize * state.imageDetail), 36, 280);
-    const sampleWidth = imageAspect >= 1 ? longSide : Math.max(2, Math.round(longSide * imageAspect));
-    const sampleHeight = imageAspect >= 1 ? Math.max(2, Math.round(longSide / imageAspect)) : longSide;
+    const detail = Math.max(1, Math.round(state.imageDetail));
+    const sampleWidth = (grid.columns - 1) * detail + 1;
+    const sampleHeight = (grid.rows - 1) * detail + 1;
     const sampleCanvas = document.createElement("canvas");
     sampleCanvas.width = sampleWidth;
     sampleCanvas.height = sampleHeight;
     const sample = sampleCanvas.getContext("2d", { willReadFrequently: true });
+    const placement = getImagePlacement(image, grid);
 
+    // Pixel centre i sits at grid ratio i / (sampleWidth - 1).
     sample.clearRect(0, 0, sampleWidth, sampleHeight);
-    sample.drawImage(image, 0, 0, sampleWidth, sampleHeight);
+    sample.imageSmoothingEnabled = true;
+    sample.imageSmoothingQuality = "high";
+    sample.drawImage(
+      image,
+      placement.x * (sampleWidth - 1) + 0.5,
+      placement.y * (sampleHeight - 1) + 0.5,
+      placement.width * (sampleWidth - 1),
+      placement.height * (sampleHeight - 1)
+    );
 
     const data = sample.getImageData(0, 0, sampleWidth, sampleHeight).data;
     const paths = [];
-    const maxRuns = 9000;
-    const placement = getImagePlacement(image, grid);
     const threshold = state.imageThreshold;
 
     const toNorm = (x, y) => ({
-      x: placement.x + (sampleWidth <= 1 ? 0.5 : x / (sampleWidth - 1)) * placement.width,
-      y: placement.y + (sampleHeight <= 1 ? 0.5 : y / (sampleHeight - 1)) * placement.height,
+      x: x / (sampleWidth - 1),
+      y: y / (sampleHeight - 1),
     });
 
     const addRuns = (starts, stepX, stepY) => {
@@ -477,7 +485,7 @@
             pushThresholdRun(runStart, lastActive, toNorm, paths);
             runStart = null;
             lastActive = null;
-            if (paths.length >= maxRuns) {
+            if (paths.length >= MAX_IMAGE_RUNS) {
               return true;
             }
           }
@@ -488,7 +496,7 @@
 
         if (runStart) {
           pushThresholdRun(runStart, lastActive, toNorm, paths);
-          if (paths.length >= maxRuns) {
+          if (paths.length >= MAX_IMAGE_RUNS) {
             return true;
           }
         }
@@ -497,22 +505,16 @@
       return false;
     };
 
-    const horizontalStarts = Array.from({ length: sampleHeight }, (_, y) => ({ x: 0, y }));
-    const verticalStarts = Array.from({ length: sampleWidth }, (_, x) => ({ x, y: 0 }));
-    const diagonalDownStarts = [
-      ...Array.from({ length: sampleWidth }, (_, x) => ({ x, y: 0 })),
-      ...Array.from({ length: Math.max(0, sampleHeight - 1) }, (_, index) => ({ x: 0, y: index + 1 })),
-    ];
-    const diagonalUpStarts = [
-      ...Array.from({ length: sampleWidth }, (_, x) => ({ x, y: sampleHeight - 1 })),
-      ...Array.from({ length: Math.max(0, sampleHeight - 1) }, (_, index) => ({ x: 0, y: sampleHeight - 2 - index })),
-    ];
+    const columnStarts = (y) => Array.from({ length: grid.columns }, (_, column) => ({ x: column * detail, y }));
+    const rowStarts = (x) => Array.from({ length: grid.rows }, (_, row) => ({ x, y: row * detail }));
+    const lastRow = sampleHeight - 1;
 
-    if (state.imageLinesHorizontal && addRuns(horizontalStarts, 1, 0)) return paths;
-    if (state.imageLinesVertical && addRuns(verticalStarts, 0, 1)) return paths;
+    if (state.imageLinesHorizontal && addRuns(rowStarts(0), 1, 0)) return paths;
+    if (state.imageLinesVertical && addRuns(columnStarts(0), 0, 1)) return paths;
     if (state.imageLinesDiagonal) {
-      if (addRuns(diagonalDownStarts, 1, 1)) return paths;
-      if (addRuns(diagonalUpStarts, 1, -1)) return paths;
+      // Down-right diagonals start on the top and left edge, up-right ones on the bottom and left edge.
+      if (addRuns([...columnStarts(0), ...rowStarts(0).slice(1)], 1, 1)) return paths;
+      if (addRuns([...columnStarts(lastRow), ...rowStarts(0).slice(0, -1)], 1, -1)) return paths;
     }
 
     return paths;
