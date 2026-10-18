@@ -487,6 +487,16 @@ output,
   display: none;
 }
 
+.record-toggle::before {
+  content: "● ";
+}
+
+.timeline-bar .record-toggle.is-recording {
+  border-color: #ff2a00;
+  background: #ff2a00;
+  color: var(--paper);
+}
+
 .time-display {
   min-width: 112px;
   text-align: left;

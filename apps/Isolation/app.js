@@ -35,6 +35,7 @@
   const DEFAULT_EASE = "inOut";
   const KEY_TIME_EPSILON = 1 / 120;
   const KEY_SNAP_FPS = 30;
+  const RECORD_INTERVAL = 1 / 15;
   // Where the time axis starts and ends inside the timeline (label column + inset), see .timeline-body in the CSS.
   const TIMELINE_TRACK_LEFT = 158;
   const TIMELINE_TRACK_RIGHT = 8;
@@ -267,6 +268,7 @@
     timelineRows: document.getElementById("timelineRows"),
     timelineEmpty: document.getElementById("timelineEmpty"),
     playToggle: document.getElementById("playToggle"),
+    recordToggle: document.getElementById("recordToggle"),
     timeDisplay: document.getElementById("timeDisplay"),
     animationDuration: document.getElementById("animationDuration"),
     keyEase: document.getElementById("keyEase"),
@@ -285,6 +287,7 @@
     drag: null,
     timelineOpen: false,
     keyButtons: [],
+    recording: null,
   };
   const state = loadState();
   const importedImage = {
@@ -766,6 +769,12 @@
     if (options.image) {
       importedImage.dirty = true;
     }
+    if (motion.recording) {
+      // While recording, changes are sampled by the recorder and saved as keyframes when it stops.
+      syncControls();
+      scheduleRender();
+      return;
+    }
     if (options.noAutoKey) {
       motion.baseline = listMotionValues();
     } else {
@@ -815,7 +824,7 @@
   }
 
   function undo() {
-    if (pointer.down || !history.undo.length) {
+    if (pointer.down || motion.recording || !history.undo.length) {
       return;
     }
     history.redo.push(history.current);
@@ -823,7 +832,7 @@
   }
 
   function redo() {
-    if (pointer.down || !history.redo.length) {
+    if (pointer.down || motion.recording || !history.redo.length) {
       return;
     }
     history.undo.push(history.current);
@@ -3252,10 +3261,11 @@
     motion.time = clamp(t, 0, animation.duration);
     motion.lineScale = 1;
 
+    const touched = motion.recording ? motion.recording.touched : null;
     Object.keys(animation.tracks).forEach((key) => {
       const def = getMotionParam(key);
       const keys = animation.tracks[key];
-      if (!def || !keys.length) {
+      if (!def || !keys.length || (touched && touched.has(key))) {
         return;
       }
       const value = evaluateTrack(def, keys, motion.time);
@@ -3393,6 +3403,10 @@
     if (shouldPlay === motion.playing) {
       return;
     }
+    if (!shouldPlay && motion.recording) {
+      stopRecording();
+      return;
+    }
     motion.playing = shouldPlay;
     if (shouldPlay) {
       if (!state.animation.loop && motion.time >= state.animation.duration - 1e-6) {
@@ -3417,8 +3431,11 @@
     let time = motion.time + Math.max(0, now - motion.lastTick) / 1000;
     motion.lastTick = now;
     let finished = false;
+    if (motion.recording) {
+      captureRecordingChanges(Math.min(time, duration));
+    }
     if (time >= duration) {
-      if (state.animation.loop) {
+      if (state.animation.loop && !motion.recording) {
         time %= duration;
       } else {
         time = duration;
@@ -3435,7 +3452,10 @@
     if (!syncPanel) {
       updateTimelinePlayhead();
     }
-    onPlaybackFrame(time);
+    if (motion.recording) {
+      motion.recording.last = listMotionValues();
+      motion.recording.lastTime = time;
+    }
     render(ctx, canvas.width, canvas.height);
 
     if (finished) {
@@ -3445,8 +3465,154 @@
     motion.raf = requestAnimationFrame(playbackTick);
   }
 
-  // Filled in by record mode (step 3b).
-  function onPlaybackFrame() {}
+  // --- record ---
+  // Rec plays from the playhead and samples every animatable value. A parameter you change is taken out of
+  // playback until you stop, then its samples are thinned out to the few keyframes the shape needs.
+
+  function toggleRecording() {
+    if (motion.recording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }
+
+  function startRecording() {
+    if (motion.recording) {
+      return;
+    }
+    endHistoryBurst();
+    if (motion.playing) {
+      togglePlayback(false);
+    }
+    if (motion.time >= state.animation.duration - 1e-6) {
+      motion.time = 0;
+    }
+    applyAnimationAt(motion.time);
+    motion.recording = {
+      touched: new Set(),
+      samples: new Map(),
+      last: listMotionValues(),
+      lastTime: motion.time,
+    };
+    togglePlayback(true);
+    updateTransportUi();
+  }
+
+  function captureRecordingChanges(t) {
+    const recording = motion.recording;
+    const now = listMotionValues();
+    now.forEach((value, key) => {
+      const before = recording.last.get(key);
+      if (sameMotionValue(value, before)) {
+        return;
+      }
+      let samples = recording.samples.get(key);
+      if (!samples) {
+        // Keep the value from just before the change, so the parameter holds it until you touched it.
+        samples = [{ t: recording.lastTime, v: before }];
+        recording.samples.set(key, samples);
+        recording.touched.add(key);
+      }
+      const previous = samples.length > 1 ? samples[samples.length - 2] : null;
+      if (previous && t - previous.t < RECORD_INTERVAL) {
+        samples[samples.length - 1] = { t, v: value };
+      } else {
+        samples.push({ t, v: value });
+      }
+    });
+    recording.last = now;
+    recording.lastTime = t;
+  }
+
+  function stopRecording() {
+    const recording = motion.recording;
+    if (!recording) {
+      return;
+    }
+    captureRecordingChanges(motion.time);
+    const tracks = state.animation.tracks;
+    recording.samples.forEach((samples, key) => {
+      const def = getMotionParam(key);
+      if (!def || (def.objectId && !state.isolations.some((item) => item.id === def.objectId)) || samples.length < 2) {
+        return;
+      }
+      const start = samples[0].t;
+      const end = samples[samples.length - 1].t;
+      const kept = (tracks[key] || []).filter((frame) => frame.t < start - KEY_TIME_EPSILON || frame.t > end + KEY_TIME_EPSILON);
+      const recorded = reduceSamples(def, samples).map((sample) => ({ t: roundTime(sample.t), v: sample.v, e: "linear" }));
+      const merged = [];
+      kept
+        .concat(recorded)
+        .sort((a, b) => a.t - b.t)
+        .forEach((frame) => {
+          const last = merged[merged.length - 1];
+          if (last && Math.abs(last.t - frame.t) < KEY_TIME_EPSILON) {
+            merged[merged.length - 1] = frame;
+          } else {
+            merged.push(frame);
+          }
+        });
+      tracks[key] = merged;
+    });
+
+    const count = recording.samples.size;
+    motion.recording = null;
+    motion.playing = false;
+    cancelAnimationFrame(motion.raf);
+    motion.raf = 0;
+    motion.selected.clear();
+    applyAnimationAt(motion.time, { sync: false, render: false });
+    commitChange({ noAutoKey: true });
+    updateTransportUi();
+    if (count) {
+      setTimelineOpen(true);
+    }
+  }
+
+  // Thins recorded samples out to the keyframes needed for the same shape (Ramer-Douglas-Peucker, 1% of the range).
+  function reduceSamples(def, samples) {
+    if (def.kind === "bool" || def.kind === "select") {
+      return samples.filter((sample, index) => index === 0 || sample.v !== samples[index - 1].v);
+    }
+    const vectors = samples.map((sample) => {
+      if (def.kind === "color") {
+        const rgb = hexToRgb(sample.v);
+        return [rgb.r, rgb.g, rgb.b];
+      }
+      return [sample.v];
+    });
+    let span = 0;
+    for (let dim = 0; dim < vectors[0].length; dim += 1) {
+      const values = vectors.map((vector) => vector[dim]);
+      span = Math.max(span, Math.max(...values) - Math.min(...values));
+    }
+    const tolerance = Math.max(span * 0.01, 1e-6);
+    const keep = samples.map((sample, index) => index === 0 || index === samples.length - 1);
+    const stack = [[0, samples.length - 1]];
+    while (stack.length) {
+      const [from, to] = stack.pop();
+      let worst = -1;
+      let worstDistance = tolerance;
+      for (let index = from + 1; index < to; index += 1) {
+        const amount = (samples[index].t - samples[from].t) / Math.max(1e-9, samples[to].t - samples[from].t);
+        let distance = 0;
+        for (let dim = 0; dim < vectors[index].length; dim += 1) {
+          const expected = vectors[from][dim] + (vectors[to][dim] - vectors[from][dim]) * amount;
+          distance = Math.max(distance, Math.abs(vectors[index][dim] - expected));
+        }
+        if (distance > worstDistance) {
+          worst = index;
+          worstDistance = distance;
+        }
+      }
+      if (worst >= 0) {
+        keep[worst] = true;
+        stack.push([from, worst], [worst, to]);
+      }
+    }
+    return samples.filter((sample, index) => keep[index]);
+  }
 
   function seek(t) {
     if (motion.playing) {
@@ -3481,8 +3647,10 @@
   }
 
   function updateTransportUi() {
-    els.playToggle.textContent = motion.playing ? "Pause" : "Play";
-    els.playToggle.classList.toggle("is-active", motion.playing);
+    els.playToggle.textContent = motion.playing && !motion.recording ? "Pause" : "Play";
+    els.playToggle.classList.toggle("is-active", motion.playing && !motion.recording);
+    els.recordToggle.textContent = motion.recording ? "Stop" : "Rec";
+    els.recordToggle.classList.toggle("is-recording", Boolean(motion.recording));
     setInputValue(els.animationDuration, state.animation.duration);
     const trackCount = Object.keys(state.animation.tracks).length;
     els.timelineToggle.textContent = trackCount && !motion.timelineOpen ? `Timeline · ${trackCount} animated` : "Timeline";
@@ -3796,6 +3964,7 @@
   function wireTimeline() {
     els.timelineToggle.addEventListener("click", () => setTimelineOpen(!motion.timelineOpen));
     els.playToggle.addEventListener("click", () => togglePlayback());
+    els.recordToggle.addEventListener("click", toggleRecording);
     els.animationDuration.addEventListener("change", () => {
       state.animation.duration = clampNumber(els.animationDuration.value, MIN_DURATION, MAX_DURATION, state.animation.duration);
       applyAnimationAt(motion.time, { sync: false, render: false });
@@ -4256,6 +4425,11 @@
     } else if (key === "i") {
       state.showImage = !state.showImage;
       commitChange();
+    } else if (key === "r" && event.shiftKey) {
+      if (!motion.timelineOpen) {
+        setTimelineOpen(true);
+      }
+      toggleRecording();
     } else if (key === "r") {
       randomizeAll();
     } else if (key === "e" && event.shiftKey) {

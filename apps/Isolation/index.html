@@ -48,6 +48,7 @@
               <li><span>Timeline</span><kbd>T</kbd></li>
               <li><span>Play / pause</span><kbd>Space</kbd></li>
               <li><span>To start</span><kbd>Home</kbd></li>
+              <li><span>Record</span><kbd>⇧R</kbd></li>
               <li><span>Stop drawing / close</span><kbd>Esc</kbd></li>
             </ul>
           </div>
@@ -442,6 +443,7 @@
             <button id="timelineToggle" class="timeline-toggle" type="button" aria-expanded="false" aria-controls="timelineBody" title="Show or hide the timeline (T)">Timeline</button>
             <div id="timelineTransport" class="timeline-transport" hidden>
               <button id="playToggle" type="button" title="Play or pause (Space)">Play</button>
+              <button id="recordToggle" class="record-toggle" type="button" title="Record: plays from the playhead and turns every change you make into keyframes (⇧R)">Rec</button>
               <output id="timeDisplay" class="time-display">00:00.0 / 10.0s</output>
               <label class="timeline-field" title="Length of the animation in seconds">
                 <span>Duration</span>
@@ -462,7 +464,7 @@
               <span id="timelineRulerEnd" class="timeline-ruler-end">10.0s</span>
             </div>
             <div id="timelineRows" class="timeline-rows"></div>
-            <p id="timelineEmpty" class="timeline-empty">No keyframes yet. Press ◇ next to a setting to keyframe it at the playhead.</p>
+            <p id="timelineEmpty" class="timeline-empty">No keyframes yet. Press ◇ next to a setting to keyframe it at the playhead, or press Rec and change things.</p>
             <div class="timeline-playhead" aria-hidden="true"></div>
           </div>
         </div>
