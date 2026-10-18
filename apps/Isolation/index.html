@@ -45,6 +45,9 @@
               <li><span>Export SVG</span><kbd>⇧E</kbd></li>
               <li><span>Save preset</span><kbd><span class="mod-key">⌘</span>S</kbd></li>
               <li><span>Load preset</span><kbd><span class="mod-key">⌘</span>O</kbd></li>
+              <li><span>Timeline</span><kbd>T</kbd></li>
+              <li><span>Play / pause</span><kbd>Space</kbd></li>
+              <li><span>To start</span><kbd>Home</kbd></li>
               <li><span>Stop drawing / close</span><kbd>Esc</kbd></li>
             </ul>
           </div>
@@ -433,6 +436,35 @@
       <section class="stage" aria-label="drawing area">
         <div class="canvas-shell">
           <canvas id="workCanvas" width="2953" height="2953"></canvas>
+        </div>
+        <div class="timeline" role="region" aria-label="timeline">
+          <div class="timeline-bar">
+            <button id="timelineToggle" class="timeline-toggle" type="button" aria-expanded="false" aria-controls="timelineBody" title="Show or hide the timeline (T)">Timeline</button>
+            <div id="timelineTransport" class="timeline-transport" hidden>
+              <button id="playToggle" type="button" title="Play or pause (Space)">Play</button>
+              <output id="timeDisplay" class="time-display">00:00.0 / 10.0s</output>
+              <label class="timeline-field" title="Length of the animation in seconds">
+                <span>Duration</span>
+                <input id="animationDuration" type="number" min="0.5" max="600" step="0.5" value="10" />
+              </label>
+              <select id="keyEase" title="Easing from the selected keyframes to the next ones" hidden>
+                <option value="" disabled>Mixed</option>
+                <option value="linear">Linear</option>
+                <option value="in">Ease In</option>
+                <option value="out">Ease Out</option>
+                <option value="inOut">Ease In-Out</option>
+              </select>
+            </div>
+          </div>
+          <div id="timelineBody" class="timeline-body" hidden>
+            <div id="timelineRuler" class="timeline-ruler">
+              <span class="timeline-ruler-start">0s</span>
+              <span id="timelineRulerEnd" class="timeline-ruler-end">10.0s</span>
+            </div>
+            <div id="timelineRows" class="timeline-rows"></div>
+            <p id="timelineEmpty" class="timeline-empty">No keyframes yet. Press ◇ next to a setting to keyframe it at the playhead.</p>
+            <div class="timeline-playhead" aria-hidden="true"></div>
+          </div>
         </div>
       </section>
     </main>

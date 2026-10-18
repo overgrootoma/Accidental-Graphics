@@ -408,6 +408,8 @@ output,
 
 .stage {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -424,6 +426,240 @@ output,
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+/* Timeline: a slim strip under the canvas; opening it never covers the canvas, the canvas shrinks. */
+.timeline {
+  border: 1px solid var(--rule);
+  font-size: 12px;
+}
+
+.timeline-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 8px 0 0;
+}
+
+.timeline-bar button,
+.timeline-bar select {
+  min-height: 24px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.timeline-bar select {
+  width: auto;
+}
+
+.timeline-bar .timeline-toggle {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--rule);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.timeline-toggle::before {
+  content: "+ ";
+  font-weight: 400;
+}
+
+.timeline-toggle[aria-expanded="true"]::before {
+  content: "- ";
+}
+
+.timeline-transport {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.timeline-transport[hidden],
+.timeline-body[hidden],
+.timeline-bar [hidden] {
+  display: none;
+}
+
+.time-display {
+  min-width: 112px;
+  text-align: left;
+}
+
+.timeline-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timeline-field input {
+  width: 64px;
+  min-height: 24px;
+  padding: 2px 4px;
+}
+
+.timeline-body {
+  --playhead: 0;
+  /* Keys at 0s and at the end stay fully visible: the track area is inset from the label column and the edge. */
+  --track-left: 158px;
+  --track-right: 8px;
+  position: relative;
+  max-height: 30vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-top: 1px solid var(--rule);
+  user-select: none;
+  touch-action: none;
+}
+
+.timeline-ruler,
+.timeline-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+}
+
+.timeline-ruler {
+  position: relative;
+  height: 20px;
+  cursor: ew-resize;
+  background: repeating-linear-gradient(to right, var(--ink) 0 1px, transparent 1px calc(100% / var(--ticks, 10))) var(--track-left) 100% /
+    calc(100% - var(--track-left) - var(--track-right) + 1px) 5px no-repeat;
+}
+
+.timeline-ruler-start,
+.timeline-ruler-end {
+  position: absolute;
+  top: 3px;
+  font-size: 10px;
+}
+
+.timeline-ruler-start {
+  left: calc(var(--track-left) + 4px);
+}
+
+.timeline-ruler-end {
+  right: 4px;
+}
+
+.timeline-row {
+  height: 22px;
+  border-top: 1px solid #e2e2e2;
+}
+
+.timeline-row .timeline-label {
+  overflow: hidden;
+  min-height: 0;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid #e2e2e2;
+  font-size: 11px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-track {
+  position: relative;
+  margin: 0 var(--track-right) 0 calc(var(--track-left) - 150px);
+  cursor: ew-resize;
+}
+
+.key-dot {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  background: var(--ink);
+  transform: translate(-50%, -50%) rotate(45deg);
+  cursor: grab;
+}
+
+.key-dot.is-selected {
+  background: #006dff;
+}
+
+.timeline-empty {
+  padding: 8px 10px;
+  color: #555;
+}
+
+.timeline-empty[hidden] {
+  display: none;
+}
+
+.timeline-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--track-left) + (100% - var(--track-left) - var(--track-right)) * var(--playhead));
+  width: 1px;
+  background: #ff2a00;
+  pointer-events: none;
+}
+
+/* Keyframe buttons next to controls, only while the timeline is open. */
+.key-button {
+  display: none;
+}
+
+.motion-on .key-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  min-height: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.3;
+}
+
+.motion-on .key-button::before {
+  content: "◇";
+}
+
+.motion-on .key-button.is-animated {
+  opacity: 1;
+}
+
+.motion-on .key-button.has-key::before {
+  content: "◆";
+}
+
+.motion-on .key-button:active {
+  background: none;
+  color: var(--ink);
+}
+
+.motion-on .control {
+  grid-template-columns: 96px minmax(0, 1fr) 48px 16px;
+  gap: 10px;
+}
+
+.motion-on .check .key-button {
+  margin-left: auto;
+}
+
+.motion-on .color-row input[type="color"] {
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.field label .key-button {
+  float: right;
 }
 
 #workCanvas {

@@ -28,9 +28,67 @@
   // Longer links break in chat apps and mail; above this the drawn lines are left out of the link.
   const LINK_MAX_LENGTH = 16000;
   const HISTORY_MERGE_MS = 1000;
+  const MIN_DURATION = 0.5;
+  const MAX_DURATION = 600;
+  const DEFAULT_DURATION = 10;
+  const EASES = ["linear", "in", "out", "inOut"];
+  const DEFAULT_EASE = "inOut";
+  const KEY_TIME_EPSILON = 1 / 120;
+  const KEY_SNAP_FPS = 30;
+  // Where the time axis starts and ends inside the timeline (label column + inset), see .timeline-body in the CSS.
+  const TIMELINE_TRACK_LEFT = 158;
+  const TIMELINE_TRACK_RIGHT = 8;
+  const TIMELINE_OPEN_KEY = "isolation-timeline-open";
+  const SHAPES = ["block", "circle", "diamond", "triangle", "hexagon", "hourglass", "wedge", "cross", "star", "blob", "custom"];
+
+  // Parameters that can be keyframed. kind: number (smooth), integer, grid (odd steps), color (smooth RGB),
+  // bool and select (step). input is the control id when it differs from the state key.
+  const GLOBAL_MOTION_PARAMS = {
+    showGrid: { label: "Grid Lines", kind: "bool" },
+    gridSize: { label: "Grid Size", kind: "grid" },
+    reaction: { label: "Reaction", kind: "number" },
+    drawFill: { label: "Fill", kind: "bool" },
+    lineFillColor: { label: "Fill Color", kind: "color" },
+    fillWeight: { label: "Fill Size", kind: "number" },
+    drawStroke: { label: "Outline", kind: "bool" },
+    lineColor: { label: "Outline Color", kind: "color" },
+    strokeWeight: { label: "Outline Size", kind: "number" },
+    lineCap: { label: "Ends", kind: "select", options: ["butt", "square", "round"] },
+    lineJoin: { label: "Corners", kind: "select", options: ["miter", "bevel", "round"] },
+    imageLinesHorizontal: { label: "Horizontal", kind: "bool" },
+    imageLinesVertical: { label: "Vertical", kind: "bool" },
+    imageLinesDiagonal: { label: "Diagonal", kind: "bool" },
+    imageThreshold: { label: "Threshold", kind: "number" },
+    imageDetail: { label: "Detail", kind: "integer" },
+    imageScale: { label: "Image Scale", kind: "number" },
+    imageOffsetX: { label: "Image X", kind: "number" },
+    imageOffsetY: { label: "Image Y", kind: "number" },
+    imageBrightness: { label: "Bright", kind: "number" },
+    imageContrast: { label: "Contrast", kind: "number" },
+    imageInvert: { label: "Invert Image", kind: "bool" },
+    paperColor: { label: "Paper", kind: "color" },
+    transparentPaper: { label: "Transparent Paper", kind: "bool" },
+    transparentDrawing: { label: "Transparent Drawing", kind: "bool" },
+  };
+  const OBJECT_MOTION_PARAMS = {
+    enabled: { label: "Enabled", kind: "bool", input: "isolationEnabled" },
+    outline: { label: "Outline", kind: "bool", input: "isolationOutline" },
+    shape: { label: "Shape", kind: "select", options: SHAPES, input: "isolationShape" },
+    x: { label: "X", kind: "number", input: "isolationX" },
+    y: { label: "Y", kind: "number", input: "isolationY" },
+    width: { label: "Width", kind: "number", input: "isolationWidth" },
+    height: { label: "Height", kind: "number", input: "isolationHeight" },
+    rotation: { label: "Rotate", kind: "number", input: "isolationRotation" },
+    force: { label: "Force", kind: "number", input: "isolationForce" },
+    gap: { label: "Silence", kind: "number", input: "isolationGap" },
+    fill: { label: "Fill", kind: "bool", input: "isolationFill" },
+    fillColor: { label: "Fill Color", kind: "color", input: "isolationFillColor" },
+    strokeColor: { label: "Stroke Color", kind: "color", input: "isolationStrokeColor" },
+    strokeWidth: { label: "Stroke", kind: "number", input: "isolationStrokeWidth" },
+  };
 
   const DEFAULT_STATE = {
-    isolationModelVersion: 6,
+    isolationModelVersion: 7,
     widthCm: 25,
     heightCm: 25,
     dpi: 300,
@@ -63,6 +121,11 @@
     imageLinesDiagonal: true,
     showImage: false,
     paths: [],
+    animation: {
+      duration: DEFAULT_DURATION,
+      loop: false,
+      tracks: {},
+    },
     selectedIsolationId: "iso-1",
     isolations: [
       {
@@ -196,8 +259,33 @@
     presetStatus: document.getElementById("presetStatus"),
     shortcutsToggle: document.getElementById("shortcutsToggle"),
     shortcuts: document.getElementById("shortcuts"),
+    timelineToggle: document.getElementById("timelineToggle"),
+    timelineTransport: document.getElementById("timelineTransport"),
+    timelineBody: document.getElementById("timelineBody"),
+    timelineRuler: document.getElementById("timelineRuler"),
+    timelineRulerEnd: document.getElementById("timelineRulerEnd"),
+    timelineRows: document.getElementById("timelineRows"),
+    timelineEmpty: document.getElementById("timelineEmpty"),
+    playToggle: document.getElementById("playToggle"),
+    timeDisplay: document.getElementById("timeDisplay"),
+    animationDuration: document.getElementById("animationDuration"),
+    keyEase: document.getElementById("keyEase"),
   };
 
+  const motion = {
+    time: 0,
+    playing: false,
+    raf: 0,
+    lastTick: 0,
+    lastSync: 0,
+    lineScale: 1,
+    baseline: null,
+    selected: new Set(),
+    clipboard: [],
+    drag: null,
+    timelineOpen: false,
+    keyButtons: [],
+  };
   const state = loadState();
   const importedImage = {
     image: null,
@@ -355,7 +443,9 @@
         };
       });
     }
-    merged.isolationModelVersion = 6;
+    // Version 7 adds the animation; older saves simply have none.
+    merged.animation = normalizeAnimation(saved.animation, merged.isolations);
+    merged.isolationModelVersion = 7;
 
     if (!merged.isolations.some((item) => item.id === merged.selectedIsolationId)) {
       merged.selectedIsolationId = merged.isolations[0].id;
@@ -596,20 +686,7 @@
 
   function normalizeIsolation(item, index) {
     item = item || {};
-    const validShapes = [
-      "block",
-      "circle",
-      "diamond",
-      "triangle",
-      "hexagon",
-      "hourglass",
-      "wedge",
-      "cross",
-      "star",
-      "blob",
-      "custom",
-    ];
-    const shape = validShapes.includes(item.shape) ? item.shape : "block";
+    const shape = SHAPES.includes(item.shape) ? item.shape : "block";
     const width = clampNumber(item.width || item.size, ISO_SIZE_MIN, ISO_SIZE_MAX, 17);
     const fallbackHeight = width;
     const height = shape === "circle" ? width : clampNumber(item.height, ISO_SIZE_MIN, ISO_SIZE_MAX, fallbackHeight);
@@ -689,10 +766,17 @@
     if (options.image) {
       importedImage.dirty = true;
     }
+    if (options.noAutoKey) {
+      motion.baseline = listMotionValues();
+    } else {
+      autoKeyChanges();
+    }
     syncControls();
     scheduleRender();
     saveState();
     recordHistory(options.merge);
+    renderTimeline();
+    updateKeyButtons();
   }
 
   function makeSnapshot() {
@@ -771,8 +855,11 @@
     isolationDrawMode = false;
     customIsolationDraft.active = false;
     customIsolationDraft.points = [];
+    settleAnimationAfterLoad();
     syncControls();
     applyCanvasSize();
+    renderTimeline();
+    updateKeyButtons();
   }
 
   function pxToCm(px, dpi) {
@@ -915,16 +1002,20 @@
   }
 
   function syncIsolationSelect() {
-    while (els.isolationSelect.firstChild) {
-      els.isolationSelect.removeChild(els.isolationSelect.firstChild);
+    const labels = state.isolations.map((item, index) => (item.enabled === false ? `Object ${index + 1} Off` : `Object ${index + 1}`));
+    const signature = state.isolations.map((item, index) => `${item.id}=${labels[index]}`).join("|");
+    if (els.isolationSelect.dataset.signature !== signature) {
+      els.isolationSelect.dataset.signature = signature;
+      while (els.isolationSelect.firstChild) {
+        els.isolationSelect.removeChild(els.isolationSelect.firstChild);
+      }
+      state.isolations.forEach((item, index) => {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = labels[index];
+        els.isolationSelect.appendChild(option);
+      });
     }
-
-    state.isolations.forEach((item, index) => {
-      const option = document.createElement("option");
-      option.value = item.id;
-      option.textContent = item.enabled === false ? `Object ${index + 1} Off` : `Object ${index + 1}`;
-      els.isolationSelect.appendChild(option);
-    });
 
     els.isolationSelect.value = state.selectedIsolationId;
     els.removeIsolation.disabled = state.isolations.length <= 1;
@@ -933,7 +1024,7 @@
 
   function syncOutputs() {
     els.gridSizeValue.textContent = state.gridSize;
-    els.reactionValue.textContent = state.reaction;
+    els.reactionValue.textContent = Math.round(state.reaction);
     els.fillWeightValue.textContent = Math.round(state.fillWeight);
     els.strokeWeightValue.textContent = Number(state.strokeWeight).toFixed(1);
     els.randomLineCountValue.textContent = Math.round(state.randomLineCount);
@@ -1109,9 +1200,12 @@
     importedImage.key = "";
     els.imageImport.value = "";
     setIsolationDrawMode(false);
+    togglePlayback(false);
+    motion.time = 0;
+    settleAnimationAfterLoad();
     syncControls();
     applyCanvasSize();
-    commitChange();
+    commitChange({ noAutoKey: true });
   }
 
   function randomizeAll() {
@@ -1186,6 +1280,7 @@
     }
 
     if (parts.isolation) {
+      state.isolations.forEach((item) => removeObjectTracks(item.id));
       state.isolations = Array.from({ length: isolationCount }, (_, index) => {
         const width = 8 + random() * 24;
         const height = 6 + random() * 25;
@@ -1498,8 +1593,8 @@
   // The strokes every line gets, in drawing order: the outline sits under the fill.
   function getLineStrokes(maxSide) {
     const scale = maxSide / 2953;
-    const fillWidth = Math.max(1, state.fillWeight * scale);
-    const outlineWidth = Math.max(0.2, state.strokeWeight * scale);
+    const fillWidth = Math.max(1, state.fillWeight * scale * motion.lineScale);
+    const outlineWidth = Math.max(0.2, state.strokeWeight * scale * motion.lineScale);
     if (state.drawStroke && state.drawFill) {
       return [
         { color: state.lineColor, width: fillWidth + outlineWidth * 2 },
@@ -2764,8 +2859,9 @@
     Object.assign(state, next);
     importedImage.dirty = true;
     setIsolationDrawMode(false);
+    settleAnimationAfterLoad();
     syncControls();
-    applyCanvasSizeFromInputs();
+    applyCanvasSizeFromInputs({ noAutoKey: true });
   }
 
   async function copyLink() {
@@ -2971,6 +3067,754 @@
       }
     }
     return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Motion: keyframed parameters, evaluated at the playhead.
+  // state.animation = { duration, loop, tracks: { paramKey: [{ t, v, e }] } }
+  // Global params use their state key ("reaction"); object params use "iso:<id>:<prop>".
+  // ---------------------------------------------------------------------------
+
+  function getMotionParam(key) {
+    if (typeof key !== "string") {
+      return null;
+    }
+    if (key.startsWith("iso:")) {
+      const parts = key.split(":");
+      const def = OBJECT_MOTION_PARAMS[parts[2]];
+      return parts.length === 3 && def ? { ...def, key, objectId: parts[1], prop: parts[2] } : null;
+    }
+    const def = GLOBAL_MOTION_PARAMS[key];
+    return def ? { ...def, key, prop: key } : null;
+  }
+
+  function objectParamKey(id, prop) {
+    return `iso:${id}:${prop}`;
+  }
+
+  function normalizeAnimation(animation, isolations) {
+    const source = animation && typeof animation === "object" ? animation : {};
+    const ids = new Set(isolations.map((item) => item.id));
+    const tracks = {};
+    if (source.tracks && typeof source.tracks === "object") {
+      Object.keys(source.tracks).forEach((key) => {
+        const def = getMotionParam(key);
+        if (!def || (def.objectId && !ids.has(def.objectId)) || !Array.isArray(source.tracks[key])) {
+          return;
+        }
+        const keys = source.tracks[key]
+          .map((frame) => {
+            const value = frame ? normalizeMotionValue(def, frame.v) : undefined;
+            if (value === undefined || !Number.isFinite(Number(frame.t))) {
+              return null;
+            }
+            return { t: roundTime(clamp(Number(frame.t), 0, MAX_DURATION)), v: value, e: EASES.includes(frame.e) ? frame.e : "linear" };
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.t - b.t);
+        if (keys.length) {
+          tracks[key] = keys;
+        }
+      });
+    }
+    return {
+      duration: clampNumber(source.duration, MIN_DURATION, MAX_DURATION, DEFAULT_DURATION),
+      loop: source.loop === true,
+      tracks,
+    };
+  }
+
+  function normalizeMotionValue(def, value) {
+    if (def.kind === "color") {
+      return validHex(value) ? value : undefined;
+    }
+    if (def.kind === "bool") {
+      return typeof value === "boolean" ? value : undefined;
+    }
+    if (def.kind === "select") {
+      return def.options.includes(value) ? value : undefined;
+    }
+    const number = Number(value);
+    return Number.isFinite(number) ? number : undefined;
+  }
+
+  function roundTime(t) {
+    return Math.round(t * 1000) / 1000;
+  }
+
+  function readMotionValue(def) {
+    if (def.objectId) {
+      const item = state.isolations.find((entry) => entry.id === def.objectId);
+      return item ? item[def.prop] : undefined;
+    }
+    return state[def.prop];
+  }
+
+  function writeMotionValue(def, value) {
+    if (def.objectId) {
+      const item = state.isolations.find((entry) => entry.id === def.objectId);
+      if (item) {
+        item[def.prop] = value;
+      }
+      return;
+    }
+    state[def.prop] = value;
+  }
+
+  // Every animatable value right now, keyed like the tracks. Used to see what an edit changed.
+  function listMotionValues() {
+    const values = new Map();
+    Object.keys(GLOBAL_MOTION_PARAMS).forEach((key) => values.set(key, state[key]));
+    state.isolations.forEach((item) => {
+      Object.keys(OBJECT_MOTION_PARAMS).forEach((prop) => values.set(objectParamKey(item.id, prop), item[prop]));
+    });
+    return values;
+  }
+
+  function sameMotionValue(a, b) {
+    if (typeof a === "number" && typeof b === "number") {
+      return Math.abs(a - b) < 1e-9;
+    }
+    return a === b;
+  }
+
+  function easeAmount(ease, u) {
+    if (ease === "in") {
+      return u * u * u;
+    }
+    if (ease === "out") {
+      return 1 - Math.pow(1 - u, 3);
+    }
+    if (ease === "inOut") {
+      return u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+    }
+    return u;
+  }
+
+  function mixMotionValue(def, a, b, amount) {
+    if (def.kind === "bool" || def.kind === "select") {
+      return a;
+    }
+    if (def.kind === "color") {
+      const from = hexToRgb(a);
+      const to = hexToRgb(b);
+      const channel = (key) => Math.round(from[key] + (to[key] - from[key]) * amount);
+      return `#${[channel("r"), channel("g"), channel("b")].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+    }
+    return a + (b - a) * amount;
+  }
+
+  // Value of a track at time t. With Loop on, the stretch after the last key runs back to the first key,
+  // so the value at the end equals the value at the start.
+  function evaluateTrack(def, keys, t) {
+    const first = keys[0];
+    const last = keys[keys.length - 1];
+    if (keys.length === 1 || t <= first.t) {
+      if (state.animation.loop && keys.length > 1 && t < first.t) {
+        return evaluateLoopWrap(def, keys, t + state.animation.duration);
+      }
+      return first.v;
+    }
+    if (t >= last.t) {
+      return state.animation.loop ? evaluateLoopWrap(def, keys, t) : last.v;
+    }
+
+    let index = 0;
+    while (index < keys.length - 2 && keys[index + 1].t <= t) {
+      index += 1;
+    }
+    const from = keys[index];
+    const to = keys[index + 1];
+    const span = to.t - from.t;
+    const amount = span > 0 ? easeAmount(from.e, (t - from.t) / span) : 1;
+    return mixMotionValue(def, from.v, to.v, amount);
+  }
+
+  function evaluateLoopWrap(def, keys, t) {
+    const first = keys[0];
+    const last = keys[keys.length - 1];
+    const span = first.t + state.animation.duration - last.t;
+    if (span <= 0) {
+      return last.v;
+    }
+    return mixMotionValue(def, last.v, first.v, easeAmount(last.e, clamp((t - last.t) / span, 0, 1)));
+  }
+
+  function hasAnimation() {
+    return Object.keys(state.animation.tracks).length > 0;
+  }
+
+  // Writes the animated values for time t into the state. No undo step and no save: it is a view of the
+  // timeline, not an edit. options.sync = false skips the panel update (used while exporting video).
+  function applyAnimationAt(t, options) {
+    options = options || {};
+    const animation = state.animation;
+    motion.time = clamp(t, 0, animation.duration);
+    motion.lineScale = 1;
+
+    Object.keys(animation.tracks).forEach((key) => {
+      const def = getMotionParam(key);
+      const keys = animation.tracks[key];
+      if (!def || !keys.length) {
+        return;
+      }
+      const value = evaluateTrack(def, keys, motion.time);
+      if (def.kind === "grid") {
+        // Grid size only has odd values; line weight follows the smooth value so the steps don't jump.
+        state.gridSize = oddClamp(value, GRID_SIZE_MIN, GRID_SIZE_MAX, state.gridSize);
+        motion.lineScale = keys[0].v / clamp(value, GRID_SIZE_MIN, GRID_SIZE_MAX);
+      } else if (def.kind === "integer") {
+        writeMotionValue(def, Math.round(value));
+      } else {
+        writeMotionValue(def, value);
+      }
+    });
+
+    applyMotionPaths(motion.time);
+    keepAnimatedShapesConsistent();
+    motion.baseline = listMotionValues();
+
+    if (options.sync !== false) {
+      syncControls();
+      updateTimelinePlayhead();
+      updateKeyButtons();
+    }
+    if (options.render !== false) {
+      scheduleRender();
+    }
+  }
+
+  // A circle stays round and Lock Ratio stays locked when only width or height is animated.
+  function keepAnimatedShapesConsistent() {
+    const tracks = state.animation.tracks;
+    state.isolations.forEach((item) => {
+      const widthAnimated = Boolean(tracks[objectParamKey(item.id, "width")]);
+      const heightAnimated = Boolean(tracks[objectParamKey(item.id, "height")]);
+      if (!widthAnimated && !heightAnimated) {
+        return;
+      }
+      if (item.shape === "circle") {
+        if (widthAnimated) {
+          item.height = item.width;
+        } else {
+          item.width = item.height;
+        }
+      } else if (item.lockAspect && widthAnimated !== heightAnimated) {
+        if (widthAnimated) {
+          item.height = clamp(item.width / item.aspectRatio, ISO_SIZE_MIN, ISO_SIZE_MAX);
+        } else {
+          item.width = clamp(item.height * item.aspectRatio, ISO_SIZE_MIN, ISO_SIZE_MAX);
+        }
+      }
+    });
+  }
+
+  // Filled in with motion paths (step 3c).
+  function applyMotionPaths() {}
+
+  // An edit to a parameter that already has keyframes sets a keyframe at the playhead.
+  function autoKeyChanges() {
+    const now = listMotionValues();
+    if (hasAnimation() && motion.baseline) {
+      now.forEach((value, key) => {
+        if (state.animation.tracks[key] && !sameMotionValue(value, motion.baseline.get(key))) {
+          setKeyframe(key, motion.time, value);
+        }
+      });
+    }
+    motion.baseline = now;
+  }
+
+  function findKeyIndex(keys, t) {
+    return keys.findIndex((frame) => Math.abs(frame.t - t) < KEY_TIME_EPSILON);
+  }
+
+  function setKeyframe(key, t, value, ease) {
+    const def = getMotionParam(key);
+    if (!def) {
+      return null;
+    }
+    const tracks = state.animation.tracks;
+    const keys = tracks[key] || (tracks[key] = []);
+    const time = roundTime(clamp(t, 0, state.animation.duration));
+    const index = findKeyIndex(keys, time);
+    if (index >= 0) {
+      keys[index].v = value;
+      if (ease) {
+        keys[index].e = ease;
+      }
+      return keys[index];
+    }
+    const frame = { t: time, v: value, e: ease || DEFAULT_EASE };
+    keys.push(frame);
+    keys.sort((a, b) => a.t - b.t);
+    return frame;
+  }
+
+  function toggleKeyframe(key) {
+    const def = getMotionParam(key);
+    if (!def) {
+      return;
+    }
+    const keys = state.animation.tracks[key];
+    const index = keys ? findKeyIndex(keys, motion.time) : -1;
+    if (index >= 0) {
+      keys.splice(index, 1);
+      if (!keys.length) {
+        delete state.animation.tracks[key];
+      }
+    } else {
+      setKeyframe(key, motion.time, readMotionValue(def));
+    }
+    motion.selected.clear();
+    applyAnimationAt(motion.time, { sync: false, render: false });
+    commitChange({ noAutoKey: true });
+  }
+
+  function removeObjectTracks(id) {
+    Object.keys(state.animation.tracks).forEach((key) => {
+      if (key.startsWith(`iso:${id}:`)) {
+        delete state.animation.tracks[key];
+      }
+    });
+  }
+
+  // After the whole state was replaced (undo, preset, link, reset): show the animation at the playhead.
+  function settleAnimationAfterLoad() {
+    motion.selected.clear();
+    motion.time = clamp(motion.time, 0, state.animation.duration);
+    applyAnimationAt(motion.time, { sync: false, render: false });
+  }
+
+  // --- playback ---
+
+  function togglePlayback(play) {
+    const shouldPlay = typeof play === "boolean" ? play : !motion.playing;
+    if (shouldPlay === motion.playing) {
+      return;
+    }
+    motion.playing = shouldPlay;
+    if (shouldPlay) {
+      if (!state.animation.loop && motion.time >= state.animation.duration - 1e-6) {
+        motion.time = 0;
+      }
+      motion.lastTick = performance.now();
+      motion.lastSync = 0;
+      motion.raf = requestAnimationFrame(playbackTick);
+    } else {
+      cancelAnimationFrame(motion.raf);
+      motion.raf = 0;
+      applyAnimationAt(motion.time);
+    }
+    updateTransportUi();
+  }
+
+  function playbackTick(now) {
+    if (!motion.playing) {
+      return;
+    }
+    const duration = state.animation.duration;
+    let time = motion.time + Math.max(0, now - motion.lastTick) / 1000;
+    motion.lastTick = now;
+    let finished = false;
+    if (time >= duration) {
+      if (state.animation.loop) {
+        time %= duration;
+      } else {
+        time = duration;
+        finished = true;
+      }
+    }
+
+    // The panel follows at ~10 fps; the canvas renders every frame it can.
+    const syncPanel = now - motion.lastSync > 100 || finished;
+    if (syncPanel) {
+      motion.lastSync = now;
+    }
+    applyAnimationAt(time, { sync: syncPanel, render: false });
+    if (!syncPanel) {
+      updateTimelinePlayhead();
+    }
+    onPlaybackFrame(time);
+    render(ctx, canvas.width, canvas.height);
+
+    if (finished) {
+      togglePlayback(false);
+      return;
+    }
+    motion.raf = requestAnimationFrame(playbackTick);
+  }
+
+  // Filled in by record mode (step 3b).
+  function onPlaybackFrame() {}
+
+  function seek(t) {
+    if (motion.playing) {
+      motion.time = clamp(t, 0, state.animation.duration);
+      return;
+    }
+    applyAnimationAt(t);
+  }
+
+  // --- timeline UI ---
+
+  function formatTime(t) {
+    const minutes = Math.floor(t / 60);
+    const seconds = t - minutes * 60;
+    return `${String(minutes).padStart(2, "0")}:${seconds.toFixed(1).padStart(4, "0")}`;
+  }
+
+  function setTimelineOpen(open) {
+    motion.timelineOpen = open;
+    document.body.classList.toggle("motion-on", open);
+    els.timelineToggle.setAttribute("aria-expanded", String(open));
+    els.timelineBody.hidden = !open;
+    els.timelineTransport.hidden = !open;
+    try {
+      localStorage.setItem(TIMELINE_OPEN_KEY, open ? "1" : "0");
+    } catch (error) {
+      // Only a convenience; the timeline still works.
+    }
+    renderTimeline();
+    updateKeyButtons();
+    updateViewScale();
+  }
+
+  function updateTransportUi() {
+    els.playToggle.textContent = motion.playing ? "Pause" : "Play";
+    els.playToggle.classList.toggle("is-active", motion.playing);
+    setInputValue(els.animationDuration, state.animation.duration);
+    const trackCount = Object.keys(state.animation.tracks).length;
+    els.timelineToggle.textContent = trackCount && !motion.timelineOpen ? `Timeline · ${trackCount} animated` : "Timeline";
+    updateEaseSelect();
+  }
+
+  function updateTimelinePlayhead() {
+    const duration = state.animation.duration;
+    els.timeDisplay.textContent = `${formatTime(motion.time)} / ${duration.toFixed(1)}s`;
+    if (motion.timelineOpen) {
+      els.timelineBody.style.setProperty("--playhead", String(duration > 0 ? motion.time / duration : 0));
+    }
+  }
+
+  function getTimelineTrackKeys() {
+    const tracks = state.animation.tracks;
+    const ordered = Object.keys(GLOBAL_MOTION_PARAMS).filter((key) => tracks[key]);
+    state.isolations.forEach((item) => {
+      Object.keys(OBJECT_MOTION_PARAMS).forEach((prop) => {
+        const key = objectParamKey(item.id, prop);
+        if (tracks[key]) {
+          ordered.push(key);
+        }
+      });
+    });
+    return ordered;
+  }
+
+  function getTrackLabel(key) {
+    const def = getMotionParam(key);
+    if (!def) {
+      return key;
+    }
+    if (def.objectId) {
+      const index = state.isolations.findIndex((item) => item.id === def.objectId);
+      return `Object ${index + 1} · ${def.label}`;
+    }
+    return def.label;
+  }
+
+  function renderTimeline() {
+    updateTransportUi();
+    updateTimelinePlayhead();
+    if (!motion.timelineOpen) {
+      return;
+    }
+
+    const duration = state.animation.duration;
+    const keys = getTimelineTrackKeys();
+    const rows = els.timelineRows;
+    while (rows.firstChild) {
+      rows.removeChild(rows.firstChild);
+    }
+    els.timelineEmpty.hidden = keys.length > 0;
+    els.timelineRuler.style.setProperty("--ticks", String(Math.max(1, Math.round(duration))));
+    els.timelineRulerEnd.textContent = `${duration.toFixed(1)}s`;
+
+    keys.forEach((key) => {
+      const row = document.createElement("div");
+      row.className = "timeline-row";
+      const label = document.createElement("button");
+      label.type = "button";
+      label.className = "timeline-label";
+      label.textContent = getTrackLabel(key);
+      label.title = "Select all keyframes in this row";
+      label.dataset.track = key;
+      const track = document.createElement("div");
+      track.className = "timeline-track";
+      track.dataset.track = key;
+      state.animation.tracks[key].forEach((frame, index) => {
+        if (frame.t > duration + KEY_TIME_EPSILON) {
+          return;
+        }
+        const dot = document.createElement("span");
+        dot.className = "key-dot";
+        dot.classList.toggle("is-selected", motion.selected.has(frame));
+        dot.style.left = `${(frame.t / duration) * 100}%`;
+        dot.dataset.track = key;
+        dot.dataset.index = String(index);
+        dot.title = `${frame.t.toFixed(2)}s`;
+        track.appendChild(dot);
+      });
+      row.appendChild(label);
+      row.appendChild(track);
+      rows.appendChild(row);
+    });
+  }
+
+  function updateEaseSelect() {
+    const selected = Array.from(motion.selected);
+    els.keyEase.hidden = selected.length === 0;
+    if (!selected.length) {
+      return;
+    }
+    const eases = new Set(selected.map((frame) => frame.e));
+    els.keyEase.value = eases.size === 1 ? selected[0].e : "";
+  }
+
+  function createKeyButtons() {
+    const params = [
+      ...Object.keys(GLOBAL_MOTION_PARAMS).map((key) => ({ param: key, input: GLOBAL_MOTION_PARAMS[key].input || key, object: false })),
+      ...Object.keys(OBJECT_MOTION_PARAMS).map((prop) => ({ param: prop, input: OBJECT_MOTION_PARAMS[prop].input, object: true })),
+    ];
+    params.forEach(({ param, input, object }) => {
+      const element = document.getElementById(input);
+      const host = element && element.closest(".control, .check, .color-row, .field");
+      if (!host) {
+        return;
+      }
+      const def = object ? OBJECT_MOTION_PARAMS[param] : GLOBAL_MOTION_PARAMS[param];
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "key-button";
+      button.dataset.param = param;
+      button.dataset.object = object ? "1" : "";
+      button.title = `Keyframe ${def.label} at the playhead`;
+      button.setAttribute("aria-label", `Keyframe ${def.label}`);
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        toggleKeyframe(object ? objectParamKey(state.selectedIsolationId, param) : param);
+      });
+      const label = host.classList.contains("field") ? host.querySelector("label") : null;
+      (label || host).appendChild(button);
+      motion.keyButtons.push(button);
+    });
+  }
+
+  function updateKeyButtons() {
+    if (!motion.timelineOpen) {
+      return;
+    }
+    motion.keyButtons.forEach((button) => {
+      const key = button.dataset.object ? objectParamKey(state.selectedIsolationId, button.dataset.param) : button.dataset.param;
+      const keys = state.animation.tracks[key];
+      const onKey = Boolean(keys) && findKeyIndex(keys, motion.time) >= 0;
+      button.classList.toggle("is-animated", Boolean(keys));
+      button.classList.toggle("has-key", onKey);
+    });
+  }
+
+  function timeFromTimelineEvent(event) {
+    const rect = els.timelineRuler.getBoundingClientRect();
+    const left = rect.left + TIMELINE_TRACK_LEFT;
+    const width = Math.max(1, rect.width - TIMELINE_TRACK_LEFT - TIMELINE_TRACK_RIGHT);
+    return clamp(((event.clientX - left) / width) * state.animation.duration, 0, state.animation.duration);
+  }
+
+  function snapTime(t) {
+    return roundTime(Math.round(t * KEY_SNAP_FPS) / KEY_SNAP_FPS);
+  }
+
+  function handleTimelinePointerDown(event) {
+    const dot = event.target.closest(".key-dot");
+    const label = event.target.closest(".timeline-label");
+    if (label) {
+      const keys = state.animation.tracks[label.dataset.track] || [];
+      if (!event.shiftKey) {
+        motion.selected.clear();
+      }
+      keys.forEach((frame) => motion.selected.add(frame));
+      renderTimeline();
+      return;
+    }
+
+    const insideTracks = event.clientX >= els.timelineRuler.getBoundingClientRect().left + TIMELINE_TRACK_LEFT - 8;
+    if (!dot && !insideTracks) {
+      return;
+    }
+    event.preventDefault();
+    try {
+      els.timelineBody.setPointerCapture(event.pointerId);
+    } catch (error) {
+      // Dragging still works while the pointer stays over the timeline.
+    }
+
+    if (dot) {
+      const frame = state.animation.tracks[dot.dataset.track][Number(dot.dataset.index)];
+      if (event.shiftKey) {
+        if (motion.selected.has(frame)) {
+          motion.selected.delete(frame);
+        } else {
+          motion.selected.add(frame);
+        }
+      } else if (!motion.selected.has(frame)) {
+        motion.selected.clear();
+        motion.selected.add(frame);
+      }
+      motion.drag = {
+        mode: "keys",
+        startTime: timeFromTimelineEvent(event),
+        frames: Array.from(motion.selected).map((selected) => ({ frame: selected, t: selected.t })),
+        moved: false,
+      };
+      renderTimeline();
+      return;
+    }
+
+    if (!event.shiftKey) {
+      motion.selected.clear();
+      renderTimeline();
+    }
+    motion.drag = { mode: "scrub" };
+    seek(timeFromTimelineEvent(event));
+  }
+
+  function handleTimelinePointerMove(event) {
+    const drag = motion.drag;
+    if (!drag) {
+      return;
+    }
+    if (drag.mode === "scrub") {
+      seek(timeFromTimelineEvent(event));
+      return;
+    }
+    const duration = state.animation.duration;
+    const earliest = Math.min(...drag.frames.map((entry) => entry.t));
+    const latest = Math.max(...drag.frames.map((entry) => entry.t));
+    const delta = clamp(timeFromTimelineEvent(event) - drag.startTime, -earliest, duration - latest);
+    drag.frames.forEach((entry) => {
+      entry.frame.t = snapTime(entry.t + delta);
+    });
+    drag.moved = true;
+    Object.values(state.animation.tracks).forEach((keys) => keys.sort((a, b) => a.t - b.t));
+    renderTimeline();
+    applyAnimationAt(motion.time);
+  }
+
+  function handleTimelinePointerUp() {
+    const drag = motion.drag;
+    motion.drag = null;
+    if (!drag || drag.mode !== "keys" || !drag.moved) {
+      return;
+    }
+    // Moving a key onto another one in the same row replaces that one.
+    Object.keys(state.animation.tracks).forEach((key) => {
+      const keys = state.animation.tracks[key];
+      const kept = [];
+      keys.forEach((frame) => {
+        const clash = kept.findIndex((other) => Math.abs(other.t - frame.t) < KEY_TIME_EPSILON);
+        if (clash < 0) {
+          kept.push(frame);
+        } else if (motion.selected.has(frame)) {
+          kept[clash] = frame;
+        }
+      });
+      state.animation.tracks[key] = kept;
+    });
+    applyAnimationAt(motion.time, { sync: false, render: false });
+    commitChange({ noAutoKey: true });
+  }
+
+  function deleteSelectedKeys() {
+    if (!motion.selected.size) {
+      return false;
+    }
+    Object.keys(state.animation.tracks).forEach((key) => {
+      const keys = state.animation.tracks[key].filter((frame) => !motion.selected.has(frame));
+      if (keys.length) {
+        state.animation.tracks[key] = keys;
+      } else {
+        delete state.animation.tracks[key];
+      }
+    });
+    motion.selected.clear();
+    applyAnimationAt(motion.time, { sync: false, render: false });
+    commitChange({ noAutoKey: true });
+    return true;
+  }
+
+  function copySelectedKeys() {
+    if (!motion.selected.size) {
+      return false;
+    }
+    const entries = [];
+    Object.keys(state.animation.tracks).forEach((key) => {
+      state.animation.tracks[key].forEach((frame) => {
+        if (motion.selected.has(frame)) {
+          entries.push({ key, t: frame.t, v: frame.v, e: frame.e });
+        }
+      });
+    });
+    const start = Math.min(...entries.map((entry) => entry.t));
+    motion.clipboard = entries.map((entry) => ({ ...entry, t: entry.t - start }));
+    return true;
+  }
+
+  function pasteKeys() {
+    if (!motion.clipboard.length) {
+      return false;
+    }
+    motion.selected.clear();
+    motion.clipboard.forEach((entry) => {
+      const frame = setKeyframe(entry.key, motion.time + entry.t, entry.v, entry.e);
+      if (frame) {
+        motion.selected.add(frame);
+      }
+    });
+    applyAnimationAt(motion.time, { sync: false, render: false });
+    commitChange({ noAutoKey: true });
+    return true;
+  }
+
+  function readTimelineOpen() {
+    try {
+      return localStorage.getItem(TIMELINE_OPEN_KEY) === "1";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function wireTimeline() {
+    els.timelineToggle.addEventListener("click", () => setTimelineOpen(!motion.timelineOpen));
+    els.playToggle.addEventListener("click", () => togglePlayback());
+    els.animationDuration.addEventListener("change", () => {
+      state.animation.duration = clampNumber(els.animationDuration.value, MIN_DURATION, MAX_DURATION, state.animation.duration);
+      applyAnimationAt(motion.time, { sync: false, render: false });
+      commitChange({ noAutoKey: true });
+    });
+    els.keyEase.addEventListener("change", () => {
+      if (!EASES.includes(els.keyEase.value)) {
+        return;
+      }
+      motion.selected.forEach((frame) => {
+        frame.e = els.keyEase.value;
+      });
+      applyAnimationAt(motion.time, { sync: false, render: false });
+      commitChange({ noAutoKey: true });
+    });
+    els.timelineBody.addEventListener("pointerdown", handleTimelinePointerDown);
+    els.timelineBody.addEventListener("pointermove", handleTimelinePointerMove);
+    els.timelineBody.addEventListener("pointerup", handleTimelinePointerUp);
+    els.timelineBody.addEventListener("pointercancel", handleTimelinePointerUp);
   }
 
   function wireControls() {
@@ -3202,9 +4046,9 @@
     });
   }
 
-  function applyCanvasSizeFromInputs() {
+  function applyCanvasSizeFromInputs(options) {
     applyCanvasSize();
-    commitChange();
+    commitChange(options);
   }
 
   function addIsolation(atPoint) {
@@ -3277,6 +4121,7 @@
       return;
     }
     const index = state.isolations.findIndex((item) => item.id === state.selectedIsolationId);
+    removeObjectTracks(state.selectedIsolationId);
     state.isolations = state.isolations.filter((item) => item.id !== state.selectedIsolationId);
     state.selectedIsolationId = state.isolations[Math.max(0, index - 1)].id;
     commitChange();
@@ -3337,12 +4182,24 @@
       els.presetFile.click();
       return;
     }
+    if (mod && key === "c" && !isTypingTarget(event.target) && copySelectedKeys()) {
+      event.preventDefault();
+      return;
+    }
+    if (mod && key === "v" && !isTypingTarget(event.target) && motion.timelineOpen && pasteKeys()) {
+      event.preventDefault();
+      return;
+    }
     if (mod || event.altKey || isTypingTarget(event.target)) {
       return;
     }
 
     if (event.key === "Escape") {
       toggleShortcuts(false);
+      if (motion.selected.size) {
+        motion.selected.clear();
+        renderTimeline();
+      }
       if (isolationDrawMode) {
         setIsolationDrawMode(false);
       }
@@ -3350,6 +4207,23 @@
     }
     if (event.key === "?") {
       toggleShortcuts();
+      return;
+    }
+    if (event.key === " ") {
+      // A focused button or checkbox keeps its own Space behaviour.
+      if (event.target && ["BUTTON", "SUMMARY"].includes(event.target.tagName)) {
+        return;
+      }
+      if (event.target && event.target.type === "checkbox") {
+        return;
+      }
+      event.preventDefault();
+      togglePlayback();
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      seek(0);
       return;
     }
 
@@ -3369,7 +4243,11 @@
       addIsolation(pointer.hover);
     } else if (event.key === "Delete" || event.key === "Backspace") {
       event.preventDefault();
-      removeSelectedIsolation();
+      if (!deleteSelectedKeys()) {
+        removeSelectedIsolation();
+      }
+    } else if (key === "t") {
+      setTimelineOpen(!motion.timelineOpen);
     } else if (key === "d") {
       setIsolationDrawMode(!isolationDrawMode);
     } else if (key === "g") {
@@ -3400,9 +4278,13 @@
       key.textContent = "Ctrl+";
     });
   }
+  applyAnimationAt(0, { sync: false, render: false });
   syncControls();
   applyCanvasSize();
+  createKeyButtons();
   history.current = makeSnapshot();
   wireControls();
+  wireTimeline();
+  setTimelineOpen(readTimelineOpen());
   loadStateFromLink();
 })();
