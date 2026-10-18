@@ -279,6 +279,16 @@
     animationDuration: document.getElementById("animationDuration"),
     keyEase: document.getElementById("keyEase"),
     animationLoop: document.getElementById("animationLoop"),
+    exportVideo: document.getElementById("exportVideo"),
+    videoExport: document.getElementById("videoExport"),
+    videoFormat: document.getElementById("videoFormat"),
+    videoSize: document.getElementById("videoSize"),
+    videoSizeCanvas: document.getElementById("videoSizeCanvas"),
+    videoFps: document.getElementById("videoFps"),
+    videoStart: document.getElementById("videoStart"),
+    videoCancel: document.getElementById("videoCancel"),
+    videoProgress: document.getElementById("videoProgress"),
+    videoStatus: document.getElementById("videoStatus"),
   };
 
   const motion = {
@@ -3889,6 +3899,12 @@
   }
 
   function setTimelineOpen(open) {
+    if (!open && videoExport.running) {
+      return;
+    }
+    if (!open) {
+      toggleVideoPanel(false);
+    }
     motion.timelineOpen = open;
     document.body.classList.toggle("motion-on", open);
     els.timelineToggle.setAttribute("aria-expanded", String(open));
@@ -4213,6 +4229,275 @@
     return true;
   }
 
+  // --- video export ---
+  // MP4 and PNG frames render every frame offline at the chosen size, so big canvases that cannot play in
+  // real time still export perfectly smooth. Quick records the animation in real time with MediaRecorder.
+
+  const videoExport = {
+    running: false,
+    cancelled: false,
+    mp4Supported: null,
+  };
+
+  function toggleVideoPanel(open) {
+    const show = typeof open === "boolean" ? open : els.videoExport.hidden;
+    els.videoExport.hidden = !show;
+    els.exportVideo.classList.toggle("is-active", show);
+    if (show) {
+      updateVideoSizeLabel();
+      checkMp4Support();
+    }
+  }
+
+  function getVideoSize() {
+    const choice = els.videoSize.value;
+    let width = canvas.width;
+    let height = canvas.height;
+    if (choice !== "canvas") {
+      const longSide = Number(choice);
+      const scale = longSide / Math.max(width, height);
+      width *= scale;
+      height *= scale;
+    }
+    // Video codecs need even sizes.
+    return { width: Math.max(2, Math.round(width / 2) * 2), height: Math.max(2, Math.round(height / 2) * 2) };
+  }
+
+  function updateVideoSizeLabel() {
+    els.videoSizeCanvas.textContent = `Canvas · ${canvas.width} x ${canvas.height}`;
+  }
+
+  async function checkMp4Support() {
+    if (videoExport.mp4Supported !== null) {
+      return;
+    }
+    let supported = false;
+    if (typeof VideoEncoder === "function") {
+      try {
+        const result = await VideoEncoder.isConfigSupported(getMp4Config(1920, 1080, 30));
+        supported = Boolean(result && result.supported);
+      } catch (error) {
+        supported = false;
+      }
+    }
+    videoExport.mp4Supported = supported;
+    const option = els.videoFormat.querySelector('option[value="mp4"]');
+    option.disabled = !supported;
+    option.textContent = supported ? "MP4 · frame by frame" : "MP4 · not in this browser";
+    if (!supported && els.videoFormat.value === "mp4") {
+      els.videoFormat.value = "zip";
+    }
+  }
+
+  function getMp4Config(width, height, fps) {
+    return {
+      codec: window.IsolationEncoders.avcCodecFor(width, height, fps) || "avc1.640033",
+      width,
+      height,
+      framerate: fps,
+      bitrate: Math.min(80_000_000, Math.round(width * height * fps * 0.2)),
+      // No B-frames, so chunks come out in display order for the simple muxer.
+      latencyMode: "realtime",
+      avc: { format: "avc" },
+    };
+  }
+
+  function setVideoStatus(text, progress) {
+    els.videoStatus.textContent = text;
+    els.videoProgress.hidden = typeof progress !== "number";
+    if (typeof progress === "number") {
+      els.videoProgress.value = progress;
+    }
+  }
+
+  function setVideoRunning(running) {
+    videoExport.running = running;
+    videoExport.cancelled = false;
+    els.videoStart.hidden = running;
+    els.videoCancel.hidden = !running;
+    [els.videoFormat, els.videoSize, els.videoFps].forEach((input) => {
+      input.disabled = running;
+    });
+    document.body.classList.toggle("is-exporting", running);
+  }
+
+  async function startVideoExport() {
+    if (videoExport.running) {
+      return;
+    }
+    if (motion.recording) {
+      stopRecording();
+    }
+    togglePlayback(false);
+    const format = els.videoFormat.value;
+    const fps = Number(els.videoFps.value) || 30;
+    const size = getVideoSize();
+    const savedTime = motion.time;
+    setVideoRunning(true);
+
+    try {
+      let blob = null;
+      if (format === "live") {
+        blob = await recordLiveVideo(size, fps);
+      } else {
+        blob = await renderVideoFrames(format, size, fps);
+      }
+      if (blob && !videoExport.cancelled) {
+        const extension = format === "zip" ? "zip" : blob.type.includes("mp4") ? "mp4" : "webm";
+        const name = getExportFilename(extension);
+        downloadBlob(blob, name);
+        setVideoStatus(`Saved ${name}`);
+      } else {
+        setVideoStatus("Cancelled");
+      }
+    } catch (error) {
+      setVideoStatus(`Could not export: ${error.message}`);
+    } finally {
+      setVideoRunning(false);
+      applyAnimationAt(savedTime);
+    }
+  }
+
+  function getVideoFrameTimes(fps) {
+    const duration = state.animation.duration;
+    const count = Math.max(1, Math.round(duration * fps));
+    // With Loop the last frame is the one before the start; without, the final pose is included.
+    const total = state.animation.loop ? count : count + 1;
+    return Array.from({ length: total }, (_, index) => Math.min(duration, index / fps));
+  }
+
+  function renderFrameTo(target, size, t) {
+    applyAnimationAt(t, { sync: false, render: false });
+    render(target, size.width, size.height);
+  }
+
+  async function renderVideoFrames(format, size, fps) {
+    const frameCanvas = document.createElement("canvas");
+    frameCanvas.width = size.width;
+    frameCanvas.height = size.height;
+    const frameCtx = frameCanvas.getContext("2d", { alpha: true });
+    const times = getVideoFrameTimes(fps);
+    const encoders = window.IsolationEncoders;
+
+    let encoder = null;
+    let muxer = null;
+    let encodeError = null;
+    let zip = null;
+    if (format === "mp4") {
+      const config = getMp4Config(size.width, size.height, fps);
+      const support = await VideoEncoder.isConfigSupported(config);
+      if (!support || !support.supported) {
+        throw new Error("this size is too big for MP4 here; try 2160 px or PNG frames");
+      }
+      muxer = encoders.createMp4Muxer({ width: size.width, height: size.height, fps });
+      encoder = new VideoEncoder({
+        output: (chunk, metadata) => muxer.addChunk(chunk, metadata),
+        error: (error) => {
+          encodeError = error;
+        },
+      });
+      encoder.configure(config);
+    } else {
+      zip = encoders.createZipWriter();
+    }
+
+    for (let index = 0; index < times.length; index += 1) {
+      if (videoExport.cancelled) {
+        if (encoder) {
+          encoder.close();
+        }
+        return null;
+      }
+      if (encodeError) {
+        throw encodeError;
+      }
+      renderFrameTo(frameCtx, size, times[index]);
+      if (encoder) {
+        const frame = new VideoFrame(frameCanvas, { timestamp: Math.round((index * 1e6) / fps), duration: Math.round(1e6 / fps) });
+        encoder.encode(frame, { keyFrame: index % (fps * 2) === 0 });
+        frame.close();
+        while (encoder.encodeQueueSize > 4) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+      } else {
+        const blob = await new Promise((resolve) => frameCanvas.toBlob(resolve, "image/png"));
+        zip.add(`frame_${String(index + 1).padStart(5, "0")}.png`, new Uint8Array(await blob.arrayBuffer()));
+      }
+      setVideoStatus(`Frame ${index + 1} / ${times.length}`, (index + 1) / times.length);
+      // Let the page breathe so progress shows and Cancel works.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    if (encoder) {
+      await encoder.flush();
+      encoder.close();
+      if (encodeError) {
+        throw encodeError;
+      }
+      return muxer.finish();
+    }
+    return zip.finish();
+  }
+
+  function getLiveVideoType() {
+    const types = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+    return typeof MediaRecorder === "function" ? types.find((type) => MediaRecorder.isTypeSupported(type)) : null;
+  }
+
+  // Plays the animation once in real time into a canvas at the export size and records that canvas.
+  function recordLiveVideo(size, fps) {
+    const type = getLiveVideoType();
+    const liveCanvas = document.createElement("canvas");
+    if (!type || typeof liveCanvas.captureStream !== "function") {
+      return Promise.reject(new Error("this browser cannot record video; try PNG frames"));
+    }
+    liveCanvas.width = size.width;
+    liveCanvas.height = size.height;
+    const liveCtx = liveCanvas.getContext("2d", { alpha: false });
+    renderFrameTo(liveCtx, size, 0);
+    const stream = liveCanvas.captureStream(fps);
+    const recorder = new MediaRecorder(stream, {
+      mimeType: type,
+      videoBitsPerSecond: Math.min(40_000_000, Math.round(size.width * size.height * fps * 0.15)),
+    });
+    const parts = [];
+    const duration = state.animation.duration;
+
+    return new Promise((resolve, reject) => {
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size) {
+          parts.push(event.data);
+        }
+      };
+      recorder.onerror = (event) => reject(event.error || new Error("recording failed"));
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        resolve(videoExport.cancelled ? null : new Blob(parts, { type: type.split(";")[0] }));
+      };
+      recorder.start(250);
+      const started = performance.now();
+      const tick = () => {
+        const elapsed = (performance.now() - started) / 1000;
+        if (videoExport.cancelled || elapsed >= duration) {
+          recorder.stop();
+          return;
+        }
+        renderFrameTo(liveCtx, size, elapsed);
+        setVideoStatus(`Recording ${formatTime(elapsed)} / ${duration.toFixed(1)}s`, elapsed / duration);
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  function wireVideoExport() {
+    els.exportVideo.addEventListener("click", () => toggleVideoPanel());
+    els.videoStart.addEventListener("click", startVideoExport);
+    els.videoCancel.addEventListener("click", () => {
+      videoExport.cancelled = true;
+    });
+  }
+
   function readTimelineOpen() {
     try {
       return localStorage.getItem(TIMELINE_OPEN_KEY) === "1";
@@ -4383,6 +4668,10 @@
     });
     els.viewScale.addEventListener("change", updateViewScale);
     window.addEventListener("resize", updateViewScale);
+    // The canvas refits whenever its space changes, e.g. when the timeline or the video panel opens.
+    if (typeof ResizeObserver === "function") {
+      new ResizeObserver(() => updateViewScale()).observe(canvas.parentElement);
+    }
 
     els.exportPng.addEventListener("click", downloadPng);
     els.exportSvg.addEventListener("click", downloadSvg);
@@ -4741,6 +5030,7 @@
   history.current = makeSnapshot();
   wireControls();
   wireTimeline();
+  wireVideoExport();
   setTimelineOpen(readTimelineOpen());
   loadStateFromLink();
 })();

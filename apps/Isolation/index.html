@@ -474,7 +474,38 @@
                 <option value="out">Ease Out</option>
                 <option value="inOut">Ease In-Out</option>
               </select>
+              <button id="exportVideo" class="export-video" type="button" title="Export the animation as video or PNG frames">Export Video</button>
             </div>
+          </div>
+          <div id="videoExport" class="video-export" hidden>
+            <label class="timeline-field" title="MP4 and PNG frames render every frame offline, so they are always smooth. Quick records in real time.">
+              <span>Format</span>
+              <select id="videoFormat">
+                <option value="mp4">MP4 · frame by frame</option>
+                <option value="zip">PNG frames · .zip</option>
+                <option value="live">Quick · real time</option>
+              </select>
+            </label>
+            <label class="timeline-field" title="Size of the long side">
+              <span>Size</span>
+              <select id="videoSize">
+                <option value="1080">1080 px</option>
+                <option value="2160">2160 px</option>
+                <option id="videoSizeCanvas" value="canvas">Canvas</option>
+              </select>
+            </label>
+            <label class="timeline-field">
+              <span>FPS</span>
+              <select id="videoFps">
+                <option value="24">24</option>
+                <option value="30" selected>30</option>
+                <option value="60">60</option>
+              </select>
+            </label>
+            <button id="videoStart" type="button">Export</button>
+            <button id="videoCancel" type="button" hidden>Cancel</button>
+            <progress id="videoProgress" max="1" value="0" hidden></progress>
+            <span id="videoStatus" class="video-status"></span>
           </div>
           <div id="timelineBody" class="timeline-body" hidden>
             <div id="timelineRuler" class="timeline-ruler">
@@ -489,6 +520,7 @@
       </section>
     </main>
 
+    <script src="encoders.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

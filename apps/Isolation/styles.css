@@ -431,6 +431,7 @@ output,
 /* Timeline: a slim strip under the canvas; opening it never covers the canvas, the canvas shrinks. */
 .timeline {
   border: 1px solid var(--rule);
+  background: var(--paper);
   font-size: 12px;
 }
 
@@ -495,6 +496,51 @@ output,
   border-color: #ff2a00;
   background: #ff2a00;
   color: var(--paper);
+}
+
+.timeline-bar .export-video {
+  margin-left: auto;
+}
+
+.video-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--rule);
+}
+
+.video-export[hidden] {
+  display: none;
+}
+
+.video-export button,
+.video-export select {
+  width: auto;
+  min-height: 24px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.video-export progress {
+  width: 140px;
+  height: 8px;
+  accent-color: var(--ink);
+}
+
+.video-export progress[hidden] {
+  display: none;
+}
+
+/* While a video renders, the settings wait so every frame shows the same drawing. */
+.is-exporting .panel,
+.is-exporting .canvas-shell,
+.is-exporting .timeline-bar,
+.is-exporting .timeline-body {
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .time-display {
