@@ -9,6 +9,8 @@
   const GRID_SIZE_MIN = 9;
   const GRID_SIZE_MAX = 201;
   const STORAGE_KEY = "isolation-field-state";
+  const HISTORY_LIMIT = 100;
+  const HISTORY_MERGE_MS = 1000;
 
   const DEFAULT_STATE = {
     isolationModelVersion: 5,
@@ -168,6 +170,8 @@
     transparentPaper: document.getElementById("transparentPaper"),
     transparentDrawing: document.getElementById("transparentDrawing"),
     exportPng: document.getElementById("exportPng"),
+    shortcutsToggle: document.getElementById("shortcutsToggle"),
+    shortcuts: document.getElementById("shortcuts"),
   };
 
   const state = loadState();
@@ -186,11 +190,19 @@
     lastCell: "",
     offsetX: 0,
     offsetY: 0,
+    hover: null,
   };
   let isolationDrawMode = false;
   const customIsolationDraft = {
     active: false,
     points: [],
+  };
+  const history = {
+    undo: [],
+    redo: [],
+    current: null,
+    burstKey: "",
+    burstTime: 0,
   };
 
   function loadState() {
@@ -345,8 +357,7 @@
       importedImage.paths = [];
       importedImage.dirty = true;
       importedImage.key = "";
-      scheduleRender();
-      updateImageStatus();
+      commitChange();
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
@@ -362,8 +373,7 @@
     importedImage.dirty = false;
     importedImage.key = "";
     els.imageImport.value = "";
-    updateImageStatus();
-    scheduleRender();
+    commitChange();
   }
 
   function rebuildImportedImageIfNeeded(grid) {
@@ -630,6 +640,99 @@
     }
   }
 
+  // Every change to the drawing goes through here: UI, render, storage and undo history stay in sync.
+  // Pass merge (usually the control id) so one slider drag becomes one undo step.
+  function commitChange(options) {
+    options = options || {};
+    if (options.image) {
+      importedImage.dirty = true;
+    }
+    syncControls();
+    scheduleRender();
+    saveState();
+    recordHistory(options.merge);
+  }
+
+  function makeSnapshot() {
+    // Selecting another object is not a drawing change, so it is left out of the history.
+    const { selectedIsolationId, ...drawing } = state;
+    return {
+      json: JSON.stringify(drawing),
+      image: importedImage.image,
+      name: importedImage.name,
+    };
+  }
+
+  function recordHistory(mergeKey) {
+    const next = makeSnapshot();
+    const current = history.current;
+    if (current && current.json === next.json && current.image === next.image) {
+      return;
+    }
+
+    const now = performance.now();
+    const merge = Boolean(mergeKey) && mergeKey === history.burstKey && now - history.burstTime < HISTORY_MERGE_MS;
+    if (!merge && current) {
+      history.undo.push(current);
+      if (history.undo.length > HISTORY_LIMIT) {
+        history.undo.shift();
+      }
+    }
+    history.redo = [];
+    history.current = next;
+    history.burstKey = mergeKey || "";
+    history.burstTime = now;
+  }
+
+  function endHistoryBurst() {
+    history.burstKey = "";
+  }
+
+  function undo() {
+    if (pointer.down || !history.undo.length) {
+      return;
+    }
+    history.redo.push(history.current);
+    restoreSnapshot(history.undo.pop());
+  }
+
+  function redo() {
+    if (pointer.down || !history.redo.length) {
+      return;
+    }
+    history.undo.push(history.current);
+    restoreSnapshot(history.redo.pop());
+  }
+
+  function restoreSnapshot(snapshot) {
+    const selectedId = state.selectedIsolationId;
+    const saved = JSON.parse(snapshot.json);
+    Object.keys(state).forEach((key) => {
+      delete state[key];
+    });
+    Object.assign(state, saved);
+    state.selectedIsolationId = state.isolations.some((item) => item.id === selectedId) ? selectedId : state.isolations[0].id;
+
+    if (importedImage.image !== snapshot.image) {
+      importedImage.image = snapshot.image;
+      importedImage.name = snapshot.name;
+      importedImage.paths = [];
+      importedImage.dirty = true;
+      importedImage.key = "";
+      if (!snapshot.image) {
+        els.imageImport.value = "";
+      }
+    }
+
+    history.current = snapshot;
+    endHistoryBurst();
+    isolationDrawMode = false;
+    customIsolationDraft.active = false;
+    customIsolationDraft.points = [];
+    syncControls();
+    applyCanvasSize();
+  }
+
   function cmToPixels(cm, dpi) {
     return Math.max(1, Math.round((cm / CM_PER_INCH) * dpi));
   }
@@ -728,9 +831,9 @@
     els.imageContrast.value = state.imageContrast;
     els.imageInvert.checked = state.imageInvert;
     els.showImage.checked = state.showImage;
-    els.widthCm.value = state.widthCm;
-    els.heightCm.value = state.heightCm;
-    els.dpi.value = state.dpi;
+    setInputValue(els.widthCm, state.widthCm);
+    setInputValue(els.heightCm, state.heightCm);
+    setInputValue(els.dpi, state.dpi);
     els.paperColor.value = state.paperColor;
     els.transparentPaper.checked = state.transparentPaper;
     els.transparentDrawing.checked = state.transparentDrawing;
@@ -784,14 +887,14 @@
     els.isolationFill.checked = item.fill;
     els.isolationFillColor.value = item.fillColor;
     els.isolationLockAspect.checked = item.lockAspect;
-    els.isolationRatioNumber.value = Number(item.aspectRatio).toFixed(2);
-    els.isolationX.value = Number((item.x * 100).toFixed(1));
-    els.isolationY.value = Number((item.y * 100).toFixed(1));
+    setInputValue(els.isolationRatioNumber, Number(item.aspectRatio).toFixed(2));
+    setInputValue(els.isolationX, Number((item.x * 100).toFixed(1)));
+    setInputValue(els.isolationY, Number((item.y * 100).toFixed(1)));
     els.isolationWidth.value = item.width;
-    els.isolationWidthNumber.value = Number(item.width).toFixed(1);
+    setInputValue(els.isolationWidthNumber, Number(item.width).toFixed(1));
     els.isolationWidthValue.textContent = formatControlValue(item.width);
     els.isolationHeight.value = item.height;
-    els.isolationHeightNumber.value = Number(item.height).toFixed(1);
+    setInputValue(els.isolationHeightNumber, Number(item.height).toFixed(1));
     els.isolationHeightValue.textContent = formatControlValue(item.height);
     els.isolationRotation.value = item.rotation;
     els.isolationRotationValue.textContent = Math.round(item.rotation);
@@ -829,6 +932,14 @@
     }
   }
 
+  // Leaves a number field alone while someone is typing in it.
+  function setInputValue(input, value) {
+    if (input === document.activeElement && input.type === "number") {
+      return;
+    }
+    input.value = value;
+  }
+
   function formatControlValue(value) {
     return Number(value).toFixed(1).replace(".0", "");
   }
@@ -837,21 +948,16 @@
     return state.isolations.find((item) => item.id === state.selectedIsolationId) || state.isolations[0];
   }
 
-  function updateSelectedIsolation(key, value) {
+  function updateSelectedIsolation(key, value, mergeKey) {
     const item = getSelectedIsolation();
     if (!item) {
       return;
     }
     item[key] = value;
-    if (key === "enabled") {
-      syncIsolationSelect();
-    }
-    syncSelectedIsolationControls();
-    scheduleRender();
-    saveState();
+    commitChange({ merge: mergeKey });
   }
 
-  function updateIsolationDimension(key, value) {
+  function updateIsolationDimension(key, value, mergeKey) {
     const item = getSelectedIsolation();
     if (!item) {
       return;
@@ -880,9 +986,7 @@
       item.aspectRatio = item.width / item.height;
     }
 
-    syncSelectedIsolationControls();
-    scheduleRender();
-    saveState();
+    commitChange({ merge: mergeKey });
   }
 
   function setIsolationAspectLock(locked) {
@@ -894,8 +998,7 @@
     if (locked) {
       item.aspectRatio = item.height > 0 ? item.width / item.height : 1;
     }
-    syncSelectedIsolationControls();
-    saveState();
+    commitChange();
   }
 
   function setIsolationAspectRatio(value) {
@@ -906,24 +1009,17 @@
     item.aspectRatio = item.shape === "circle" ? 1 : clampNumber(value, 0.05, 20, item.aspectRatio || 1);
     item.lockAspect = true;
     item.height = item.shape === "circle" ? item.width : clamp(item.width / item.aspectRatio, 3, 60);
-    syncSelectedIsolationControls();
-    scheduleRender();
-    saveState();
+    commitChange({ merge: "isolationRatioNumber" });
   }
 
   function setRangeState(key, input, parser) {
     state[key] = parser ? parser(input.value) : Number(input.value);
-    syncOutputs();
-    scheduleRender();
-    saveState();
+    commitChange({ merge: input.id });
   }
 
   function setImageState(key, input, parser) {
     state[key] = parser ? parser(input.value) : Number(input.value);
-    importedImage.dirty = true;
-    syncOutputs();
-    scheduleRender();
-    saveState();
+    commitChange({ merge: input.id, image: true });
   }
 
   function resetAll() {
@@ -938,15 +1034,10 @@
     importedImage.dirty = false;
     importedImage.key = "";
     els.imageImport.value = "";
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch (error) {
-      // Reset still applies even when browser storage is blocked.
-    }
+    setIsolationDrawMode(false);
     syncControls();
     applyCanvasSize();
-    scheduleRender();
-    saveState();
+    commitChange();
   }
 
   function randomizeAll() {
@@ -1054,8 +1145,7 @@
     if (parts.canvas) {
       applyCanvasSize();
     }
-    scheduleRender();
-    saveState();
+    commitChange();
   }
 
   function getRandomizeParts() {
@@ -1095,17 +1185,13 @@
     item.aspectRatio = item.height > 0 ? item.width / item.height : 1;
 
     setIsolationDrawMode(false);
-    syncOutputs();
-    scheduleRender();
-    saveState();
+    commitChange();
   }
 
   function randomizeDrawing() {
     const random = seededRandom((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0);
     state.paths = buildRandomLinePaths(random);
-    syncOutputs();
-    scheduleRender();
-    saveState();
+    commitChange();
   }
 
   function buildRandomLinePaths(random) {
@@ -1214,8 +1300,9 @@
     const minSide = Math.min(grid.width, grid.height);
     const step = Math.max(grid.stepX, grid.stepY);
     return state.isolations.filter((item) => item.enabled !== false).map((item) => {
-      const width = grid.width * (item.width / 100);
-      const height = grid.height * (item.height / 100);
+      const size = getIsolationRatioSize(item, grid);
+      const width = grid.width * size.width;
+      const height = grid.height * size.height;
       const gap = minSide * (item.gap / 100) + step * 0.45;
 
       const geo = {
@@ -1241,6 +1328,14 @@
       geo.boundRadius = getIsolationBoundRadius(geo);
       return geo;
     });
+  }
+
+  // Object size as a fraction of the grid width and height.
+  function getIsolationRatioSize(item) {
+    return {
+      width: item.width / 100,
+      height: item.height / 100,
+    };
   }
 
   // Radius of a circle around the centre that contains the whole shape, used to skip far-away points.
@@ -2219,10 +2314,7 @@
     if (points.length >= 3) {
       applyCustomIsolationShape(points);
       isolationDrawMode = false;
-      syncIsolationSelect();
-      syncOutputs();
-      scheduleRender();
-      saveState();
+      commitChange();
       return;
     }
 
@@ -2275,9 +2367,7 @@
       item.shape = "block";
     }
     setIsolationDrawMode(false);
-    syncOutputs();
-    scheduleRender();
-    saveState();
+    commitChange();
   }
 
   function getPointBounds(points) {
@@ -2472,137 +2562,79 @@
     els.randomizeAll.addEventListener("click", randomizeAll);
     els.resetAllTop.addEventListener("click", resetAll);
 
+    // A slider release, checkbox or select ends the current undo step.
+    document.querySelector(".panel").addEventListener("change", endHistoryBurst);
+
     els.showGrid.addEventListener("change", () => {
       state.showGrid = els.showGrid.checked;
-      scheduleRender();
-      saveState();
+      commitChange();
     });
     els.gridSize.addEventListener("input", () => setRangeState("gridSize", els.gridSize, (value) => oddClamp(value, GRID_SIZE_MIN, GRID_SIZE_MAX, DEFAULT_STATE.gridSize)));
     els.reaction.addEventListener("input", () => setRangeState("reaction", els.reaction));
 
-    els.drawFill.addEventListener("change", () => {
-      state.drawFill = els.drawFill.checked;
-      scheduleRender();
-      saveState();
+    [
+      ["drawFill", "checked"],
+      ["drawStroke", "checked"],
+      ["transparentPaper", "checked"],
+      ["transparentDrawing", "checked"],
+      ["showImage", "checked"],
+    ].forEach(([key, property]) => {
+      els[key].addEventListener("change", () => {
+        state[key] = els[key][property];
+        commitChange();
+      });
     });
 
-    els.lineFillColor.addEventListener("input", () => {
-      state.lineFillColor = els.lineFillColor.value;
-      scheduleRender();
-      saveState();
+    ["lineFillColor", "lineColor", "paperColor"].forEach((key) => {
+      els[key].addEventListener("input", () => {
+        state[key] = els[key].value;
+        commitChange({ merge: key });
+      });
     });
 
     els.fillWeight.addEventListener("input", () => setRangeState("fillWeight", els.fillWeight));
-
-    els.drawStroke.addEventListener("change", () => {
-      state.drawStroke = els.drawStroke.checked;
-      scheduleRender();
-      saveState();
-    });
-
-    els.lineColor.addEventListener("input", () => {
-      state.lineColor = els.lineColor.value;
-      scheduleRender();
-      saveState();
-    });
-
     els.strokeWeight.addEventListener("input", () => setRangeState("strokeWeight", els.strokeWeight));
     els.lineCap.addEventListener("change", () => {
       state.lineCap = validLineCap(els.lineCap.value) ? els.lineCap.value : "butt";
-      scheduleRender();
-      saveState();
+      commitChange();
     });
     els.lineJoin.addEventListener("change", () => {
       state.lineJoin = validLineJoin(els.lineJoin.value) ? els.lineJoin.value : "miter";
-      scheduleRender();
-      saveState();
+      commitChange();
     });
     els.randomLineCount.addEventListener("input", () => setRangeState("randomLineCount", els.randomLineCount));
     els.randomLineLength.addEventListener("input", () => setRangeState("randomLineLength", els.randomLineLength));
 
     els.undoLine.addEventListener("click", () => {
       state.paths.pop();
-      scheduleRender();
-      saveState();
+      commitChange();
     });
 
     els.clearLines.addEventListener("click", () => {
       state.paths = [];
-      scheduleRender();
-      saveState();
+      commitChange();
     });
     els.randomizeDrawing.addEventListener("click", randomizeDrawing);
 
     els.imageImport.addEventListener("change", handleImageImport);
-    ["imageLinesHorizontal", "imageLinesVertical", "imageLinesDiagonal"].forEach((key) => {
+    ["imageLinesHorizontal", "imageLinesVertical", "imageLinesDiagonal", "imageInvert"].forEach((key) => {
       els[key].addEventListener("change", () => {
         state[key] = els[key].checked;
-        importedImage.dirty = true;
-        scheduleRender();
-        saveState();
+        commitChange({ image: true });
       });
     });
-    els.imageThreshold.addEventListener("input", () => setImageState("imageThreshold", els.imageThreshold));
-    els.imageDetail.addEventListener("input", () => setImageState("imageDetail", els.imageDetail));
-    els.imageScale.addEventListener("input", () => setImageState("imageScale", els.imageScale));
-    els.imageOffsetX.addEventListener("input", () => setImageState("imageOffsetX", els.imageOffsetX));
-    els.imageOffsetY.addEventListener("input", () => setImageState("imageOffsetY", els.imageOffsetY));
-    els.imageBrightness.addEventListener("input", () => setImageState("imageBrightness", els.imageBrightness));
-    els.imageContrast.addEventListener("input", () => setImageState("imageContrast", els.imageContrast));
-    els.imageInvert.addEventListener("change", () => {
-      state.imageInvert = els.imageInvert.checked;
-      importedImage.dirty = true;
-      scheduleRender();
-      saveState();
-    });
-    els.showImage.addEventListener("change", () => {
-      state.showImage = els.showImage.checked;
-      scheduleRender();
-      saveState();
+    ["imageThreshold", "imageDetail", "imageScale", "imageOffsetX", "imageOffsetY", "imageBrightness", "imageContrast"].forEach((key) => {
+      els[key].addEventListener("input", () => setImageState(key, els[key]));
     });
     els.clearImage.addEventListener("click", clearImportedImage);
 
     els.isolationSelect.addEventListener("change", () => {
       state.selectedIsolationId = els.isolationSelect.value;
-      syncSelectedIsolationControls();
-      scheduleRender();
-      saveState();
+      commitChange();
     });
 
-    els.addIsolation.addEventListener("click", () => {
-      const current = getSelectedIsolation();
-      const id = nextIsolationId();
-      const phase = ((state.isolations.length + state.paths.length + 1) * 0.61803398875) % 1;
-      const item = normalizeIsolation(
-        {
-          ...current,
-          id,
-          enabled: true,
-          outline: true,
-          x: 0.12 + ((phase * 1.41) % 1) * 0.76,
-          y: 0.12 + ((phase * 2.17 + 0.2) % 1) * 0.76,
-        },
-        state.isolations.length
-      );
-      state.isolations.push(item);
-      state.selectedIsolationId = id;
-      syncIsolationSelect();
-      syncOutputs();
-      scheduleRender();
-      saveState();
-    });
-
-    els.removeIsolation.addEventListener("click", () => {
-      if (state.isolations.length <= 1) {
-        return;
-      }
-      state.isolations = state.isolations.filter((item) => item.id !== state.selectedIsolationId);
-      state.selectedIsolationId = state.isolations[0].id;
-      syncIsolationSelect();
-      syncOutputs();
-      scheduleRender();
-      saveState();
-    });
+    els.addIsolation.addEventListener("click", () => addIsolation(null));
+    els.removeIsolation.addEventListener("click", removeSelectedIsolation);
 
     els.isolationEnabled.addEventListener("change", () => updateSelectedIsolation("enabled", els.isolationEnabled.checked));
     els.isolationOutline.addEventListener("change", () => updateSelectedIsolation("outline", els.isolationOutline.checked));
@@ -2618,58 +2650,50 @@
       if (!item.lockAspect && item.height > 0) {
         item.aspectRatio = item.width / item.height;
       }
-      syncSelectedIsolationControls();
-      scheduleRender();
-      saveState();
+      commitChange();
     });
     els.drawIsolationShape.addEventListener("click", () => setIsolationDrawMode(!isolationDrawMode));
     els.clearIsolationShape.addEventListener("click", clearCustomIsolationShape);
-    els.isolationX.addEventListener("input", () => updateSelectedIsolation("x", clampNumber(els.isolationX.value, 0, 100, 50) / 100));
-    els.isolationY.addEventListener("input", () => updateSelectedIsolation("y", clampNumber(els.isolationY.value, 0, 100, 50) / 100));
-    els.isolationWidth.addEventListener("input", () => updateIsolationDimension("width", Number(els.isolationWidth.value)));
-    els.isolationHeight.addEventListener("input", () => updateIsolationDimension("height", Number(els.isolationHeight.value)));
-    els.isolationWidthNumber.addEventListener("input", () => updateIsolationDimension("width", Number(els.isolationWidthNumber.value)));
-    els.isolationHeightNumber.addEventListener("input", () => updateIsolationDimension("height", Number(els.isolationHeightNumber.value)));
+    els.isolationX.addEventListener("input", () => updateSelectedIsolation("x", clampNumber(els.isolationX.value, 0, 100, 50) / 100, "isolationX"));
+    els.isolationY.addEventListener("input", () => updateSelectedIsolation("y", clampNumber(els.isolationY.value, 0, 100, 50) / 100, "isolationY"));
+    els.isolationWidth.addEventListener("input", () => updateIsolationDimension("width", Number(els.isolationWidth.value), "isolationWidth"));
+    els.isolationHeight.addEventListener("input", () => updateIsolationDimension("height", Number(els.isolationHeight.value), "isolationHeight"));
+    els.isolationWidthNumber.addEventListener("input", () => updateIsolationDimension("width", Number(els.isolationWidthNumber.value), "isolationWidth"));
+    els.isolationHeightNumber.addEventListener("input", () => updateIsolationDimension("height", Number(els.isolationHeightNumber.value), "isolationHeight"));
     els.isolationLockAspect.addEventListener("change", () => setIsolationAspectLock(els.isolationLockAspect.checked));
     els.isolationRatioNumber.addEventListener("input", () => setIsolationAspectRatio(Number(els.isolationRatioNumber.value)));
-    els.isolationRotation.addEventListener("input", () => updateSelectedIsolation("rotation", Number(els.isolationRotation.value)));
-    els.isolationForce.addEventListener("input", () => updateSelectedIsolation("force", Number(els.isolationForce.value)));
-    els.isolationGap.addEventListener("input", () => updateSelectedIsolation("gap", Number(els.isolationGap.value)));
+    els.isolationRotation.addEventListener("input", () => updateSelectedIsolation("rotation", Number(els.isolationRotation.value), "isolationRotation"));
+    els.isolationForce.addEventListener("input", () => updateSelectedIsolation("force", Number(els.isolationForce.value), "isolationForce"));
+    els.isolationGap.addEventListener("input", () => updateSelectedIsolation("gap", Number(els.isolationGap.value), "isolationGap"));
     els.isolationFill.addEventListener("change", () => updateSelectedIsolation("fill", els.isolationFill.checked));
-    els.isolationFillColor.addEventListener("input", () => updateSelectedIsolation("fillColor", els.isolationFillColor.value));
-    els.isolationStrokeColor.addEventListener("input", () => updateSelectedIsolation("strokeColor", els.isolationStrokeColor.value));
-    els.isolationStrokeWidth.addEventListener("input", () => updateSelectedIsolation("strokeWidth", Number(els.isolationStrokeWidth.value)));
+    els.isolationFillColor.addEventListener("input", () => updateSelectedIsolation("fillColor", els.isolationFillColor.value, "isolationFillColor"));
+    els.isolationStrokeColor.addEventListener("input", () => updateSelectedIsolation("strokeColor", els.isolationStrokeColor.value, "isolationStrokeColor"));
+    els.isolationStrokeWidth.addEventListener("input", () => updateSelectedIsolation("strokeWidth", Number(els.isolationStrokeWidth.value), "isolationStrokeWidth"));
 
     els.centerIsolation.addEventListener("click", () => {
       const item = getSelectedIsolation();
       item.x = 0.5;
       item.y = 0.5;
-      syncSelectedIsolationControls();
-      scheduleRender();
-      saveState();
+      commitChange();
     });
 
     els.randomIsolation.addEventListener("click", randomizeSelectedIsolation);
 
-    els.applySize.addEventListener("click", applyCanvasSize);
+    els.applySize.addEventListener("click", applyCanvasSizeFromInputs);
+    [els.widthCm, els.heightCm, els.dpi].forEach((input) => {
+      input.addEventListener("change", applyCanvasSizeFromInputs);
+    });
     els.viewScale.addEventListener("change", updateViewScale);
     window.addEventListener("resize", updateViewScale);
 
-    els.paperColor.addEventListener("input", () => {
-      state.paperColor = els.paperColor.value;
-      scheduleRender();
-      saveState();
-    });
-
-    [els.transparentPaper, els.transparentDrawing].forEach((input) => {
-      input.addEventListener("change", () => {
-        state[input.id] = input.checked;
-        scheduleRender();
-        saveState();
-      });
-    });
-
     els.exportPng.addEventListener("click", downloadPng);
+    els.shortcutsToggle.addEventListener("click", () => toggleShortcuts());
+    document.addEventListener("keydown", handleShortcut);
+    document.addEventListener("pointerdown", (event) => {
+      if (!els.shortcuts.hidden && !els.shortcuts.contains(event.target) && event.target !== els.shortcutsToggle) {
+        toggleShortcuts(false);
+      }
+    });
 
     canvas.addEventListener("pointerdown", (event) => {
       event.preventDefault();
@@ -2692,8 +2716,7 @@
       if (hit) {
         const mapped = pointerToGridRatio(event);
         state.selectedIsolationId = hit.id;
-        syncIsolationSelect();
-        syncSelectedIsolationControls();
+        syncControls();
         pointer.mode = "isolation";
         pointer.offsetX = hit.source.x - mapped.x;
         pointer.offsetY = hit.source.y - mapped.y;
@@ -2705,6 +2728,7 @@
     });
 
     canvas.addEventListener("pointermove", (event) => {
+      pointer.hover = pointerToGridRatio(event);
       if (!pointer.down) {
         return;
       }
@@ -2718,15 +2742,21 @@
       }
     });
 
+    canvas.addEventListener("pointerleave", () => {
+      pointer.hover = null;
+    });
+
     canvas.addEventListener("pointerup", (event) => {
-      if (pointer.mode === "customIsolation") {
-        finishCustomIsolationShape();
-      }
+      const mode = pointer.mode;
       pointer.down = false;
       pointer.mode = "";
       pointer.lastCell = "";
       pointer.activePath = null;
-      saveState();
+      if (mode === "customIsolation") {
+        finishCustomIsolationShape();
+      } else {
+        commitChange();
+      }
       if (canvas.hasPointerCapture && canvas.hasPointerCapture(event.pointerId)) {
         canvas.releasePointerCapture(event.pointerId);
       }
@@ -2740,9 +2770,155 @@
       pointer.lastCell = "";
       pointer.activePath = null;
       updateIsolationDrawUi();
-      scheduleRender();
-      saveState();
+      commitChange();
     });
+  }
+
+  function applyCanvasSizeFromInputs() {
+    applyCanvasSize();
+    commitChange();
+  }
+
+  function addIsolation(atPoint) {
+    const current = getSelectedIsolation();
+    const id = nextIsolationId();
+    const spot = atPoint || findSpotNextTo(current);
+    const item = normalizeIsolation(
+      {
+        ...current,
+        id,
+        enabled: true,
+        outline: true,
+        x: clamp(spot.x, 0, 1),
+        y: clamp(spot.y, 0, 1),
+      },
+      state.isolations.length
+    );
+    state.isolations.push(item);
+    state.selectedIsolationId = id;
+    commitChange();
+  }
+
+  // Next free spot beside an object: right, left, below, above. Positions are in grid ratio.
+  function findSpotNextTo(item) {
+    const grid = getGrid(canvas.width, canvas.height, Math.min(canvas.width, canvas.height) * 0.055);
+    const size = getIsolationRatioSize(item, grid);
+    const extent = Math.max(size.width, size.height);
+    const stepX = extent + 0.03;
+    const stepY = extent * (grid.width / grid.height) + 0.03;
+    const halfX = size.width / 2;
+    const halfY = size.height / 2;
+    const candidates = [
+      { x: item.x + stepX, y: item.y },
+      { x: item.x - stepX, y: item.y },
+      { x: item.x, y: item.y + stepY },
+      { x: item.x, y: item.y - stepY },
+    ];
+    const fits = (spot) => spot.x - halfX >= 0 && spot.x + halfX <= 1 && spot.y - halfY >= 0 && spot.y + halfY <= 1;
+    return candidates.find(fits) || candidates.find((spot) => spot.x >= 0 && spot.x <= 1 && spot.y >= 0 && spot.y <= 1) || { x: item.x, y: item.y };
+  }
+
+  function removeSelectedIsolation() {
+    if (state.isolations.length <= 1) {
+      return;
+    }
+    const index = state.isolations.findIndex((item) => item.id === state.selectedIsolationId);
+    state.isolations = state.isolations.filter((item) => item.id !== state.selectedIsolationId);
+    state.selectedIsolationId = state.isolations[Math.max(0, index - 1)].id;
+    commitChange();
+  }
+
+  function nudgeSelectedIsolation(dx, dy) {
+    const item = getSelectedIsolation();
+    if (!item) {
+      return;
+    }
+    item.x = clamp(item.x + dx, 0, 1);
+    item.y = clamp(item.y + dy, 0, 1);
+    commitChange({ merge: "nudge" });
+  }
+
+  function toggleShortcuts(show) {
+    const visible = typeof show === "boolean" ? show : els.shortcuts.hidden;
+    els.shortcuts.hidden = !visible;
+    els.shortcutsToggle.setAttribute("aria-expanded", String(visible));
+  }
+
+  function isTypingTarget(target) {
+    if (!target || !target.tagName) {
+      return false;
+    }
+    if (target.isContentEditable || target.tagName === "TEXTAREA" || target.tagName === "SELECT") {
+      return true;
+    }
+    return target.tagName === "INPUT" && !["range", "checkbox", "color", "file", "button"].includes(target.type);
+  }
+
+  function handleShortcut(event) {
+    const mod = event.metaKey || event.ctrlKey;
+    const key = event.key.toLowerCase();
+
+    if (mod && key === "z" && !isTypingTarget(event.target)) {
+      event.preventDefault();
+      endHistoryBurst();
+      if (event.shiftKey) {
+        redo();
+      } else {
+        undo();
+      }
+      return;
+    }
+    if (mod && key === "y" && !isTypingTarget(event.target)) {
+      event.preventDefault();
+      redo();
+      return;
+    }
+    if (mod || event.altKey || isTypingTarget(event.target)) {
+      return;
+    }
+
+    if (event.key === "Escape") {
+      toggleShortcuts(false);
+      if (isolationDrawMode) {
+        setIsolationDrawMode(false);
+      }
+      return;
+    }
+    if (event.key === "?") {
+      toggleShortcuts();
+      return;
+    }
+
+    const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (arrows[event.key]) {
+      // Arrow keys on a focused slider keep moving that slider.
+      if (event.target && event.target.type === "range") {
+        return;
+      }
+      event.preventDefault();
+      const step = event.shiftKey ? 0.05 : 0.005;
+      nudgeSelectedIsolation(arrows[event.key][0] * step, arrows[event.key][1] * step);
+      return;
+    }
+
+    if (key === "a") {
+      addIsolation(pointer.hover);
+    } else if (event.key === "Delete" || event.key === "Backspace") {
+      event.preventDefault();
+      removeSelectedIsolation();
+    } else if (key === "d") {
+      setIsolationDrawMode(!isolationDrawMode);
+    } else if (key === "g") {
+      state.showGrid = !state.showGrid;
+      commitChange();
+    } else if (key === "i") {
+      state.showImage = !state.showImage;
+      commitChange();
+    } else if (key === "r") {
+      randomizeAll();
+    } else if (key === "e") {
+      downloadPng();
+    }
   }
 
   function nextIsolationId() {
@@ -2753,7 +2929,13 @@
     return `iso-${index}`;
   }
 
+  if (!/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) {
+    document.querySelectorAll(".mod-key").forEach((key) => {
+      key.textContent = "Ctrl+";
+    });
+  }
   syncControls();
   applyCanvasSize();
+  history.current = makeSnapshot();
   wireControls();
 })();

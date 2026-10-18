@@ -17,6 +17,7 @@
           <div class="panel-title">
             <p class="eyebrow">Isolation Grid</p>
             <h1>Settings</h1>
+            <button id="shortcutsToggle" class="help-toggle" type="button" aria-expanded="false" aria-controls="shortcuts" title="Keyboard shortcuts (?)">?</button>
           </div>
           <div class="header-actions">
             <button id="exportPng" type="button">Export PNG</button>
@@ -25,6 +26,22 @@
               <span>Show Image</span>
             </label>
             <button id="resetAllTop" type="button">Reset All</button>
+          </div>
+          <div id="shortcuts" class="shortcuts" hidden>
+            <p class="shortcuts-title">Shortcuts</p>
+            <ul>
+              <li><span>Undo</span><kbd><span class="mod-key">⌘</span>Z</kbd></li>
+              <li><span>Redo</span><kbd>⇧<span class="mod-key">⌘</span>Z</kbd></li>
+              <li><span>Add object at mouse</span><kbd>A</kbd></li>
+              <li><span>Remove object</span><kbd>⌫</kbd></li>
+              <li><span>Move object (⇧ = more)</span><kbd>← ↑ → ↓</kbd></li>
+              <li><span>Draw shape</span><kbd>D</kbd></li>
+              <li><span>Grid lines</span><kbd>G</kbd></li>
+              <li><span>Show image</span><kbd>I</kbd></li>
+              <li><span>Randomize</span><kbd>R</kbd></li>
+              <li><span>Export PNG</span><kbd>E</kbd></li>
+              <li><span>Stop drawing / close</span><kbd>Esc</kbd></li>
+            </ul>
           </div>
         </header>
 
