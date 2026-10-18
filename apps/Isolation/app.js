@@ -61,6 +61,8 @@
     imageLinesHorizontal: { label: "Horizontal", kind: "bool" },
     imageLinesVertical: { label: "Vertical", kind: "bool" },
     imageLinesDiagonal: { label: "Diagonal", kind: "bool" },
+    imageLinesAngle: { label: "Angle Lines", kind: "bool" },
+    imageAngle: { label: "Angle", kind: "number" },
     imageThreshold: { label: "Threshold", kind: "number" },
     imageDetail: { label: "Detail", kind: "integer" },
     imageScale: { label: "Image Scale", kind: "number" },
@@ -123,6 +125,8 @@
     imageLinesHorizontal: true,
     imageLinesVertical: true,
     imageLinesDiagonal: true,
+    imageLinesAngle: false,
+    imageAngle: 30,
     showImage: false,
     paths: [],
     animation: {
@@ -195,6 +199,10 @@
     imageLinesHorizontal: document.getElementById("imageLinesHorizontal"),
     imageLinesVertical: document.getElementById("imageLinesVertical"),
     imageLinesDiagonal: document.getElementById("imageLinesDiagonal"),
+    imageLinesAngle: document.getElementById("imageLinesAngle"),
+    imageAngle: document.getElementById("imageAngle"),
+    imageAngleValue: document.getElementById("imageAngleValue"),
+    imageAngleRow: document.getElementById("imageAngleRow"),
     imageThreshold: document.getElementById("imageThreshold"),
     imageThresholdValue: document.getElementById("imageThresholdValue"),
     imageDetail: document.getElementById("imageDetail"),
@@ -294,6 +302,11 @@
     videoStatus: document.getElementById("videoStatus"),
   };
 
+  // Cached image samples on the grid lattice (see getImageSample).
+  const imageSample = {
+    image: null,
+    key: "",
+  };
   const motion = {
     time: 0,
     playing: false,
@@ -392,6 +405,8 @@
     merged.imageBrightness = clampNumber(merged.imageBrightness, -100, 100, base.imageBrightness);
     merged.imageContrast = clampNumber(merged.imageContrast, -100, 100, base.imageContrast);
     merged.imageInvert = Boolean(merged.imageInvert);
+    merged.imageLinesAngle = merged.imageLinesAngle === true;
+    merged.imageAngle = clampNumber(merged.imageAngle, -90, 90, base.imageAngle);
     if (typeof saved.imageLinesHorizontal === "boolean" || typeof saved.imageLinesVertical === "boolean" || typeof saved.imageLinesDiagonal === "boolean") {
       merged.imageLinesHorizontal = Boolean(saved.imageLinesHorizontal);
       merged.imageLinesVertical = Boolean(saved.imageLinesVertical);
@@ -541,20 +556,15 @@
       return;
     }
 
+    const layer = getBaseLineLayer();
     const key = [
-      importedImage.image.naturalWidth || importedImage.image.width,
-      importedImage.image.naturalHeight || importedImage.image.height,
-      state.imageThreshold,
       state.imageDetail,
       state.imageScale,
       state.imageOffsetX,
       state.imageOffsetY,
       state.imageBrightness,
       state.imageContrast,
-      state.imageInvert ? 1 : 0,
-      state.imageLinesHorizontal ? 1 : 0,
-      state.imageLinesVertical ? 1 : 0,
-      state.imageLinesDiagonal ? 1 : 0,
+      getLineLayerKey(layer),
       state.gridSize,
       Math.round(grid.width),
       Math.round(grid.height),
@@ -564,43 +574,100 @@
       return;
     }
 
-    importedImage.paths = buildThresholdPaths(importedImage.image, grid);
+    importedImage.paths = buildThresholdPaths(importedImage.image, grid, layer);
     importedImage.dirty = false;
     importedImage.key = key;
     updateImageStatus();
   }
 
-  // Samples the image on a lattice that lies exactly on the grid: Detail samples per grid cell,
-  // so every grid row, column and diagonal gets exactly one line of samples.
-  function buildThresholdPaths(image, grid) {
+  // Samples the image on a lattice that lies exactly on the grid: Detail samples per grid cell, so every
+  // grid row, column and diagonal gets exactly one line of samples. Brightness and contrast are applied
+  // here once; line directions (and later layers) only compare against a threshold.
+  function getImageSample(image, grid) {
     const detail = Math.max(1, Math.round(state.imageDetail));
-    const sampleWidth = (grid.columns - 1) * detail + 1;
-    const sampleHeight = (grid.rows - 1) * detail + 1;
-    const sampleCanvas = document.createElement("canvas");
-    sampleCanvas.width = sampleWidth;
-    sampleCanvas.height = sampleHeight;
-    const sample = sampleCanvas.getContext("2d", { willReadFrequently: true });
     const placement = getImagePlacement(image, grid);
+    const key = [
+      detail,
+      grid.columns,
+      grid.rows,
+      placement.x,
+      placement.y,
+      placement.width,
+      placement.height,
+      state.imageBrightness,
+      state.imageContrast,
+    ].join(":");
+    if (imageSample.image === image && imageSample.key === key) {
+      return imageSample;
+    }
 
-    // Pixel centre i sits at grid ratio i / (sampleWidth - 1).
-    sample.clearRect(0, 0, sampleWidth, sampleHeight);
+    const width = (grid.columns - 1) * detail + 1;
+    const height = (grid.rows - 1) * detail + 1;
+    const sampleCanvas = document.createElement("canvas");
+    sampleCanvas.width = width;
+    sampleCanvas.height = height;
+    const sample = sampleCanvas.getContext("2d", { willReadFrequently: true });
+
+    // Pixel centre i sits at grid ratio i / (width - 1).
+    sample.clearRect(0, 0, width, height);
     sample.imageSmoothingEnabled = true;
     sample.imageSmoothingQuality = "high";
     sample.drawImage(
       image,
-      placement.x * (sampleWidth - 1) + 0.5,
-      placement.y * (sampleHeight - 1) + 0.5,
-      placement.width * (sampleWidth - 1),
-      placement.height * (sampleHeight - 1)
+      placement.x * (width - 1) + 0.5,
+      placement.y * (height - 1) + 0.5,
+      placement.width * (width - 1),
+      placement.height * (height - 1)
     );
 
-    const data = sample.getImageData(0, 0, sampleWidth, sampleHeight).data;
-    const paths = [];
-    const threshold = state.imageThreshold;
+    const data = sample.getImageData(0, 0, width, height).data;
+    const contrast = (259 * (state.imageContrast + 255)) / (255 * (259 - state.imageContrast));
+    // Luminance per sample; NaN where the image is (almost) transparent, so it never counts as a line.
+    const luminance = new Float64Array(width * height);
+    for (let index = 0; index < luminance.length; index += 1) {
+      const offset = index * 4;
+      if (data[offset + 3] / 255 < 0.08) {
+        luminance[index] = NaN;
+        continue;
+      }
+      const raw = data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722;
+      luminance[index] = clamp(contrast * (raw - 128) + 128 + state.imageBrightness * 2.55, 0, 255);
+    }
 
+    Object.assign(imageSample, { image, key, width, height, detail, luminance });
+    return imageSample;
+  }
+
+  // The line settings of the base layer (layer 1).
+  function getBaseLineLayer() {
+    return {
+      threshold: state.imageThreshold,
+      horizontal: state.imageLinesHorizontal,
+      vertical: state.imageLinesVertical,
+      diagonal: state.imageLinesDiagonal,
+      angleOn: state.imageLinesAngle,
+      angle: state.imageAngle,
+    };
+  }
+
+  function getLineLayerKey(layer) {
+    return [layer.threshold, layer.horizontal, layer.vertical, layer.diagonal, layer.angleOn, layer.angle, state.imageInvert].join(":");
+  }
+
+  function buildThresholdPaths(image, grid, layer) {
+    const sample = getImageSample(image, grid);
+    const { width, height, detail, luminance } = sample;
+    const threshold = layer.threshold;
+    const invert = state.imageInvert;
+    const paths = [];
+
+    const isActive = (x, y) => {
+      const value = luminance[y * width + x];
+      return value === value && (invert ? value >= threshold : value <= threshold);
+    };
     const toNorm = (x, y) => ({
-      x: x / (sampleWidth - 1),
-      y: y / (sampleHeight - 1),
+      x: x / (width - 1),
+      y: y / (height - 1),
     });
 
     const addRuns = (starts, stepX, stepY) => {
@@ -610,8 +677,8 @@
         let x = start.x;
         let y = start.y;
 
-        while (x >= 0 && x < sampleWidth && y >= 0 && y < sampleHeight) {
-          const active = isThresholdPixelActive(data, (y * sampleWidth + x) * 4, threshold);
+        while (x >= 0 && x < width && y >= 0 && y < height) {
+          const active = isActive(x, y);
 
           if (active) {
             if (!runStart) {
@@ -646,17 +713,83 @@
 
     const columnStarts = (y) => Array.from({ length: grid.columns }, (_, column) => ({ x: column * detail, y }));
     const rowStarts = (x) => Array.from({ length: grid.rows }, (_, row) => ({ x, y: row * detail }));
-    const lastRow = sampleHeight - 1;
+    const lastRow = height - 1;
 
-    if (state.imageLinesHorizontal && addRuns(rowStarts(0), 1, 0)) return paths;
-    if (state.imageLinesVertical && addRuns(columnStarts(0), 0, 1)) return paths;
-    if (state.imageLinesDiagonal) {
+    if (layer.horizontal && addRuns(rowStarts(0), 1, 0)) return paths;
+    if (layer.vertical && addRuns(columnStarts(0), 0, 1)) return paths;
+    if (layer.diagonal) {
       // Down-right diagonals start on the top and left edge, up-right ones on the bottom and left edge.
       if (addRuns([...columnStarts(0), ...rowStarts(0).slice(1)], 1, 1)) return paths;
       if (addRuns([...columnStarts(lastRow), ...rowStarts(0).slice(0, -1)], 1, -1)) return paths;
     }
+    if (layer.angleOn) {
+      addAngledRuns(sample, layer.angle, isActive, toNorm, paths);
+    }
 
     return paths;
+  }
+
+  // Parallel scan lines at any angle (degrees, counter-clockwise, 0 = horizontal), one grid cell apart
+  // and anchored on the grid origin, so 0° and 90° give the same lines as Horizontal and Vertical.
+  function addAngledRuns(sample, angle, isActive, toNorm, paths) {
+    const { width, height, detail } = sample;
+    const radians = (angle * Math.PI) / 180;
+    const tidy = (value) => (Math.abs(value) < 1e-9 ? 0 : value);
+    // Lines always run left to right (or top to bottom) and are stacked top to bottom (or left to right),
+    // like the Horizontal and Vertical lines.
+    let direction = { x: tidy(Math.cos(radians)), y: tidy(-Math.sin(radians)) };
+    if (direction.x < 0 || (direction.x === 0 && direction.y < 0)) {
+      direction = { x: -direction.x, y: -direction.y };
+    }
+    let normal = { x: tidy(-direction.y), y: tidy(direction.x) };
+    if (normal.y < 0 || (normal.y === 0 && normal.x < 0)) {
+      normal = { x: -normal.x, y: -normal.y };
+    }
+    const corners = [
+      [0, 0],
+      [width - 1, 0],
+      [0, height - 1],
+      [width - 1, height - 1],
+    ];
+    const across = corners.map(([x, y]) => x * normal.x + y * normal.y);
+    const along = corners.map(([x, y]) => x * direction.x + y * direction.y);
+    const firstLine = Math.ceil(Math.min(...across) / detail - 1e-9);
+    const lastLine = Math.floor(Math.max(...across) / detail + 1e-9);
+    const firstStep = Math.floor(Math.min(...along)) - 1;
+    const lastStep = Math.ceil(Math.max(...along)) + 1;
+
+    for (let line = firstLine; line <= lastLine; line += 1) {
+      const offset = line * detail;
+      let runStart = null;
+      let lastActive = null;
+      for (let step = firstStep; step <= lastStep; step += 1) {
+        const px = normal.x * offset + direction.x * step;
+        const py = normal.y * offset + direction.y * step;
+        const x = Math.round(px);
+        const y = Math.round(py);
+        const inside = x >= 0 && x < width && y >= 0 && y < height;
+        const active = inside && isActive(x, y);
+        if (active) {
+          if (!runStart) {
+            runStart = { x: px, y: py };
+          }
+          lastActive = { x: px, y: py };
+        } else if (runStart) {
+          pushThresholdRun(runStart, lastActive, toNorm, paths);
+          runStart = null;
+          lastActive = null;
+          if (paths.length >= MAX_IMAGE_RUNS) {
+            return;
+          }
+        }
+      }
+      if (runStart) {
+        pushThresholdRun(runStart, lastActive, toNorm, paths);
+        if (paths.length >= MAX_IMAGE_RUNS) {
+          return;
+        }
+      }
+    }
   }
 
   function getImagePlacement(image, grid) {
@@ -691,18 +824,6 @@
     paths.push({
       points: start.x === end.x && start.y === end.y ? [first] : [first, last],
     });
-  }
-
-  function isThresholdPixelActive(data, index, threshold) {
-    const alpha = data[index + 3] / 255;
-    if (alpha < 0.08) {
-      return false;
-    }
-
-    const rawLuminance = data[index] * 0.2126 + data[index + 1] * 0.7152 + data[index + 2] * 0.0722;
-    const contrast = (259 * (state.imageContrast + 255)) / (255 * (259 - state.imageContrast));
-    const luminance = clamp(contrast * (rawLuminance - 128) + 128 + state.imageBrightness * 2.55, 0, 255);
-    return state.imageInvert ? luminance >= threshold : luminance <= threshold;
   }
 
   function updateImageStatus() {
@@ -1018,6 +1139,9 @@
     els.imageLinesHorizontal.checked = state.imageLinesHorizontal;
     els.imageLinesVertical.checked = state.imageLinesVertical;
     els.imageLinesDiagonal.checked = state.imageLinesDiagonal;
+    els.imageLinesAngle.checked = state.imageLinesAngle;
+    els.imageAngle.value = state.imageAngle;
+    els.imageAngleRow.hidden = !state.imageLinesAngle;
     els.imageThreshold.value = state.imageThreshold;
     els.imageDetail.value = state.imageDetail;
     els.imageScale.value = state.imageScale;
@@ -1073,6 +1197,7 @@
     els.imageOffsetYValue.textContent = Math.round(state.imageOffsetY);
     els.imageBrightnessValue.textContent = Math.round(state.imageBrightness);
     els.imageContrastValue.textContent = Math.round(state.imageContrast);
+    els.imageAngleValue.textContent = `${Math.round(state.imageAngle)}°`;
     updateImageStatus();
     syncSelectedIsolationControls();
   }
@@ -1305,7 +1430,9 @@
       state.imageLinesHorizontal = random() > 0.5;
       state.imageLinesVertical = random() > 0.5;
       state.imageLinesDiagonal = random() > 0.5;
-      if (!state.imageLinesHorizontal && !state.imageLinesVertical && !state.imageLinesDiagonal) {
+      state.imageLinesAngle = random() > 0.75;
+      state.imageAngle = Math.round(-90 + random() * 180);
+      if (!state.imageLinesHorizontal && !state.imageLinesVertical && !state.imageLinesDiagonal && !state.imageLinesAngle) {
         state.imageLinesHorizontal = true;
       }
       state.showImage = Boolean(importedImage.image && random() > 0.45);
@@ -4609,13 +4736,13 @@
     });
 
     els.imageImport.addEventListener("change", handleImageImport);
-    ["imageLinesHorizontal", "imageLinesVertical", "imageLinesDiagonal", "imageInvert"].forEach((key) => {
+    ["imageLinesHorizontal", "imageLinesVertical", "imageLinesDiagonal", "imageLinesAngle", "imageInvert"].forEach((key) => {
       els[key].addEventListener("change", () => {
         state[key] = els[key].checked;
         commitChange({ image: true });
       });
     });
-    ["imageThreshold", "imageDetail", "imageScale", "imageOffsetX", "imageOffsetY", "imageBrightness", "imageContrast"].forEach((key) => {
+    ["imageThreshold", "imageAngle", "imageDetail", "imageScale", "imageOffsetX", "imageOffsetY", "imageBrightness", "imageContrast"].forEach((key) => {
       els[key].addEventListener("input", () => setImageState(key, els[key]));
     });
     els.clearImage.addEventListener("click", clearImportedImage);
