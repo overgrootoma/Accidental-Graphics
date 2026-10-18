@@ -353,6 +353,10 @@ output,
   gap: 12px;
 }
 
+.split > .field {
+  margin-top: 0;
+}
+
 .field label {
   display: block;
   margin-bottom: 4px;
