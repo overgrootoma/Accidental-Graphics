@@ -3,7 +3,8 @@
 
   const CM_PER_INCH = 2.54;
   const MAX_PIXELS = 36_000_000;
-  const MAX_PATHS = 120;
+  const MAX_PATHS = 1000;
+  const MAX_RANDOM_LINES = 400;
   const MAX_POINTS_PER_PATH = 1800;
   const MAX_CUSTOM_ISOLATION_POINTS = 900;
   const MAX_IMAGE_RUNS = 150000;
@@ -102,6 +103,7 @@
     lineCap: "round",
     lineJoin: "round",
     randomLineCount: 28,
+    randomLineAdd: false,
     randomLineLength: 10,
     paperColor: "#ffffff",
     transparentPaper: false,
@@ -188,6 +190,7 @@
     undoLine: document.getElementById("undoLine"),
     clearLines: document.getElementById("clearLines"),
     randomizeDrawing: document.getElementById("randomizeDrawing"),
+    randomLineAdd: document.getElementById("randomLineAdd"),
     imageImport: document.getElementById("imageImport"),
     imageLinesHorizontal: document.getElementById("imageLinesHorizontal"),
     imageLinesVertical: document.getElementById("imageLinesVertical"),
@@ -372,7 +375,8 @@
     merged.lineColor = validHex(merged.lineColor) ? merged.lineColor : base.lineColor;
     merged.lineCap = validLineCap(merged.lineCap) ? merged.lineCap : base.lineCap;
     merged.lineJoin = validLineJoin(merged.lineJoin) ? merged.lineJoin : base.lineJoin;
-    merged.randomLineCount = clampNumber(merged.randomLineCount, 4, 80, base.randomLineCount);
+    merged.randomLineCount = clampNumber(merged.randomLineCount, 4, MAX_RANDOM_LINES, base.randomLineCount);
+    merged.randomLineAdd = merged.randomLineAdd === true;
     merged.randomLineLength = clampNumber(merged.randomLineLength, 2, 40, base.randomLineLength);
     merged.paperColor = validHex(merged.paperColor) ? merged.paperColor : base.paperColor;
     merged.drawFill = Boolean(merged.drawFill);
@@ -1009,6 +1013,7 @@
     els.lineCap.value = state.lineCap;
     els.lineJoin.value = state.lineJoin;
     els.randomLineCount.value = state.randomLineCount;
+    els.randomLineAdd.checked = state.randomLineAdd;
     els.randomLineLength.value = state.randomLineLength;
     els.imageLinesHorizontal.checked = state.imageLinesHorizontal;
     els.imageLinesVertical.checked = state.imageLinesVertical;
@@ -1401,7 +1406,8 @@
 
   function randomizeDrawing() {
     const random = seededRandom((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0);
-    state.paths = buildRandomLinePaths(random);
+    const added = buildRandomLinePaths(random);
+    state.paths = state.randomLineAdd ? state.paths.concat(added).slice(-MAX_PATHS) : added;
     commitChange();
   }
 
@@ -4597,6 +4603,10 @@
       commitChange();
     });
     els.randomizeDrawing.addEventListener("click", randomizeDrawing);
+    els.randomLineAdd.addEventListener("change", () => {
+      state.randomLineAdd = els.randomLineAdd.checked;
+      commitChange();
+    });
 
     els.imageImport.addEventListener("change", handleImageImport);
     ["imageLinesHorizontal", "imageLinesVertical", "imageLinesDiagonal", "imageInvert"].forEach((key) => {

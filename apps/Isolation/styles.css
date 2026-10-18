@@ -373,6 +373,13 @@ output,
   gap: 12px;
 }
 
+.random-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
 .button-row-3 {
   grid-template-columns: 1fr 1fr 1fr;
 }

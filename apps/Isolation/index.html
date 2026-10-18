@@ -158,7 +158,7 @@
           </div>
           <div class="control">
             <label for="randomLineCount">Random</label>
-            <input id="randomLineCount" type="range" min="4" max="80" step="1" value="28" />
+            <input id="randomLineCount" type="range" min="4" max="400" step="1" value="28" title="How many lines Random Lines makes" />
             <output id="randomLineCountValue">28</output>
           </div>
           <div class="control">
@@ -170,7 +170,13 @@
             <button id="undoLine" type="button">Undo Line</button>
             <button id="clearLines" type="button">Clear Lines</button>
           </div>
-          <button id="randomizeDrawing" type="button">Random Lines</button>
+          <div class="random-row">
+            <button id="randomizeDrawing" type="button">Random Lines</button>
+            <label class="check" title="Add the new random lines to the lines you have instead of replacing them">
+              <input id="randomLineAdd" type="checkbox" />
+              <span>Add</span>
+            </label>
+          </div>
           </div>
         </details>
 
