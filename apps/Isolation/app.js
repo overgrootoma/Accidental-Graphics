@@ -36,6 +36,7 @@
   const KEY_TIME_EPSILON = 1 / 120;
   const KEY_SNAP_FPS = 30;
   const RECORD_INTERVAL = 1 / 15;
+  const MAX_MOTION_PATH_POINTS = 600;
   // Where the time axis starts and ends inside the timeline (label column + inset), see .timeline-body in the CSS.
   const TIMELINE_TRACK_LEFT = 158;
   const TIMELINE_TRACK_RIGHT = 8;
@@ -261,6 +262,11 @@
     shortcutsToggle: document.getElementById("shortcutsToggle"),
     shortcuts: document.getElementById("shortcuts"),
     timelineToggle: document.getElementById("timelineToggle"),
+    drawMotionPath: document.getElementById("drawMotionPath"),
+    clearMotionPath: document.getElementById("clearMotionPath"),
+    motionPathTimes: document.getElementById("motionPathTimes"),
+    motionPathStart: document.getElementById("motionPathStart"),
+    motionPathEnd: document.getElementById("motionPathEnd"),
     timelineTransport: document.getElementById("timelineTransport"),
     timelineBody: document.getElementById("timelineBody"),
     timelineRuler: document.getElementById("timelineRuler"),
@@ -308,6 +314,11 @@
     hover: null,
   };
   let isolationDrawMode = false;
+  let pathDrawMode = false;
+  const motionPathDraft = {
+    active: false,
+    points: [],
+  };
   const customIsolationDraft = {
     active: false,
     points: [],
@@ -714,6 +725,7 @@
       strokeColor: validHex(item.strokeColor) ? item.strokeColor : "#00ff00",
       strokeWidth: clampNumber(item.strokeWidth, 0.2, 24, 1.2),
       customPath: normalizeCustomIsolationPath(item.customPath),
+      motionPath: normalizeMotionPath(item.motionPath),
     };
   }
 
@@ -1089,11 +1101,21 @@
     }
 
     const customPointCount = item.customPath ? item.customPath.length : 0;
+    els.drawMotionPath.classList.toggle("is-active", pathDrawMode);
+    els.drawMotionPath.textContent = pathDrawMode ? "Drawing" : item.motionPath ? "Redraw Path" : "Draw Path";
+    els.clearMotionPath.disabled = !item.motionPath;
+    els.motionPathTimes.hidden = !item.motionPath;
+    if (item.motionPath) {
+      setInputValue(els.motionPathStart, Number(item.motionPath.start.toFixed(2)));
+      setInputValue(els.motionPathEnd, Number(item.motionPath.end.toFixed(2)));
+    }
     els.drawIsolationShape.classList.toggle("is-active", isolationDrawMode);
     els.drawIsolationShape.textContent = isolationDrawMode ? "Drawing" : "Draw Shape";
     els.clearIsolationShape.disabled = customPointCount < 3;
 
-    if (isolationDrawMode) {
+    if (pathDrawMode) {
+      els.isolationDrawStatus.textContent = "Draw the path on the canvas";
+    } else if (isolationDrawMode) {
       els.isolationDrawStatus.textContent = customIsolationDraft.active
         ? `${customIsolationDraft.points.length} pts`
         : "Shape capture";
@@ -1409,11 +1431,12 @@
     }
     raf = requestAnimationFrame(() => {
       raf = 0;
-      render(ctx, canvas.width, canvas.height);
+      render(ctx, canvas.width, canvas.height, true);
     });
   }
 
-  function render(target, width, height) {
+  // overlays: on-screen helpers (the selected object's motion path) that never go into exports.
+  function render(target, width, height, overlays) {
     const minSide = Math.min(width, height);
     const maxSide = Math.max(width, height);
     const grid = getGrid(width, height, minSide * 0.055);
@@ -1434,6 +1457,10 @@
     drawStoredLines(target, getDrawingPaths(), grid, geos, maxSide);
     drawIsolationObjects(target, geos, maxSide);
     drawCustomIsolationDraft(target, grid, maxSide);
+    drawMotionPathDraft(target, grid);
+    if (overlays) {
+      drawMotionPathOverlay(target, grid);
+    }
     target.restore();
   }
 
@@ -2469,14 +2496,27 @@
     }
 
     const mapped = pointerToGridRatio(event);
-    item.x = clamp(mapped.x + pointer.offsetX, 0, 1);
-    item.y = clamp(mapped.y + pointer.offsetY, 0, 1);
+    moveIsolationTo(item, clamp(mapped.x + pointer.offsetX, 0, 1), clamp(mapped.y + pointer.offsetY, 0, 1));
     syncSelectedIsolationControls();
     scheduleRender();
   }
 
+  // An object that follows a motion path takes its path along.
+  function moveIsolationTo(item, x, y) {
+    if (item.motionPath) {
+      const dx = x - item.x;
+      const dy = y - item.y;
+      item.motionPath.points = item.motionPath.points.map((point) => ({ x: point.x + dx, y: point.y + dy }));
+    }
+    item.x = x;
+    item.y = y;
+  }
+
   function setIsolationDrawMode(enabled) {
     isolationDrawMode = enabled;
+    if (enabled) {
+      pathDrawMode = false;
+    }
     customIsolationDraft.active = false;
     customIsolationDraft.points = [];
     updateIsolationDrawUi();
@@ -2638,6 +2678,7 @@
   function downloadPng() {
     render(ctx, canvas.width, canvas.height);
     canvas.toBlob((blob) => {
+      scheduleRender();
       if (!blob) {
         return;
       }
@@ -3319,8 +3360,210 @@
     });
   }
 
-  // Filled in with motion paths (step 3c).
-  function applyMotionPaths() {}
+  // --- motion paths ---
+  // An object with a path moves along it at an even speed from Start to End (seconds); the path wins over
+  // X/Y keyframes. With Loop on the path closes back to its start and the movement repeats.
+
+  function normalizeMotionPath(path) {
+    if (!path || !Array.isArray(path.points)) {
+      return null;
+    }
+    const points = path.points
+      .map((point) => ({ x: clampNumber(point && point.x, -1, 2, NaN), y: clampNumber(point && point.y, -1, 2, NaN) }))
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+      .slice(0, MAX_MOTION_PATH_POINTS);
+    if (points.length < 2) {
+      return null;
+    }
+    const start = clampNumber(path.start, 0, MAX_DURATION, 0);
+    const end = clampNumber(path.end, 0, MAX_DURATION, DEFAULT_DURATION);
+    return { points, start, end: Math.max(end, start + 0.1) };
+  }
+
+  function applyMotionPaths(t) {
+    const box = getGridBox(canvas.width, canvas.height);
+    const loop = state.animation.loop;
+    state.isolations.forEach((item) => {
+      const path = item.motionPath;
+      if (!path) {
+        return;
+      }
+      let progress = (t - path.start) / (path.end - path.start);
+      progress = loop ? progress - Math.floor(progress) : clamp(progress, 0, 1);
+      const point = pointAlongPath(path.points, progress, box, loop);
+      item.x = clamp(point.x, 0, 1);
+      item.y = clamp(point.y, 0, 1);
+    });
+  }
+
+  // Point at a fraction of the path's length, measured in canvas proportions so speed looks even.
+  function pointAlongPath(points, progress, box, closed) {
+    const list = closed ? points.concat([points[0]]) : points;
+    const lengths = [];
+    let total = 0;
+    for (let index = 1; index < list.length; index += 1) {
+      const length = Math.hypot((list[index].x - list[index - 1].x) * box.width, (list[index].y - list[index - 1].y) * box.height);
+      lengths.push(length);
+      total += length;
+    }
+    if (total <= 0) {
+      return list[0];
+    }
+    let remaining = progress * total;
+    for (let index = 0; index < lengths.length; index += 1) {
+      if (remaining <= lengths[index] || index === lengths.length - 1) {
+        const amount = lengths[index] > 0 ? clamp(remaining / lengths[index], 0, 1) : 0;
+        return {
+          x: list[index].x + (list[index + 1].x - list[index].x) * amount,
+          y: list[index].y + (list[index + 1].y - list[index].y) * amount,
+        };
+      }
+      remaining -= lengths[index];
+    }
+    return list[list.length - 1];
+  }
+
+  function setPathDrawMode(enabled) {
+    pathDrawMode = enabled;
+    if (enabled && isolationDrawMode) {
+      setIsolationDrawMode(false);
+    }
+    motionPathDraft.active = false;
+    motionPathDraft.points = [];
+    updateIsolationDrawUi();
+    scheduleRender();
+  }
+
+  function startMotionPath(event) {
+    motionPathDraft.active = true;
+    motionPathDraft.points = [];
+    addMotionPathPoint(event);
+  }
+
+  function addMotionPathPoint(event) {
+    if (!motionPathDraft.active) {
+      return;
+    }
+    const mapped = pointerToGridRatio(event);
+    const points = motionPathDraft.points;
+    const last = points[points.length - 1];
+    if (last && Math.hypot(mapped.x - last.x, mapped.y - last.y) < 0.004) {
+      return;
+    }
+    points.push({ x: mapped.x, y: mapped.y });
+    if (points.length > MAX_MOTION_PATH_POINTS) {
+      points.shift();
+    }
+    scheduleRender();
+  }
+
+  function finishMotionPath() {
+    const points = motionPathDraft.points.slice();
+    motionPathDraft.active = false;
+    motionPathDraft.points = [];
+    const item = getSelectedIsolation();
+    if (item && points.length >= 2) {
+      const existing = item.motionPath;
+      item.motionPath = {
+        points,
+        start: existing ? existing.start : 0,
+        end: existing ? existing.end : state.animation.duration,
+      };
+      pathDrawMode = false;
+      applyAnimationAt(motion.time, { sync: false, render: false });
+      commitChange({ noAutoKey: true });
+      return;
+    }
+    updateIsolationDrawUi();
+    scheduleRender();
+  }
+
+  function clearMotionPath() {
+    const item = getSelectedIsolation();
+    if (!item || !item.motionPath) {
+      return;
+    }
+    item.motionPath = null;
+    setPathDrawMode(false);
+    applyAnimationAt(motion.time, { sync: false, render: false });
+    commitChange({ noAutoKey: true });
+  }
+
+  function setMotionPathTime(key, value) {
+    const item = getSelectedIsolation();
+    if (!item || !item.motionPath) {
+      return;
+    }
+    const path = item.motionPath;
+    path[key] = clampNumber(value, 0, MAX_DURATION, path[key]);
+    if (path.end <= path.start) {
+      if (key === "start") {
+        path.end = path.start + 0.1;
+      } else {
+        path.start = Math.max(0, path.end - 0.1);
+        path.end = path.start + 0.1;
+      }
+    }
+    applyAnimationAt(motion.time, { sync: false, render: false });
+    commitChange({ noAutoKey: true });
+  }
+
+  // Canvas pixels for a size in screen pixels, so on-screen helpers look the same at any zoom.
+  function screenPixels(size) {
+    const shown = canvas.getBoundingClientRect().width;
+    return size * (shown > 0 ? canvas.width / shown : 1);
+  }
+
+  function drawPolyline(target, points, grid, closed) {
+    points.forEach((point, index) => {
+      const canvasPoint = ratioToCanvas(point, grid);
+      if (index === 0) {
+        target.moveTo(canvasPoint.x, canvasPoint.y);
+      } else {
+        target.lineTo(canvasPoint.x, canvasPoint.y);
+      }
+    });
+    if (closed) {
+      target.closePath();
+    }
+  }
+
+  function drawMotionPathDraft(target, grid) {
+    if (!motionPathDraft.points.length) {
+      return;
+    }
+    target.save();
+    target.strokeStyle = "rgba(0, 109, 255, 0.85)";
+    target.lineWidth = screenPixels(2);
+    target.setLineDash([target.lineWidth * 4, target.lineWidth * 2]);
+    target.beginPath();
+    drawPolyline(target, motionPathDraft.points, grid, false);
+    target.stroke();
+    target.restore();
+  }
+
+  // The selected object's path, shown while the timeline is open. Never part of an export.
+  function drawMotionPathOverlay(target, grid) {
+    const item = getSelectedIsolation();
+    if (!motion.timelineOpen || !item || !item.motionPath || motionPathDraft.active) {
+      return;
+    }
+    const width = screenPixels(1.5);
+    target.save();
+    target.strokeStyle = "rgba(0, 109, 255, 0.7)";
+    target.lineWidth = width;
+    target.setLineDash([width * 4, width * 3]);
+    target.beginPath();
+    drawPolyline(target, item.motionPath.points, grid, state.animation.loop);
+    target.stroke();
+    const start = ratioToCanvas(item.motionPath.points[0], grid);
+    target.setLineDash([]);
+    target.fillStyle = "rgba(0, 109, 255, 0.85)";
+    target.beginPath();
+    target.arc(start.x, start.y, width * 3, 0, Math.PI * 2);
+    target.fill();
+    target.restore();
+  }
 
   // An edit to a parameter that already has keyframes sets a keyframe at the playhead.
   function autoKeyChanges() {
@@ -3456,7 +3699,7 @@
       motion.recording.last = listMotionValues();
       motion.recording.lastTime = time;
     }
-    render(ctx, canvas.width, canvas.height);
+    render(ctx, canvas.width, canvas.height, true);
 
     if (finished) {
       togglePlayback(false);
@@ -3965,6 +4208,10 @@
     els.timelineToggle.addEventListener("click", () => setTimelineOpen(!motion.timelineOpen));
     els.playToggle.addEventListener("click", () => togglePlayback());
     els.recordToggle.addEventListener("click", toggleRecording);
+    els.drawMotionPath.addEventListener("click", () => setPathDrawMode(!pathDrawMode));
+    els.clearMotionPath.addEventListener("click", clearMotionPath);
+    els.motionPathStart.addEventListener("change", () => setMotionPathTime("start", els.motionPathStart.value));
+    els.motionPathEnd.addEventListener("change", () => setMotionPathTime("end", els.motionPathEnd.value));
     els.animationDuration.addEventListener("change", () => {
       state.animation.duration = clampNumber(els.animationDuration.value, MIN_DURATION, MAX_DURATION, state.animation.duration);
       applyAnimationAt(motion.time, { sync: false, render: false });
@@ -4152,6 +4399,12 @@
         return;
       }
 
+      if (pathDrawMode) {
+        pointer.mode = "motionPath";
+        startMotionPath(event);
+        return;
+      }
+
       const point = pointerToCanvas(event);
       const hit = hitIsolation(point);
       if (hit) {
@@ -4178,6 +4431,8 @@
         moveIsolationFromPointer(event);
       } else if (pointer.mode === "customIsolation") {
         addCustomIsolationPoint(event);
+      } else if (pointer.mode === "motionPath") {
+        addMotionPathPoint(event);
       } else if (pointer.mode === "line") {
         addLinePoint(event);
       }
@@ -4195,6 +4450,8 @@
       pointer.activePath = null;
       if (mode === "customIsolation") {
         finishCustomIsolationShape();
+      } else if (mode === "motionPath") {
+        finishMotionPath();
       } else {
         commitChange();
       }
@@ -4233,6 +4490,7 @@
         id,
         enabled: true,
         outline: true,
+        motionPath: null,
         x: clamp(spot.x, 0, 1),
         y: clamp(spot.y, 0, 1),
       },
@@ -4301,8 +4559,7 @@
     if (!item) {
       return;
     }
-    item.x = clamp(item.x + dx, 0, 1);
-    item.y = clamp(item.y + dy, 0, 1);
+    moveIsolationTo(item, clamp(item.x + dx, 0, 1), clamp(item.y + dy, 0, 1));
     commitChange({ merge: "nudge" });
   }
 
@@ -4371,6 +4628,9 @@
       }
       if (isolationDrawMode) {
         setIsolationDrawMode(false);
+      }
+      if (pathDrawMode) {
+        setPathDrawMode(false);
       }
       return;
     }

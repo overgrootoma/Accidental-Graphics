@@ -354,6 +354,20 @@
             <button id="centerIsolation" type="button">Center</button>
             <button id="randomIsolation" type="button">Shuffle Object</button>
           </div>
+          <div class="button-row motion-only">
+            <button id="drawMotionPath" type="button" title="Draw a line on the canvas; the object follows it over time">Draw Path</button>
+            <button id="clearMotionPath" type="button">Clear Path</button>
+          </div>
+          <div id="motionPathTimes" class="split motion-only" hidden>
+            <div class="field">
+              <label for="motionPathStart">Path Start s</label>
+              <input id="motionPathStart" type="number" min="0" max="600" step="0.1" value="0" title="When the object leaves the start of the path" />
+            </div>
+            <div class="field">
+              <label for="motionPathEnd">Path End s</label>
+              <input id="motionPathEnd" type="number" min="0" max="600" step="0.1" value="10" title="When the object reaches the end of the path" />
+            </div>
+          </div>
           </div>
         </details>
 

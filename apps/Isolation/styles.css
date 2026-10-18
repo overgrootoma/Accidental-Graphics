@@ -614,6 +614,20 @@ output,
   pointer-events: none;
 }
 
+/* Motion-only controls (motion paths) appear with the timeline. */
+.motion-only,
+.motion-on .motion-only[hidden] {
+  display: none;
+}
+
+.motion-on .motion-only {
+  display: grid;
+}
+
+.button-row + .split {
+  margin-top: 10px;
+}
+
 /* Keyframe buttons next to controls, only while the timeline is open. */
 .key-button {
   display: none;
