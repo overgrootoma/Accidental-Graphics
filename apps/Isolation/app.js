@@ -7,9 +7,19 @@
   const MAX_POINTS_PER_PATH = 1800;
   const MAX_CUSTOM_ISOLATION_POINTS = 900;
   const MAX_IMAGE_RUNS = 150000;
+  const MAX_ISOLATIONS = 48;
   const GRID_SIZE_MIN = 9;
   const GRID_SIZE_MAX = 201;
   const STORAGE_KEY = "isolation-field-state";
+  // Screen sizes use 72 dpi so the pixel size comes out exact.
+  const CANVAS_PRESETS = {
+    square: { widthCm: pxToCm(1080, 72), heightCm: pxToCm(1080, 72), dpi: 72 },
+    portrait: { widthCm: pxToCm(1080, 72), heightCm: pxToCm(1350, 72), dpi: 72 },
+    story: { widthCm: pxToCm(1080, 72), heightCm: pxToCm(1920, 72), dpi: 72 },
+    landscape: { widthCm: pxToCm(1920, 72), heightCm: pxToCm(1080, 72), dpi: 72 },
+    a4: { widthCm: 21, heightCm: 29.7, dpi: 300 },
+    a3: { widthCm: 29.7, heightCm: 42, dpi: 300 },
+  };
   // Object width and height are % of the shorter grid side, so a circle stays round on any canvas.
   const ISO_SIZE_MIN = 3;
   const ISO_SIZE_MAX = 200;
@@ -169,6 +179,7 @@
     dpi: document.getElementById("dpi"),
     viewScale: document.getElementById("viewScale"),
     applySize: document.getElementById("applySize"),
+    canvasPreset: document.getElementById("canvasPreset"),
     pixelSize: document.getElementById("pixelSize"),
     paperColor: document.getElementById("paperColor"),
     transparentPaper: document.getElementById("transparentPaper"),
@@ -272,7 +283,7 @@
     delete merged.toolComplexity;
 
     if (Array.isArray(saved.isolations) && saved.isolations.length) {
-      merged.isolations = saved.isolations.slice(0, 12).map((item, index) => normalizeIsolation(item, index));
+      merged.isolations = saved.isolations.slice(0, MAX_ISOLATIONS).map((item, index) => normalizeIsolation(item, index));
     } else {
       merged.isolations = [
         normalizeIsolation(
@@ -755,6 +766,28 @@
     applyCanvasSize();
   }
 
+  function pxToCm(px, dpi) {
+    return Number(((px / dpi) * CM_PER_INCH).toFixed(3));
+  }
+
+  function getMatchingCanvasPreset() {
+    const match = Object.keys(CANVAS_PRESETS).find((key) => {
+      const preset = CANVAS_PRESETS[key];
+      return preset.widthCm === state.widthCm && preset.heightCm === state.heightCm && preset.dpi === state.dpi;
+    });
+    return match || "custom";
+  }
+
+  function applyCanvasPreset(key) {
+    const preset = CANVAS_PRESETS[key];
+    if (!preset) {
+      return;
+    }
+    Object.assign(state, preset);
+    syncControls();
+    applyCanvasSizeFromInputs();
+  }
+
   function cmToPixels(cm, dpi) {
     return Math.max(1, Math.round((cm / CM_PER_INCH) * dpi));
   }
@@ -864,6 +897,7 @@
     setInputValue(els.widthCm, state.widthCm);
     setInputValue(els.heightCm, state.heightCm);
     setInputValue(els.dpi, state.dpi);
+    els.canvasPreset.value = getMatchingCanvasPreset();
     els.paperColor.value = state.paperColor;
     els.transparentPaper.checked = state.transparentPaper;
     els.transparentDrawing.checked = state.transparentDrawing;
@@ -885,6 +919,7 @@
 
     els.isolationSelect.value = state.selectedIsolationId;
     els.removeIsolation.disabled = state.isolations.length <= 1;
+    els.addIsolation.disabled = state.isolations.length >= MAX_ISOLATIONS;
   }
 
   function syncOutputs() {
@@ -2712,6 +2747,7 @@
     els.randomIsolation.addEventListener("click", randomizeSelectedIsolation);
 
     els.applySize.addEventListener("click", applyCanvasSizeFromInputs);
+    els.canvasPreset.addEventListener("change", () => applyCanvasPreset(els.canvasPreset.value));
     [els.widthCm, els.heightCm, els.dpi].forEach((input) => {
       input.addEventListener("change", applyCanvasSizeFromInputs);
     });
@@ -2812,6 +2848,9 @@
   }
 
   function addIsolation(atPoint) {
+    if (state.isolations.length >= MAX_ISOLATIONS) {
+      return;
+    }
     const current = getSelectedIsolation();
     const id = nextIsolationId();
     const spot = atPoint || findSpotNextTo(current);
@@ -2831,7 +2870,8 @@
     commitChange();
   }
 
-  // Next free spot beside an object: right, left, below, above. Positions are in grid ratio.
+  // Nearest free spot beside an object: right, left, below, above, then diagonals and further out.
+  // Positions are in grid ratio.
   function findSpotNextTo(item) {
     const grid = getGrid(canvas.width, canvas.height, Math.min(canvas.width, canvas.height) * 0.055);
     const shortSide = Math.min(grid.width, grid.height);
@@ -2841,14 +2881,35 @@
     const stepY = spacing / grid.height;
     const halfX = extent / 2 / grid.width;
     const halfY = extent / 2 / grid.height;
-    const candidates = [
-      { x: item.x + stepX, y: item.y },
-      { x: item.x - stepX, y: item.y },
-      { x: item.x, y: item.y + stepY },
-      { x: item.x, y: item.y - stepY },
+    const directions = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+      [1, 1],
+      [-1, 1],
+      [1, -1],
+      [-1, -1],
     ];
-    const fits = (spot) => spot.x - halfX >= 0 && spot.x + halfX <= 1 && spot.y - halfY >= 0 && spot.y + halfY <= 1;
-    return candidates.find(fits) || candidates.find((spot) => spot.x >= 0 && spot.x <= 1 && spot.y >= 0 && spot.y <= 1) || { x: item.x, y: item.y };
+    const candidates = [];
+    for (let ring = 1; ring <= 4; ring += 1) {
+      directions.forEach(([dx, dy]) => {
+        candidates.push({ x: item.x + dx * stepX * ring, y: item.y + dy * stepY * ring });
+      });
+    }
+
+    const insideCanvas = (spot) => spot.x - halfX >= 0 && spot.x + halfX <= 1 && spot.y - halfY >= 0 && spot.y + halfY <= 1;
+    const isFree = (spot) =>
+      state.isolations.every((other) => {
+        const otherExtent = (Math.max(other.width, other.height) / 100) * shortSide;
+        const distance = Math.hypot((spot.x - other.x) * grid.width, (spot.y - other.y) * grid.height);
+        return distance >= (extent + otherExtent) / 2;
+      });
+
+    return (
+      candidates.find((spot) => insideCanvas(spot) && isFree(spot)) ||
+      candidates.find(insideCanvas) || { x: item.x, y: item.y }
+    );
   }
 
   function removeSelectedIsolation() {
