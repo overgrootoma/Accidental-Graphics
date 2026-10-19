@@ -459,7 +459,11 @@
     raf: 0,
   };
   const MIDI_STORAGE_KEY = "isolation-midi";
+  const MIDI_BRIDGE_PORT = 8765;
   const midi = {
+    bridgeSources: [],
+    bridgeMissing: false,
+    retryTimer: 0,
     access: null,
     requesting: null,
     learning: null,
@@ -2074,8 +2078,72 @@
   // slider through the normal input event, so undo, record and everything else work as with the mouse.
   // Links belong to this browser and controller, so they are kept here and not in presets.
 
-  function midiSupported() {
-    return typeof navigator.requestMIDIAccess === "function";
+  // Chrome and Firefox read controllers themselves (Web MIDI). Safari has no Web MIDI, so there the app
+  // talks to tools/midi-bridge.py, a small script on the Mac that passes MIDI over a local WebSocket.
+  function usesMidiBridge() {
+    return typeof navigator.requestMIDIAccess !== "function";
+  }
+
+  function getMidiBridgeUrl() {
+    const local = ["localhost", "127.0.0.1"].includes(location.hostname) && location.port;
+    return local ? `ws://${location.host}/midi` : `ws://localhost:${MIDI_BRIDGE_PORT}/midi`;
+  }
+
+  function connectMidiBridge() {
+    return new Promise((resolve, reject) => {
+      let socket;
+      try {
+        socket = new WebSocket(getMidiBridgeUrl());
+      } catch (error) {
+        // Safari may refuse a plain local connection from the https site; the local address always works.
+        reject(error);
+        return;
+      }
+      let opened = false;
+      socket.onopen = () => {
+        opened = true;
+        midi.access = { bridge: socket };
+        resolve(midi.access);
+      };
+      socket.onmessage = (event) => {
+        let message = null;
+        try {
+          message = JSON.parse(event.data);
+        } catch (error) {
+          return;
+        }
+        if (message.type === "midi") {
+          handleMidiMessage({ data: message.data });
+        } else if (message.type === "hello" || message.type === "sources") {
+          midi.bridgeSources = message.sources || [];
+          syncMidiUi();
+        }
+      };
+      socket.onclose = () => {
+        if (!opened) {
+          reject(new Error("bridge not running"));
+          return;
+        }
+        // The bridge stopped: forget the connection and try again quietly while knobs are linked.
+        midi.access = null;
+        midi.requesting = null;
+        midi.bridgeSources = [];
+        syncMidiUi();
+        scheduleBridgeRetry();
+      };
+    });
+  }
+
+  function scheduleBridgeRetry() {
+    clearTimeout(midi.retryTimer);
+    if (!Object.keys(midi.mappings).length) {
+      return;
+    }
+    midi.retryTimer = setTimeout(() => {
+      ensureMidiAccess()
+        .then(syncMidiUi)
+        .catch(scheduleBridgeRetry);
+    }, 3000);
   }
 
   function readMidiMappings() {
@@ -2098,6 +2166,12 @@
   function ensureMidiAccess() {
     if (midi.access) {
       return Promise.resolve(midi.access);
+    }
+    if (!midi.requesting && usesMidiBridge()) {
+      midi.requesting = connectMidiBridge().catch((error) => {
+        midi.requesting = null;
+        throw error;
+      });
     }
     if (!midi.requesting) {
       midi.requesting = navigator
@@ -2171,17 +2245,20 @@
         host.classList.add("has-midi");
       }
     });
-    if (!midiSupported()) {
-      els.midiStatus.textContent = "MIDI controllers work in Chrome; this browser has no Web MIDI.";
-    } else if (midi.learning) {
+    const bridge = usesMidiBridge();
+    const via = bridge && midi.access ? " via bridge" : "";
+    if (midi.learning) {
       els.midiStatus.textContent = "Turn a knob or move a fader…";
+    } else if (bridge && !midi.access && midi.bridgeMissing) {
+      els.midiStatus.textContent = "Start the MIDI bridge (python3 tools/midi-bridge.py) and open localhost:8765/apps/Isolation/";
     } else if (mapped.size) {
-      els.midiStatus.textContent = `MIDI: ${mapped.size} slider${mapped.size === 1 ? "" : "s"} linked`;
+      els.midiStatus.textContent = `MIDI${via}: ${mapped.size} slider${mapped.size === 1 ? "" : "s"} linked`;
     } else {
       els.midiStatus.textContent = "Right-click a slider to link a MIDI knob.";
     }
+    els.midiStatus.title = bridge && midi.bridgeSources.length ? `Controllers: ${midi.bridgeSources.join(", ")}` : "";
     els.midiForgetAll.hidden = mapped.size === 0;
-    els.midiConnect.hidden = !midiSupported() || mapped.size === 0 || Boolean(midi.access);
+    els.midiConnect.hidden = (mapped.size === 0 && !midi.bridgeMissing) || Boolean(midi.access);
   }
 
   function showMidiMenu(input, x, y) {
@@ -2200,11 +2277,17 @@
     midi.menuInput = null;
   }
 
+  function reportMidiProblem() {
+    if (usesMidiBridge()) {
+      midi.bridgeMissing = true;
+      syncMidiUi();
+    } else {
+      els.midiStatus.textContent = "MIDI access was not allowed.";
+    }
+  }
+
   function wireMidiControls() {
     syncMidiUi();
-    if (!midiSupported()) {
-      return;
-    }
     document.querySelector(".panel").addEventListener("contextmenu", (event) => {
       const input = event.target.closest('input[type="range"]');
       if (!input || !input.id) {
@@ -2220,10 +2303,11 @@
         return;
       }
       ensureMidiAccess()
-        .then(() => setMidiLearning(input))
-        .catch(() => {
-          els.midiStatus.textContent = "MIDI access was not allowed.";
-        });
+        .then(() => {
+          midi.bridgeMissing = false;
+          setMidiLearning(input);
+        })
+        .catch(reportMidiProblem);
     });
     els.midiForgetOne.addEventListener("click", () => {
       const input = midi.menuInput;
@@ -2248,14 +2332,19 @@
     });
     els.midiConnect.addEventListener("click", () => {
       ensureMidiAccess()
-        .then(syncMidiUi)
-        .catch(() => {
-          els.midiStatus.textContent = "MIDI access was not allowed.";
-        });
+        .then(() => {
+          midi.bridgeMissing = false;
+          syncMidiUi();
+        })
+        .catch(reportMidiProblem);
     });
+    // With the bridge there is no permission prompt, so linked knobs simply reconnect.
+    if (usesMidiBridge() && Object.keys(midi.mappings).length) {
+      ensureMidiAccess().then(syncMidiUi).catch(scheduleBridgeRetry);
+    }
     // After a reload, linked knobs reconnect by themselves only when MIDI was already allowed;
     // otherwise Connect asks, so opening the page never pops up a permission request.
-    if (Object.keys(midi.mappings).length && navigator.permissions && navigator.permissions.query) {
+    if (!usesMidiBridge() && Object.keys(midi.mappings).length && navigator.permissions && navigator.permissions.query) {
       navigator.permissions
         .query({ name: "midi" })
         .then((result) => {
