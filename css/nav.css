@@ -21,6 +21,10 @@
   border-bottom: 1px solid #fff;
   font-family: "Doto", system-ui;
   font-variation-settings: "ROND" 0;
+  /* Notch / landscape safe areas (viewport-fit=cover). */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  -webkit-tap-highlight-color: transparent;
 }
 
 .site-nav nav {
@@ -153,6 +157,31 @@
 
 #menuDropdown.is-open {
   display: block;
+  animation: ag-menu-open var(--ag-dur-3, 420ms) var(--ag-ease-out, cubic-bezier(.22, 1, .36, 1)) both;
+}
+
+/* Secondary motion: the panel unrolls, then the links follow one after another. */
+#menuDropdown.is-open a {
+  animation: ag-menu-item 360ms var(--ag-ease-out, cubic-bezier(.22, 1, .36, 1)) both;
+  animation-delay: calc(60ms + var(--i, 0) * 45ms);
+}
+
+@keyframes ag-menu-open {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes ag-menu-item {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+#hamburgerMenu .hamburger-icon {
+  transition: transform var(--ag-dur-3, 420ms) var(--ag-ease-spring, cubic-bezier(.34, 1.56, .64, 1));
+}
+
+#hamburgerMenu.is-open .hamburger-icon {
+  transform: rotate(90deg);
 }
 
 #menuDropdown a {
@@ -212,13 +241,35 @@
   }
 
   #menuDropdown {
-    right: 8px;
+    right: max(8px, env(safe-area-inset-right));
     max-height: calc(100dvh - 68px);
     overflow-y: auto;
   }
 }
 
+@media (max-width: 768px), (pointer: coarse) {
+  #menuDropdown a {
+    min-height: 52px;
+    font-size: 1rem;
+  }
+
+  #hamburgerMenu {
+    touch-action: manipulation;
+  }
+}
+
+@media (max-width: 768px) {
+  #menuDropdown {
+    min-width: min(240px, calc(100vw - 16px));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  #menuDropdown.is-open,
+  #menuDropdown.is-open a {
+    animation: none !important;
+  }
+
   .site-nav *,
   .site-nav *::before,
   .site-nav *::after {
@@ -232,12 +283,60 @@
   }
 }
 
-/* Cursor trail (made in navMenu.js). Fixed, so moving the mouse never makes the page longer. */
-.cursor-trail {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
+/* Live data strip in the footer (made in navMenu.js for .app-year[data-live]). */
+.app-year[data-live] {
+  justify-content: space-between;
+  gap: 16px;
+  font-family: var(--ag-data-font, ui-monospace, Menlo, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+  font-weight: 400;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  padding-left: max(14px, env(safe-area-inset-left));
+  padding-right: max(14px, env(safe-area-inset-right));
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.app-year__label {
+  white-space: nowrap;
+}
+
+.app-year__data {
+  display: flex;
+  gap: 14px;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-year__key {
+  margin-right: 0.5em;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.app-year__value {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+@media (max-width: 600px) {
+  .app-year__label {
+    display: none;
+  }
+
+  .app-year[data-live] {
+    justify-content: center;
+    gap: 0;
+    letter-spacing: 0.04em;
+  }
+
+  .app-year__data {
+    gap: 10px;
+  }
+
+  .app-year__key {
+    margin-right: 0.35em;
+  }
 }

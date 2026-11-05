@@ -2,49 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Color Range · Accidental Graphics</title>
   <meta name="description" content="Extract, paint, and layer color bands from multiple images.">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
+  <link rel="stylesheet" href="../css/data.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
   <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
   <script defer src="../scripts/navConfig.js"></script>
   <script defer src="../scripts/navMenu.js"></script>
+  <script src="../scripts/dataLayer.js"></script>
   <script defer src="../scripts/settingsToggle.js" data-panel="#controls"></script>
+  <script src="../scripts/savedSettings.js"></script>
   <script defer src="../scripts/sampleMedia.js"></script>
   <style>
-    .control-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      width: 100%;
-    }
-
     .layer-list {
       display: flex;
       flex-direction: column;
       gap: 12px;
       width: 100%;
-    }
-
-    .panel {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      width: 100%;
-    }
-
-    .panel-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 0.9rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      opacity: 0.75;
     }
 
     .layer-card {
@@ -150,24 +129,64 @@
       padding: 10px;
     }
 
+    /* Pick hint: a small chip, so the picture is never dimmed while sampling. */
     .stage-overlay {
       position: absolute;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      color: rgba(255, 255, 255, 0.9);
-      letter-spacing: 0.1em;
-      background: rgba(0, 0, 0, 0.45);
+      top: 10px;
+      left: 50%;
+      max-width: calc(100% - 20px);
+      padding: 6px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      background: #000;
+      color: #fff;
+      letter-spacing: 0.08em;
+      text-align: center;
       opacity: 0;
-      transition: opacity 0.2s ease;
+      transform: translate(-50%, -6px);
+      transition: opacity var(--ag-dur-2, 0.2s) var(--ag-ease-out, ease), transform var(--ag-dur-2, 0.2s) var(--ag-ease-out, ease);
       pointer-events: none;
       text-transform: uppercase;
-      font-size: 0.9rem;
+      font-size: 0.7rem;
+      z-index: 6;
     }
 
     .stage-overlay.is-visible {
       opacity: 1;
+      transform: translate(-50%, 0);
     }
+
+    #canvas { touch-action: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; }
+    #canvas.is-picking { cursor: crosshair; }
+
+    /* Colour probe: ring on the sampled pixel, loupe + readout beside it (DOM only, never exported). */
+    .probe-ring, .probe-loupe { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 5; opacity: 0; will-change: transform; }
+    .probe-ring { width: 26px; height: 26px; margin: -13px 0 0 -13px; border: 1px solid #fff; mix-blend-mode: difference; }
+    .probe-ring::before, .probe-ring::after { content: ""; position: absolute; background: #fff; }
+    .probe-ring::before { left: 50%; top: -7px; bottom: -7px; width: 1px; }
+    .probe-ring::after { top: 50%; left: -7px; right: -7px; height: 1px; }
+    .probe-loupe { width: 130px; background: #000; border: 1px solid rgba(255, 255, 255, 0.7); font: 0.62rem/1.35 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; color: #fff; font-variant-numeric: tabular-nums; }
+    .probe-loupe.is-on, .probe-ring.is-on { opacity: 1; }
+    .probe-loupe canvas { display: block; width: 128px; height: 128px; image-rendering: pixelated; }
+    .probe-loupe__cell { position: absolute; left: 50%; top: 64px; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 1px solid #fff; mix-blend-mode: difference; }
+    .probe-loupe__data { display: grid; padding: 4px 6px; border-top: 1px solid rgba(255, 255, 255, 0.4); }
+    .probe-loupe__swatch { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border: 1px solid #fff; vertical-align: -1px; }
+
+    @media (max-width: 768px), (pointer: coarse) { body.panel-ui-page #controls select { font-size: 16px; } }
+
+    /* Desktop: end the stage at the footer line. */
+    @media (min-width: 901px) { body.panel-ui-page:not(.ag-sheet) .canvas-stage { align-self: flex-start; height: calc(100dvh - 72px - 34px); flex: 1 1 0; } }
+    /* Margin around the picture for the lab data (css/data.css), which sits outside the canvas. */
+    body.panel-ui-page .canvas-stage { box-sizing: border-box; padding: var(--ag-hud-band, 22px) var(--ag-hud-side, 16px); }
+    /* Bottom-sheet layout: the stage is exactly the area above the sheet, the page never scrolls. */
+    body.ag-sheet.panel-ui-page { height: 100dvh; overflow: hidden; --ag-nav-h: 72px; }
+    @media (max-width: 480px) { body.ag-sheet.panel-ui-page { --ag-nav-h: 60px; } }
+    body.ag-sheet.panel-ui-page #main {
+      height: calc(100dvh - var(--ag-nav-h) - var(--ag-sheet-h, 0px));
+      min-height: 0; padding: 0; overflow: hidden; border-top: 0;
+      flex: none; /* ends at the sheet instead of growing to the body height */
+    }
+    body.ag-sheet.panel-ui-page .canvas-stage { flex: 1 1 auto; min-height: 0; padding: var(--ag-hud-band, 18px) var(--ag-hud-side, 0px); }
+    body.ag-sheet .app-year { display: none; }
 
     .muted {
       color: rgba(255, 255, 255, 0.65);
@@ -251,7 +270,17 @@
 
     <div class="canvas-stage">
       <canvas id="canvas" aria-label="Color Range canvas"></canvas>
-      <div class="stage-overlay" id="pickHint">Click to pick a color</div>
+      <div class="stage-overlay" id="pickHint">Click to pick a colour</div>
+      <div class="probe-ring" id="probeRing"></div>
+      <div class="probe-loupe" id="probeLoupe" aria-hidden="true">
+        <canvas id="probeCanvas" width="54" height="54"></canvas>
+        <span class="probe-loupe__cell"></span>
+        <div class="probe-loupe__data">
+          <span><i class="probe-loupe__swatch" id="probeSwatch"></i><span id="probeRgb"></span></span>
+          <span id="probeHex"></span>
+          <span id="probeHsl"></span>
+        </div>
+      </div>
     </div>
   </div>
   <div class="sample-modal" id="sampleModal" aria-hidden="true">
@@ -271,7 +300,7 @@
 
   <script>
     (() => {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const canvas = document.getElementById('canvas');
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       const fileInput = document.getElementById('imageInput');
@@ -286,6 +315,19 @@
       const pickColorBtn = document.getElementById('pickColorBtn');
       const layerList = document.getElementById('layerList');
       const pickHint = document.getElementById('pickHint');
+      const stage = canvas.parentElement;
+      const probeRing = document.getElementById('probeRing');
+      const probeLoupe = document.getElementById('probeLoupe');
+      const probeCtx = document.getElementById('probeCanvas').getContext('2d');
+      const probeSwatch = document.getElementById('probeSwatch');
+      const probeText = {
+        rgb: document.getElementById('probeRgb'),
+        hex: document.getElementById('probeHex'),
+        hsl: document.getElementById('probeHsl'),
+      };
+      probeCtx.imageSmoothingEnabled = false;
+      const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+      const hud = AGData.hud(canvas, { canvas, code: 'CRL', fps: false, slots: { specimen: 'tr' } });
 
       let sampleData = [
         { src: '../images/sampleimages/sample01.jpg', label: 'Sample 01' },
@@ -308,6 +350,15 @@
       const layers = [];
       let activeLayerId = null;
       let baseAspect = 1.45;
+      // Settings a new layer starts with: the last ones you used, remembered between visits.
+      const layerDefaults = {
+        color: '#ff9c4c',
+        tolerance: 56,
+        brushSize: 8,
+        opacity: 0.88,
+        blendMode: 'normal',
+        invert: false,
+      };
       let pickMode = false;
       let viewWidth = 920;
       let viewHeight = 580;
@@ -360,30 +411,47 @@
         );
       }
 
-      function colorDistance(target, current) {
-        const dr = current.r - target.r;
-        const dg = current.g - target.g;
-        const db = current.b - target.b;
-        return Math.sqrt(dr * dr + dg * dg + db * db);
+      function hueOf(r, g, b, max, min) {
+        const d = max - min;
+        if (!d) return 0;
+        let h;
+        if (max === r) h = ((g - b) / d) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h *= 60;
+        return h < 0 ? h + 360 : h;
       }
 
-      function sampleColorAtPoint(layer, point) {
-        if (!layer?.image) return null;
-        const stageW = Math.max(1, Math.round(viewWidth));
-        const stageH = Math.max(1, Math.round(viewHeight));
-        const off = document.createElement('canvas');
-        off.width = stageW;
-        off.height = stageH;
-        const offCtx = off.getContext('2d', { willReadFrequently: true });
-        const fit = fitImage(layer.image, stageW, stageH);
-        offCtx.drawImage(layer.image, fit.x, fit.y, fit.w, fit.h);
-        const sx = Math.floor(point.x / dpr);
-        const sy = Math.floor(point.y / dpr);
-        if (sx < 0 || sy < 0 || sx >= stageW || sy >= stageH) return null;
-        const data = offCtx.getImageData(sx, sy, 1, 1).data;
-        return { r: data[0], g: data[1], b: data[2] };
+      function rgbToHsv(r, g, b) {
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        return [hueOf(r, g, b, max, min), max ? ((max - min) / max) * 100 : 0, (max / 255) * 100];
       }
 
+      function rgbToHsl(r, g, b) {
+        const max = Math.max(r, g, b) / 255;
+        const min = Math.min(r, g, b) / 255;
+        const l = (max + min) / 2;
+        const d = max - min;
+        const [h] = rgbToHsv(r, g, b);
+        return [h, d ? (d / (1 - Math.abs(2 * l - 1))) * 100 : 0, l * 100];
+      }
+
+      // The layer's image drawn at the current view size: pixels for matching, probing and the loupe.
+      function getSource(layer) {
+        const w = viewWidth;
+        const h = viewHeight;
+        const cached = layer.src;
+        if (cached && cached.w === w && cached.h === h) return cached;
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        const cx = c.getContext('2d', { willReadFrequently: true });
+        const fit = fitImage(layer.image, w, h);
+        cx.drawImage(layer.image, fit.x, fit.y, fit.w, fit.h);
+        layer.src = { w, h, canvas: c, data: cx.getImageData(0, 0, w, h).data };
+        return layer.src;
+      }
 
       function getAspect() {
         if (layers.length && layers[0].image?.naturalWidth && layers[0].image?.naturalHeight) {
@@ -414,26 +482,27 @@
       }
 
       function resizeCanvas() {
-        const wrapper = document.querySelector('.canvas-stage');
-        const rect = wrapper?.getBoundingClientRect?.() || { width: window.innerWidth, height: window.innerHeight - 160 };
         const aspect = getAspect();
-        const maxWidth = Math.max(320, rect.width);
-        const maxHeight = Math.max(260, rect.height);
+        // The stage's padding is the margin for the lab data around the canvas.
+        const pad = getComputedStyle(stage);
+        const maxWidth = Math.max(1, stage.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight));
+        const maxHeight = Math.max(1, stage.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom));
         let width = maxWidth;
         let height = width / aspect;
         if (height > maxHeight) {
           height = maxHeight;
           width = height * aspect;
         }
-        viewWidth = Math.round(width);
-        viewHeight = Math.round(height);
+        viewWidth = Math.max(1, Math.round(width));
+        viewHeight = Math.max(1, Math.round(height));
         canvas.width = Math.max(1, Math.round(viewWidth * dpr));
         canvas.height = Math.max(1, Math.round(viewHeight * dpr));
         canvas.style.width = viewWidth + 'px';
         canvas.style.height = viewHeight + 'px';
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         markAllDirty();
-        render();
+        hud.refresh();
+        draw();
       }
 
       function markAllDirty() {
@@ -459,10 +528,7 @@
         } else {
           renderLayerList();
         }
-        updateStatus();
       }
-
-      function updateStatus() {}
 
       function createLayerFromSource(src, label, revokeUrl = false) {
         const img = new Image();
@@ -478,11 +544,7 @@
             id: randomId(),
             name: label || `Layer ${layers.length + 1}`,
             image: img,
-            color: '#ff9c4c',
-            tolerance: 56,
-            brushSize: 8,
-            opacity: 0.88,
-            blendMode: 'normal',
+            ...layerDefaults,
             visible: true,
             buffer: null,
             dirty: true,
@@ -490,7 +552,7 @@
           };
           layers.push(layer);
           setActiveLayer(layer.id);
-          renderLayerList();
+          hud.newSpecimen();
           render();
           if (revokeUrl) {
             URL.revokeObjectURL(src);
@@ -507,76 +569,118 @@
 
       function rebuildLayerBuffer(layer) {
         if (!layer?.image) return;
-        const w = Math.max(1, Math.round(viewWidth));
-        const h = Math.max(1, Math.round(viewHeight));
-        const off = document.createElement('canvas');
-        off.width = w;
-        off.height = h;
-        const offCtx = off.getContext('2d', { willReadFrequently: true });
-        const fit = fitImage(layer.image, w, h);
-
-        offCtx.drawImage(layer.image, fit.x, fit.y, fit.w, fit.h);
-        const imgData = offCtx.getImageData(0, 0, w, h);
-        const data = imgData.data;
-        const outData = offCtx.createImageData(w, h);
-        const out = outData.data;
+        const t0 = performance.now();
+        const { w, h, data, canvas: srcCanvas } = getSource(layer);
+        if (!layer.mask || layer.mask.width !== w || layer.mask.height !== h) {
+          layer.mask = new ImageData(w, h);
+          layer.work = document.createElement('canvas');
+          layer.work.width = w;
+          layer.work.height = h;
+          layer.workCtx = layer.work.getContext('2d');
+          layer.blur = null;
+        }
+        const out = layer.mask.data;
+        out.fill(0);
         const target = hexToRgb(layer.color);
         const tolerance = layer.tolerance;
+        const tol2 = tolerance * tolerance;
         const feather = Math.max(0, layer.brushSize || 0);
         const featherSpan = Math.max(1, feather * 2);
+        const outer2 = (tolerance + featherSpan) * (tolerance + featherSpan);
+        const invert = Boolean(layer.invert);
+        const [targetH] = rgbToHsv(target.r, target.g, target.b);
 
+        // Range statistics over the pixels inside the tolerance sphere (what the HUD reports).
+        let inRange = 0;
+        let total = 0;
+        let hMin = 0, hMax = 0, sMin = 100, sMax = 0, vMin = 100, vMax = 0;
         let hasContent = false;
         for (let i = 0; i < data.length; i += 4) {
+          const a = data[i + 3];
+          if (a === 0) continue;
+          total++;
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
-          const a = data[i + 3];
-          if (a === 0) continue;
-          const dist = colorDistance(target, { r, g, b });
-          if (dist <= tolerance) {
+          const dr = r - target.r;
+          const dg = g - target.g;
+          const db = b - target.b;
+          const d2 = dr * dr + dg * dg + db * db;
+          let cover = 0;
+          if (d2 <= tol2) {
+            cover = 1;
+            inRange++;
+            const max = r > g ? (r > b ? r : b) : (g > b ? g : b);
+            const min = r < g ? (r < b ? r : b) : (g < b ? g : b);
+            const sat = max ? ((max - min) / max) * 100 : 0;
+            const val = (max / 255) * 100;
+            if (sat < sMin) sMin = sat;
+            if (sat > sMax) sMax = sat;
+            if (val < vMin) vMin = val;
+            if (val > vMax) vMax = val;
+            if (max !== min && sat > 4) {
+              let dh = hueOf(r, g, b, max, min) - targetH;
+              if (dh > 180) dh -= 360; else if (dh < -180) dh += 360;
+              if (dh < hMin) hMin = dh;
+              if (dh > hMax) hMax = dh;
+            }
+          } else if (feather > 0 && d2 <= outer2) {
+            cover = Math.max(0, 1 - (Math.sqrt(d2) - tolerance) / featherSpan);
+          }
+          if (invert) cover = 1 - cover;
+          const alpha = Math.round(cover * a);
+          if (alpha > 0) {
             out[i] = r;
             out[i + 1] = g;
             out[i + 2] = b;
-            out[i + 3] = a;
+            out[i + 3] = alpha;
             hasContent = true;
-          } else if (feather > 0 && dist <= tolerance + featherSpan) {
-            const falloff = 1 - (dist - tolerance) / featherSpan;
-            const alpha = Math.max(0, Math.min(1, falloff)) * (a / 255);
-            out[i] = r;
-            out[i + 1] = g;
-            out[i + 2] = b;
-            out[i + 3] = Math.round(alpha * 255);
-            if (out[i + 3] > 0) hasContent = true;
           }
         }
-
-        offCtx.clearRect(0, 0, w, h);
-        offCtx.putImageData(outData, 0, 0);
+        layer.stats = {
+          pct: total ? (inRange / total) * 100 : 0,
+          hMin, hMax,
+          sMin: inRange ? sMin : 0, sMax,
+          vMin: inRange ? vMin : 0, vMax,
+        };
 
         if (!hasContent) {
-          offCtx.clearRect(0, 0, w, h);
-          offCtx.drawImage(layer.image, fit.x, fit.y, fit.w, fit.h);
-          layer.buffer = off;
-          layer.dirty = false;
-          return;
-        }
-
-        if (feather > 1) {
-          const blurred = document.createElement('canvas');
-          blurred.width = w;
-          blurred.height = h;
-          const blurCtx = blurred.getContext('2d');
-          blurCtx.filter = `blur(${Math.round(feather * 0.6)}px)`;
-          blurCtx.drawImage(off, 0, 0);
-          layer.buffer = blurred;
+          // Nothing matches: show the plain image so the layer never goes blank.
+          layer.buffer = srcCanvas;
         } else {
-          layer.buffer = off;
+          layer.workCtx.putImageData(layer.mask, 0, 0);
+          if (feather > 1) {
+            if (!layer.blur) {
+              layer.blur = document.createElement('canvas');
+              layer.blur.width = w;
+              layer.blur.height = h;
+            }
+            const blurCtx = layer.blur.getContext('2d');
+            blurCtx.clearRect(0, 0, w, h);
+            blurCtx.filter = `blur(${Math.round(feather * 0.6)}px)`;
+            blurCtx.drawImage(layer.work, 0, 0);
+            blurCtx.filter = 'none';
+            layer.buffer = layer.blur;
+          } else {
+            layer.buffer = layer.work;
+          }
         }
-
+        layer.ms = performance.now() - t0;
         layer.dirty = false;
       }
 
+      // Redraws are coalesced to one per frame (sliders fire input faster than that).
+      let drawQueued = false;
       function render() {
+        if (drawQueued) return;
+        drawQueued = true;
+        requestAnimationFrame(() => {
+          drawQueued = false;
+          draw();
+        });
+      }
+
+      function draw() {
         const displayW = viewWidth;
         const displayH = viewHeight;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -597,16 +701,33 @@
         });
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
+        updateHud();
       }
 
-      function getCanvasPoint(evt) {
-        const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        return {
-          x: (evt.clientX - rect.left) * scaleX,
-          y: (evt.clientY - rect.top) * scaleY,
-        };
+      function signed(value) {
+        return (value < 0 ? '-' : '+') + AGData.fmt(Math.abs(value), 0, 3);
+      }
+
+      function updateHud() {
+        const active = layers.find((l) => l.id === activeLayerId);
+        hud.set('Layers', layers.length ? AGData.fmt(layers.length, 0, 2) : null, 'n', 'tl');
+        if (!active) {
+          ['Source', 'Focus', 'Tol', 'Match', 'Sat', 'Val', 'Hue', 'Render'].forEach((k) => hud.set(k, null));
+          return;
+        }
+        const t = hexToRgb(active.color);
+        const [h, sat, val] = rgbToHsv(t.r, t.g, t.b);
+        hud.set('Source', `${active.image.naturalWidth} × ${active.image.naturalHeight}`, 'px', 'tl');
+        hud.set('Focus', `H${AGData.fmt(h, 0, 3)} S${AGData.fmt(sat, 0, 3)} V${AGData.fmt(val, 0, 3)}`, 'hsv', 'tl');
+        hud.set('Tol', `±${AGData.fmt(active.tolerance, 0, 3)}`, 'rgb dist', 'tl');
+        const st = active.stats;
+        if (st) {
+          hud.set('Match', AGData.fmt(st.pct, 1, 5), '% px', 'br');
+          hud.set('Hue', `${signed(st.hMin)}…${signed(st.hMax)}`, '°', 'br');
+          hud.set('Sat', `${AGData.fmt(st.sMin, 0, 3)}–${AGData.fmt(st.sMax, 0, 3)}`, '%', 'br');
+          hud.set('Val', `${AGData.fmt(st.vMin, 0, 3)}–${AGData.fmt(st.vMax, 0, 3)}`, '%', 'br');
+          hud.set('Render', AGData.fmt(active.ms || 0, 1, 4), 'ms', 'br');
+        }
       }
 
       function updatePickMode(on) {
@@ -614,7 +735,113 @@
         pickColorBtn?.classList.toggle('is-active', pickMode);
         pickColorBtn?.setAttribute('aria-pressed', String(pickMode));
         pickHint?.classList.toggle('is-visible', pickMode);
+        if (pickMode && pickHint) pickHint.textContent = coarsePointer ? 'Touch and drag, release to pick' : 'Click to pick a colour';
+        canvas.classList.toggle('is-picking', pickMode);
+        if (!pickMode) hideProbe();
       }
+
+      // ---------- Colour probe (pointer events: mouse hover/click, touch press-drag-release) ----------
+      let probing = false;
+      let probeShown = false;
+
+      function hideProbe() {
+        probing = false;
+        probeShown = false;
+        probeRing.classList.remove('is-on');
+        probeLoupe.classList.remove('is-on');
+      }
+
+      function setText(node, text) {
+        if (node.textContent !== text) node.textContent = text;
+      }
+
+      // Returns the sampled colour under the pointer (or null outside the image) and moves the probe there.
+      function probeAt(evt, show) {
+        const active = layers.find((l) => l.id === activeLayerId);
+        if (!active?.image) return null;
+        const rect = canvas.getBoundingClientRect();
+        const vx = (evt.clientX - rect.left) * (viewWidth / rect.width);
+        const vy = (evt.clientY - rect.top) * (viewHeight / rect.height);
+        const sx = Math.floor(vx);
+        const sy = Math.floor(vy);
+        if (sx < 0 || sy < 0 || sx >= viewWidth || sy >= viewHeight) {
+          if (show) hideProbe();
+          return null;
+        }
+        const src = getSource(active);
+        const i = (sy * src.w + sx) * 4;
+        if (src.data[i + 3] === 0) {
+          if (show) hideProbe();
+          return null;
+        }
+        const color = { r: src.data[i], g: src.data[i + 1], b: src.data[i + 2] };
+        if (!show) return color;
+
+        const hex = rgbToHex(color.r, color.g, color.b);
+        const hsl = rgbToHsl(color.r, color.g, color.b);
+        probeSwatch.style.background = hex;
+        setText(probeText.rgb, `RGB ${AGData.fmt(color.r, 0, 3)} ${AGData.fmt(color.g, 0, 3)} ${AGData.fmt(color.b, 0, 3)}`);
+        setText(probeText.hex, hex.toUpperCase());
+        setText(probeText.hsl, `HSL ${AGData.fmt(hsl[0], 0, 3)}° ${AGData.fmt(hsl[1], 0, 3)} ${AGData.fmt(hsl[2], 0, 3)}`);
+        probeCtx.clearRect(0, 0, 54, 54);
+        probeCtx.drawImage(src.canvas, sx - 4, sy - 4, 9, 9, 0, 0, 54, 54);
+
+        // Position inside the stage; a finger hides what is under it, so the loupe sits above the touch point.
+        const stageRect = stage.getBoundingClientRect();
+        const px = evt.clientX - stageRect.left;
+        const py = evt.clientY - stageRect.top;
+        const loupeW = 132;
+        const loupeH = 196;
+        const touch = evt.pointerType !== 'mouse';
+        let lx = touch ? px - loupeW / 2 : px + 24;
+        let ly = touch ? py - loupeH - 36 : py + 24;
+        if (!touch && lx + loupeW > stageRect.width) lx = px - 24 - loupeW;
+        if (!touch && ly + loupeH > stageRect.height) ly = py - 24 - loupeH;
+        if (touch && ly < 4) ly = py + 36;
+        lx = Math.max(4, Math.min(stageRect.width - loupeW - 4, lx));
+        ly = Math.max(4, Math.min(stageRect.height - loupeH - 4, ly));
+        probeRing.style.transform = `translate3d(${px}px, ${py}px, 0)`;
+        probeLoupe.style.transform = `translate3d(${lx}px, ${ly}px, 0)`;
+        if (!probeShown) {
+          probeShown = true;
+          probeRing.classList.add('is-on');
+          probeLoupe.classList.add('is-on');
+        }
+        return color;
+      }
+
+      function commitPick(color) {
+        const active = layers.find((l) => l.id === activeLayerId);
+        if (!active || !color) return;
+        active.color = rgbToHex(color.r, color.g, color.b);
+        active.dirty = true;
+        updatePickMode(false);
+        renderLayerList();
+        render();
+      }
+
+      canvas.addEventListener('pointerdown', (evt) => {
+        if (!pickMode || (evt.pointerType === 'mouse' && evt.button !== 0)) return;
+        evt.preventDefault();
+        probing = true;
+        try { canvas.setPointerCapture(evt.pointerId); } catch (err) { /* synthetic pointer */ }
+        probeAt(evt, true);
+      });
+      canvas.addEventListener('pointermove', (evt) => {
+        if (!pickMode) return;
+        if (probing || evt.pointerType === 'mouse') probeAt(evt, true);
+      });
+      canvas.addEventListener('pointerup', (evt) => {
+        if (!pickMode || !probing) return;
+        const color = probeAt(evt, false);
+        hideProbe();
+        // Releasing outside the image cancels, so a touch can be aborted by dragging away.
+        if (color) commitPick(color);
+      });
+      canvas.addEventListener('pointercancel', hideProbe);
+      canvas.addEventListener('pointerleave', (evt) => {
+        if (evt.pointerType === 'mouse' && !probing) hideProbe();
+      });
 
       function renderLayerList() {
         layerList.innerHTML = '';
@@ -666,7 +893,6 @@
             if (nextName && nextName.trim()) {
               layer.name = nextName.trim();
               renderLayerList();
-              updateStatus();
             }
           });
 
@@ -750,6 +976,7 @@
           tolRange.addEventListener('input', (e) => {
             layer.tolerance = parseInt(e.target.value, 10) || layer.tolerance;
             tolValue.textContent = layer.tolerance;
+            AGData.tick(tolValue);
             layer.dirty = true;
             render();
           });
@@ -762,8 +989,8 @@
           brushLabel.className = 'stacked';
           const brushText = document.createElement('span');
           const brushValue = document.createElement('em');
-          brushValue.textContent = layer.brushSize;
-          brushText.textContent = 'Feather / density ';
+          brushValue.textContent = `${layer.brushSize}px`;
+          brushText.textContent = 'Feather ';
           brushText.appendChild(brushValue);
           const brushRange = document.createElement('input');
           brushRange.type = 'range';
@@ -775,7 +1002,8 @@
           brushRange.addEventListener('input', (e) => {
             const next = parseInt(e.target.value, 10);
             layer.brushSize = Number.isFinite(next) ? next : layer.brushSize;
-            brushValue.textContent = layer.brushSize;
+            brushValue.textContent = `${layer.brushSize}px`;
+            AGData.tick(brushValue);
             layer.dirty = true;
             render();
           });
@@ -801,6 +1029,7 @@
           opacityRange.addEventListener('input', (e) => {
             layer.opacity = parseFloat(e.target.value) || layer.opacity;
             opacityValue.textContent = `${Math.round(layer.opacity * 100)}%`;
+            AGData.tick(opacityValue);
             render();
           });
           opacityRange.addEventListener('change', () => setActiveLayer(layer.id));
@@ -828,6 +1057,22 @@
           blendLabel.appendChild(blendText);
           blendLabel.appendChild(blendSelect);
           controlsWrap.appendChild(blendLabel);
+
+          const invertBtn = document.createElement('button');
+          invertBtn.type = 'button';
+          const syncInvert = () => {
+            invertBtn.textContent = `Invert match: ${layer.invert ? 'On' : 'Off'}`;
+            invertBtn.setAttribute('aria-pressed', String(Boolean(layer.invert)));
+          };
+          syncInvert();
+          invertBtn.addEventListener('click', () => {
+            layer.invert = !layer.invert;
+            layer.dirty = true;
+            syncInvert();
+            setActiveLayer(layer.id, { silent: true });
+            render();
+          });
+          controlsWrap.appendChild(invertBtn);
 
           card.appendChild(controlsWrap);
 
@@ -959,10 +1204,28 @@
           alert('Add at least one layer before exporting.');
           return;
         }
-        const link = document.createElement('a');
-        link.download = 'color-range-lab.png';
-        link.href = canvas.toDataURL('image/png');
-        link.click();
+        draw();
+        // The probe and HUD are DOM overlays, so the PNG holds the artwork only.
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          const file = new File([blob], 'color-range-lab.png', { type: 'image/png' });
+          if (coarsePointer && navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({ files: [file], title: 'Color Range' });
+              return;
+            } catch (err) {
+              if (err && err.name === 'AbortError') return;
+            }
+          }
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'color-range-lab.png';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 4000);
+        }, 'image/png');
       });
 
       clearBtn?.addEventListener('click', () => {
@@ -970,6 +1233,7 @@
         baseAspect = 1.45;
         updatePickMode(false);
         setActiveLayer(null);
+        hud.newSpecimen();
         resizeCanvas();
       });
 
@@ -978,22 +1242,37 @@
         updatePickMode(!pickMode);
       });
 
-      canvas.addEventListener('click', (evt) => {
-        if (!pickMode) return;
-        const active = layers.find((l) => l.id === activeLayerId);
-        if (!active) return;
-        const point = getCanvasPoint(evt);
-        const sampled = sampleColorAtPoint(active, point);
-        if (!sampled) return;
-        active.color = rgbToHex(sampled.r, sampled.g, sampled.b);
-        active.dirty = true;
-        updatePickMode(false);
-        renderLayerList();
-        render();
-      });
-
-      window.addEventListener('resize', resizeCanvas);
+      // The sheet animates the stage height: resize the canvas once it settles, not on every frame.
+      let resizeTimer = 0;
+      const scheduleResize = () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(resizeCanvas, 90);
+      };
+      window.addEventListener('resize', scheduleResize);
+      if (window.ResizeObserver) new ResizeObserver(scheduleResize).observe(stage);
       requestAnimationFrame(resizeCanvas);
+
+      // Remember the layer settings between visits (scripts/savedSettings.js). Images are not stored,
+      // so the settings of the layer you last worked on become the start for the next image you load.
+      AGSettings.persist('colorrangelab', {
+        get: () => {
+          const active = layers.find((l) => l.id === activeLayerId);
+          if (active) {
+            Object.keys(layerDefaults).forEach((key) => {
+              layerDefaults[key] = active[key];
+            });
+          }
+          return layerDefaults;
+        },
+        set: (saved) => {
+          if (/^#[0-9a-f]{6}$/i.test(saved.color)) layerDefaults.color = saved.color;
+          if (Number.isFinite(saved.tolerance)) layerDefaults.tolerance = Math.min(160, Math.max(8, saved.tolerance));
+          if (Number.isFinite(saved.brushSize)) layerDefaults.brushSize = Math.min(24, Math.max(0, saved.brushSize));
+          if (Number.isFinite(saved.opacity)) layerDefaults.opacity = Math.min(1, Math.max(0.1, saved.opacity));
+          if (blendModes.includes(saved.blendMode)) layerDefaults.blendMode = saved.blendMode;
+          if (typeof saved.invert === 'boolean') layerDefaults.invert = saved.invert;
+        },
+      });
     })();
   </script>
 </body>

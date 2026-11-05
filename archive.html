@@ -2,28 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Archive · Accidental Graphics</title>
   <meta name="description" content="Older Accidental Graphics tools. They still work.">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/nav.css">
+  <link rel="stylesheet" href="css/data.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
   <link rel="icon" type="image/png" sizes="16x16" href="images/face cursor.png">
   <script defer src="scripts/navConfig.js"></script>
   <script defer src="scripts/navMenu.js"></script>
+  <script src="scripts/dataLayer.js"></script>
 </head>
 <body>
   <main class="archive-wrapper">
     <header class="archive-hero">
-      <h1>The Archive</h1>
+      <h1>The Archive <sup class="title-count" id="archiveCount">-- ITEMS</sup></h1>
       <p class="lede" id="archiveIntro"></p>
     </header>
 
+    <div class="archive-head" aria-hidden="true">
+      <span>NO.</span><span>SPECIMEN</span><span>DESCRIPTION</span><span>YEAR</span>
+    </div>
     <ul class="archive-list" id="archiveList"></ul>
   </main>
-  <div class="app-year">2026 Accidental Graphics</div>
+  <div class="app-year" data-live>2026 Accidental Graphics</div>
 
   <script>
   window.addEventListener('DOMContentLoaded', () => {
@@ -37,10 +42,18 @@
       return AGContent.tools();
     }).then(tools => {
       list.innerHTML = '';
-      tools.filter(tool => tool.archived).forEach(tool => {
+      const archived = tools.filter(tool => tool.archived);
+      document.getElementById('archiveCount').textContent = `${String(archived.length).padStart(2, '0')} ITEMS`;
+      archived.forEach((tool, index) => {
         const item = document.createElement('li');
         const article = document.createElement('article');
         article.className = 'archive-details';
+        item.style.setProperty('--i', index);
+
+        const no = document.createElement('span');
+        no.className = 'archive-no';
+        no.textContent = String(index + 1).padStart(3, '0');
+        article.appendChild(no);
 
         if (tool.cover && tool.isVideo) {
           const video = document.createElement('video');
@@ -66,12 +79,6 @@
         const name = document.createElement('strong');
         name.textContent = tool.name;
         heading.appendChild(name);
-        if (tool.year) {
-          const year = document.createElement('span');
-          year.className = 'archive-year';
-          year.textContent = `Since ${tool.year}`;
-          heading.appendChild(year);
-        }
         body.appendChild(heading);
 
         if (tool.description) {
@@ -86,6 +93,10 @@
         body.appendChild(link);
 
         article.appendChild(body);
+        const year = document.createElement('span');
+        year.className = 'archive-year';
+        year.textContent = tool.year || '----';
+        article.appendChild(year);
         item.appendChild(article);
         list.appendChild(item);
       });

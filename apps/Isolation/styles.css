@@ -4,6 +4,8 @@
   --ink: #000000;
   --rule: #000000;
   --gap: 14px;
+  /* Height of the black menu bar (css/nav.css). */
+  --iso-nav: 72px;
   font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -22,7 +24,7 @@ body {
 body {
   background: var(--paper);
   color: var(--ink);
-  padding-top: 72px;
+  padding-top: var(--iso-nav);
 }
 
 button,
@@ -77,7 +79,7 @@ input[type="range"] {
 .app {
   display: grid;
   grid-template-columns: 420px minmax(0, 1fr);
-  height: calc(100dvh - 72px);
+  height: calc(100dvh - var(--iso-nav));
   min-height: 0;
   border-top: 1px solid var(--rule);
 }
@@ -229,7 +231,6 @@ body.ag-settings-hidden .app {
 }
 
 h1,
-h2,
 p {
   margin: 0;
 }
@@ -245,20 +246,6 @@ h1 {
   font-size: 11px;
   line-height: 1;
   text-transform: uppercase;
-}
-
-h2 {
-  margin-bottom: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  text-transform: uppercase;
-  letter-spacing: 0;
-}
-
-section {
-  padding: 18px 0;
-  border-bottom: 1px solid var(--rule);
 }
 
 .control-group {
@@ -678,16 +665,18 @@ output,
   height: 100%;
   padding: 12px;
   overflow: hidden;
-  border-bottom: 0;
 }
 
 .canvas-shell {
   display: grid;
   place-items: center;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
+  /* Margin for the lab data (css/data.css), which sits around the canvas, never on it. */
+  padding: var(--ag-hud-band, 22px) var(--ag-hud-side, 16px);
   overflow: hidden;
 }
 
@@ -828,6 +817,7 @@ output,
   /* Keys at 0s and at the end stay fully visible: the track area is inset from the label column and the edge. */
   --track-left: 158px;
   --track-right: 8px;
+  --label-w: 150px;
   position: relative;
   max-height: 30vh;
   overflow-x: hidden;
@@ -840,7 +830,7 @@ output,
 .timeline-ruler,
 .timeline-row {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
+  grid-template-columns: var(--label-w) minmax(0, 1fr);
 }
 
 .timeline-ruler {
@@ -886,7 +876,7 @@ output,
 
 .timeline-track {
   position: relative;
-  margin: 0 var(--track-right) 0 calc(var(--track-left) - 150px);
+  margin: 0 var(--track-right) 0 calc(var(--track-left) - var(--label-w));
   cursor: ew-resize;
 }
 
@@ -1022,6 +1012,11 @@ output,
 }
 
 @media (max-width: 480px) {
+  /* The menu bar is lower on phones (css/nav.css). */
+  :root {
+    --iso-nav: 60px;
+  }
+
   /* Four header buttons do not fit next to each other on a phone. */
   .header-actions {
     grid-template-columns: 1fr 1fr;
@@ -1033,12 +1028,7 @@ output,
     grid-template-rows: minmax(0, 1fr);
   }
 
-  body {
-    padding-top: 60px;
-  }
-
   .app {
-    height: calc(100dvh - 60px);
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 50%) minmax(0, 50%);
   }
@@ -1062,4 +1052,215 @@ output,
     max-width: 100%;
     max-height: 100%;
   }
+}
+
+.check[hidden] {
+  display: none;
+}
+
+.meter + .check {
+  margin-top: 10px;
+}
+
+/* Values read like instrument readouts (css/data.css font). */
+output,
+.meter {
+  font-family: var(--ag-data-font, ui-monospace, Menlo, monospace);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* Secondary motion: a section's content settles in just after it opens. */
+.control-group[open] > .group-body {
+  animation: iso-reveal var(--ag-dur-3, 420ms) var(--ag-ease-out, ease-out) both;
+}
+
+@keyframes iso-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.timeline-body:not([hidden]),
+.video-export:not([hidden]) {
+  animation: iso-reveal var(--ag-dur-2, 220ms) var(--ag-ease-out, ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .control-group[open] > .group-body,
+  .timeline-body:not([hidden]),
+  .video-export:not([hidden]) {
+    animation: none;
+  }
+}
+
+/* ---------- Phones and tablets: the settings are a bottom sheet (scripts/settingsToggle.js) ---------- */
+body.ag-sheet {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The panel floats as the sheet, so the stage gets the whole area above it. */
+body.ag-sheet .app {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: calc(100dvh - var(--iso-nav) - var(--ag-sheet-h, 0px));
+}
+
+body.ag-sheet .stage {
+  height: 100%;
+  gap: 8px;
+  padding: 8px max(8px, env(safe-area-inset-right)) 8px max(8px, env(safe-area-inset-left));
+}
+
+/* Tap targets of at least 40px and 16px text in fields (no zoom on focus in iOS). */
+body.ag-sheet .panel button,
+body.ag-sheet .timeline button,
+body.ag-sheet .video-export button {
+  min-height: 40px;
+}
+
+body.ag-sheet .panel select,
+body.ag-sheet .panel input[type="number"],
+body.ag-sheet .panel input[type="text"],
+body.ag-sheet .panel textarea,
+body.ag-sheet .timeline select,
+body.ag-sheet .timeline input,
+body.ag-sheet .video-export select {
+  min-height: 40px;
+  font-size: 16px;
+}
+
+body.ag-sheet .panel input[type="color"] {
+  width: 48px;
+  height: 40px;
+}
+
+body.ag-sheet .panel input[type="range"] {
+  height: 40px;
+}
+
+body.ag-sheet .header-actions button,
+body.ag-sheet .header-actions .check {
+  height: 40px;
+  font-size: 13px;
+}
+
+body.ag-sheet .help-toggle {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  font-size: 15px;
+}
+
+body.ag-sheet .check {
+  min-height: 40px;
+}
+
+body.ag-sheet .check input {
+  width: 20px;
+  height: 20px;
+}
+
+body.ag-sheet .control {
+  min-height: 40px;
+}
+
+body.ag-sheet .mini-button,
+body.ag-sheet .mini-select {
+  min-height: 40px;
+  height: 40px;
+  font-size: 14px;
+}
+
+body.ag-sheet .audio-row select {
+  min-height: 40px;
+}
+
+body.ag-sheet.motion-on .key-button {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  font-size: 16px;
+}
+
+body.ag-sheet.motion-on .control {
+  grid-template-columns: 84px minmax(0, 1fr) 44px 32px;
+}
+
+/* Timeline: the transport wraps onto two rows, rows and keys are big enough to touch. */
+body.ag-sheet .timeline {
+  font-size: 13px;
+}
+
+body.ag-sheet .timeline-bar {
+  flex-wrap: wrap;
+  padding: 0;
+}
+
+body.ag-sheet .timeline-bar .timeline-toggle {
+  height: 40px;
+  min-height: 40px;
+}
+
+body.ag-sheet .timeline-transport {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  border-top: 1px solid var(--rule);
+}
+
+body.ag-sheet .timeline-bar .export-video {
+  margin-left: 0;
+}
+
+body.ag-sheet .timeline-bar button,
+body.ag-sheet .timeline-bar select,
+body.ag-sheet .video-export button,
+body.ag-sheet .video-export select {
+  height: 40px;
+  min-height: 40px;
+  font-size: 14px;
+}
+
+body.ag-sheet .timeline-field input {
+  width: 64px;
+}
+
+body.ag-sheet .time-display {
+  min-width: 0;
+}
+
+body.ag-sheet .timeline-body {
+  --track-left: 96px;
+  --track-right: 14px;
+  --label-w: 88px;
+  max-height: 34dvh;
+}
+
+body.ag-sheet .timeline-ruler {
+  height: 30px;
+}
+
+body.ag-sheet .timeline-row,
+body.ag-sheet .timeline-row .timeline-label {
+  height: 36px;
+  min-height: 36px;
+}
+
+body.ag-sheet .timeline-row .timeline-label {
+  font-size: 12px;
+}
+
+body.ag-sheet .key-dot {
+  width: 13px;
+  height: 13px;
+}
+
+/* Bigger hit area than the visible key. */
+body.ag-sheet .key-dot::after {
+  content: "";
+  position: absolute;
+  inset: -10px;
 }
