@@ -1798,6 +1798,137 @@ body.motion-page #canvas {
   }
 }
 
+/* The <video> the frames are read from: in the document for iOS, never visible. */
+body.motion-page .motion-source-video {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 2px;
+  opacity: 0.01;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Playhead: hairline under the canvas that eases after the video time (DOM only, never exported). */
+body.motion-page .motion-playhead {
+  position: absolute;
+  z-index: 3;
+  height: 3px;
+  margin-top: -3px;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.16);
+  mix-blend-mode: difference;
+}
+
+body.motion-page .motion-playhead[hidden] {
+  display: none;
+}
+
+body.motion-page .motion-playhead__fill {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.62);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+
+body.motion-page .motion-playhead__head {
+  position: absolute;
+  top: -5px;
+  left: -0.5px;
+  width: 1px;
+  height: 13px;
+  background: #fff;
+}
+
+body.motion-page .motion-layer.is-hidden .motion-layer__title {
+  opacity: 0.5;
+}
+
+body.motion-page .motion-layer__meta {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+body.motion-page .motion-layer.is-active .motion-layer__meta {
+  color: #fff;
+}
+
+/* Mobile bottom sheet (scripts/settingsToggle.js): canvas above the sheet, 40px targets, 16px inputs. */
+body.ag-sheet.motion-page {
+  overflow: hidden;
+}
+
+body.ag-sheet.motion-page #main {
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  overflow: hidden;
+}
+
+body.ag-sheet.motion-page .canvas-stage {
+  flex: none;
+  min-height: 0;
+  padding: 10px max(10px, env(safe-area-inset-right)) 10px max(10px, env(safe-area-inset-left));
+}
+
+body.ag-sheet.motion-page #canvas {
+  max-width: none;
+  max-height: none;
+}
+
+body.ag-sheet.motion-page .motion-group > summary {
+  min-height: 48px;
+}
+
+body.ag-sheet.motion-page .motion-file-button,
+body.ag-sheet.motion-page .motion-file-button--webcam,
+body.ag-sheet.motion-page button,
+body.ag-sheet.motion-page .motion-custom-shape__top button,
+body.ag-sheet.motion-page .motion-primary-actions button {
+  min-height: 40px;
+  height: auto;
+}
+
+body.ag-sheet.motion-page input[type="number"],
+body.ag-sheet.motion-page input[type="text"],
+body.ag-sheet.motion-page select,
+body.ag-sheet.motion-page .motion-value-input,
+body.ag-sheet.motion-page .motion-layer__title {
+  min-height: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+
+body.ag-sheet.motion-page .motion-control {
+  grid-template-columns: 72px minmax(0, 1fr) 64px;
+  min-height: 44px;
+}
+
+body.ag-sheet.motion-page .motion-control input[type="range"] {
+  height: 40px;
+}
+
+body.ag-sheet.motion-page .motion-check,
+body.ag-sheet.motion-page .motion-color-row,
+body.ag-sheet.motion-page .motion-select-row {
+  min-height: 40px;
+}
+
+body.ag-sheet.motion-page .motion-check input {
+  width: 22px;
+  height: 22px;
+}
+
+body.ag-sheet.motion-page .motion-color-row input[type="color"] {
+  width: 56px;
+  height: 40px;
+}
+
+body.ag-sheet.motion-page .motion-canvas-size {
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
 /* Shared black panel UI for active app pages except Swing */
 body.panel-ui-page {
   background: #000;

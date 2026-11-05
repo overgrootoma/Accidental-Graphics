@@ -405,7 +405,7 @@ let applyingLayerSettings = false;
 
 // processing canvases (lower res for speed)
 const procCanvas = document.createElement('canvas');
-const procCtx = procCanvas.getContext('2d');
+const procCtx = procCanvas.getContext('2d', {willReadFrequently: true});
 
 // painting canvas (accumulates)
 let paintCanvas = document.createElement('canvas');
@@ -417,6 +417,133 @@ const sourceCtx = sourceCanvas.getContext('2d');
 
 // canvas canvas context
 const dispCtx = canvas.getContext('2d');
+
+// Data overlay (scripts/dataLayer.js): DOM only, so it never ends up in an export.
+const hud = AGData.hud(canvas, {canvas, code: 'MST'});
+// Live numbers for the overlay, filled by processCurrentVideoFrame.
+const frameStats = {motion: 0, regions: 0, tracked: 0};
+let sourceFps = 0;
+let fpsProbe = {time: -1, frames: -1, best: Infinity};
+let hudTextAt = 0;
+let playheadShown = 0;
+let playheadWidth = 0;
+let playheadLast = 0;
+const playheadFill = playheadEl?.querySelector('.motion-playhead__fill');
+const playheadHead = playheadEl?.querySelector('.motion-playhead__head');
+
+// Source frame rate: webcams report it; for files it is measured from the media time between
+// presented frames (requestVideoFrameCallback), keeping the shortest step seen.
+function readSourceFrameRate(stream){
+  fpsProbe = {time: -1, frames: -1, best: Infinity};
+  sourceFps = 0;
+  const track = stream?.getVideoTracks?.()[0];
+  const rate = track?.getSettings?.().frameRate;
+  if(Number.isFinite(rate) && rate > 0) sourceFps = rate;
+}
+
+function probeSourceFrame(now, meta){
+  if(!video.srcObject && meta){
+    const frames = meta.presentedFrames;
+    const time = meta.mediaTime;
+    if(fpsProbe.frames >= 0 && frames - fpsProbe.frames === 1){
+      const step = time - fpsProbe.time;
+      if(step > 0.004 && step < fpsProbe.best){
+        fpsProbe.best = step;
+        sourceFps = 1 / step;
+      }
+    }
+    fpsProbe.frames = frames;
+    fpsProbe.time = time;
+  }
+  video.requestVideoFrameCallback(probeSourceFrame);
+}
+if(typeof video.requestVideoFrameCallback === 'function'){
+  video.requestVideoFrameCallback(probeSourceFrame);
+}
+
+function formatClock(seconds){
+  const t = Math.max(0, seconds || 0);
+  const minutes = Math.floor(t / 60);
+  return `${AGData.fmt(minutes, 0, 2)}:${AGData.fmt(t - minutes * 60, 2, 2)}`;
+}
+
+function hasTimeline(){
+  return !video.srcObject && Number.isFinite(video.duration) && video.duration > 0;
+}
+
+function updateHudText(){
+  const loaded = hasVideoSource() && video.videoWidth > 0;
+  const timeline = hasTimeline();
+  const activeIndex = motionLayers.findIndex(layer => layer.id === activeLayerId);
+  // Narrow (phone) canvas: only the essentials, so the corners stay readable.
+  const full = canvas.offsetWidth >= 560;
+  hud.set('Layers', motionLayers.length ? `${AGData.fmt(motionLayers.length, 0, 2)} · ACT ${AGData.fmt(activeIndex + 1, 0, 2)}` : null, '', 'tl');
+  hud.set('Src', loaded ? `${AGData.fmt(video.videoWidth, 0, 4)} × ${AGData.fmt(video.videoHeight, 0, 4)}` : null, 'px', 'tr');
+  hud.set('Ana', loaded && full ? `${AGData.fmt(procW, 0, 4)} × ${AGData.fmt(procH, 0, 4)}` : null, 'px', 'tr');
+  hud.set('Rate', loaded ? (sourceFps ? AGData.fmt(sourceFps, 2, 2) : '--.--') : null, 'fps', 'tr');
+  if(timeline){
+    const total = sourceFps ? Math.max(1, Math.round(video.duration * sourceFps)) : 0;
+    const index = sourceFps ? Math.min(total, Math.floor(video.currentTime * sourceFps + 0.001)) : 0;
+    const width = Math.max(4, String(total).length);
+    hud.set('Frame', total ? `${AGData.fmt(index, 0, width)} / ${AGData.fmt(total, 0, width)}` : '---- / ----', '', 'bl');
+    hud.set('Media', `${formatClock(video.currentTime)} / ${formatClock(video.duration)}`, '', 'bl');
+  } else {
+    hud.set('Frame', null);
+    hud.set('Media', loaded ? 'LIVE' : null, '', 'bl');
+  }
+  hud.set('Thr', loaded && full ? `Δ ${AGData.fmt(getMotionThreshold(), 0, 3)}` : null, '', 'br');
+  hud.set('Motion', loaded ? AGData.fmt(frameStats.motion * 100, 1, 2) : null, '%', 'br');
+  hud.set('Obj', loaded ? `${AGData.fmt(frameStats.tracked, 0, 2)} / ${AGData.fmt(parseInt(maxBlobsEl.value, 10) || 0, 0, 2)}` : null, full ? `${AGData.fmt(frameStats.regions, 0, 3)} reg` : '', 'br');
+}
+
+// Playhead: a hairline on the canvas' bottom edge that eases after the video's time.
+function layoutPlayhead(){
+  if(!playheadEl || !canvasStage) return;
+  playheadWidth = canvas.offsetWidth;
+  playheadEl.style.left = `${canvas.offsetLeft}px`;
+  playheadEl.style.top = `${canvas.offsetTop + canvas.offsetHeight}px`;
+  playheadEl.style.width = `${playheadWidth}px`;
+}
+
+function updatePlayhead(now){
+  if(!playheadEl) return;
+  const timeline = hasTimeline();
+  if(playheadEl.hidden === timeline){
+    playheadEl.hidden = !timeline;
+    if(timeline) layoutPlayhead();
+  }
+  if(!timeline) return;
+  const target = Math.min(1, Math.max(0, video.currentTime / video.duration));
+  const dt = Math.min(64, now - (playheadLast || now));
+  playheadLast = now;
+  const diff = target - playheadShown;
+  if(Math.abs(diff) < 0.0005) {
+    if(playheadShown === target) return;
+    playheadShown = target;
+  } else {
+    // Critically damped follow (~90 ms); a rewind sweeps back instead of jumping.
+    playheadShown += diff * (AGData.reducedMotion ? 1 : 1 - Math.exp(-dt / 90));
+  }
+  playheadFill.style.transform = `scaleX(${playheadShown})`;
+  playheadHead.style.transform = `translateX(${playheadShown * playheadWidth}px)`;
+}
+
+function dataLoop(now){
+  requestAnimationFrame(dataLoop);
+  updatePlayhead(now);
+  if(now - hudTextAt < 100 || !AGData.visible || document.hidden) return;
+  hudTextAt = now;
+  updateHudText();
+}
+requestAnimationFrame(dataLoop);
+
+// Loop video: start over when the clip ends during normal playback (never while exporting).
+video.addEventListener('ended', () => {
+  if(!loopVideoEl?.checked || isVideoExporting || video.srcObject || playBtn.getAttribute('aria-pressed') !== 'true') return;
+  resetProcessingState();
+  video.currentTime = 0;
+  video.play().catch(() => {});
+});
 
 let blobIdSeed = 0;
 
@@ -692,6 +819,9 @@ function restoreLayerCanvases(snapshots){
 
 function resetProjectToNewCanvas(){
   video.pause();
+  hud.newSpecimen();
+  frameStats.motion = frameStats.regions = frameStats.tracked = 0;
+  readSourceFrameRate(null);
   cleanupAllLayerSources();
   motionLayers = [];
   activeLayerId = null;
@@ -800,8 +930,53 @@ function resizeLayerCanvases(){
   }
 }
 
+// Layer rows are rebuilt on every change; these animate the rebuild: rows that moved glide from
+// their old place (FLIP), new rows drop in, deleted rows slide out first.
+const seenLayerIds = new Set();
+const layerSpring = 'cubic-bezier(.34, 1.56, .64, 1)';
+
+function measureLayerRows(){
+  const tops = new Map();
+  layerList.querySelectorAll('.motion-layer[data-layer-id]').forEach(row => {
+    tops.set(row.dataset.layerId, row.getBoundingClientRect().top);
+  });
+  return tops;
+}
+
+function animateLayerRows(previousTops){
+  if(AGData.reducedMotion || typeof Element.prototype.animate !== 'function') return;
+  layerList.querySelectorAll('.motion-layer[data-layer-id]').forEach((row, index) => {
+    const id = row.dataset.layerId;
+    if(previousTops.has(id)){
+      const dy = previousTops.get(id) - row.getBoundingClientRect().top;
+      if(Math.abs(dy) > 0.5){
+        row.animate([{transform: `translateY(${dy}px)`}, {transform: 'translateY(0)'}], {duration: 420, easing: layerSpring});
+      }
+    } else if(!seenLayerIds.has(id)){
+      row.animate([
+        {opacity: 0, transform: 'translateY(-8px) scale(.98)'},
+        {opacity: 1, transform: 'none'}
+      ], {duration: 420, delay: Math.min(index, 4) * 30, easing: layerSpring, fill: 'backwards'});
+    }
+    seenLayerIds.add(id);
+  });
+}
+
+function removeLayerRowAnimated(row, done){
+  if(AGData.reducedMotion || typeof row.animate !== 'function'){
+    done();
+    return;
+  }
+  row.style.pointerEvents = 'none';
+  row.animate([
+    {opacity: 1, transform: 'none'},
+    {opacity: 0, transform: 'translateX(14px)'}
+  ], {duration: 160, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'forwards'}).finished.then(done, done);
+}
+
 function renderLayers(){
   if(!layerList) return;
+  const previousTops = measureLayerRows();
   layerList.innerHTML = '';
   if(!motionLayers.length){
     const empty = document.createElement('p');
@@ -813,7 +988,11 @@ function renderLayers(){
   }
   motionLayers.forEach((layer, index) => {
     const item = document.createElement('div');
-    item.className = `motion-layer ${layer.id === activeLayerId ? 'is-active' : ''}`;
+    item.className = `motion-layer${layer.id === activeLayerId ? ' is-active' : ''}${layer.visible ? '' : ' is-hidden'}`;
+    item.dataset.layerId = layer.id;
+    const meta = document.createElement('span');
+    meta.className = 'motion-layer__meta ag-mono';
+    meta.textContent = `L${AGData.fmt(index + 1, 0, 2)} · ${layer.source?.stream ? 'CAM' : 'FILE'}${layer.visible ? '' : ' · HIDDEN'}`;
     const title = document.createElement('input');
     title.type = 'text';
     title.className = 'motion-layer__title';
@@ -883,7 +1062,8 @@ function renderLayers(){
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.textContent = 'Delete';
-    remove.addEventListener('click', () => {
+    remove.addEventListener('click', () => removeLayerRowAnimated(item, () => {
+      if(!motionLayers.includes(layer)) return;
       rememberActiveLayerSettings();
       const wasActive = activeLayerId === layer.id;
       const nextActiveId = wasActive
@@ -891,13 +1071,15 @@ function renderLayers(){
         : activeLayerId;
       cleanupLayerSource(layer);
       motionLayers = motionLayers.filter(item => item.id !== layer.id);
+      seenLayerIds.delete(layer.id);
       setActiveLayer(nextActiveId, {rememberCurrent: false});
       renderCompositeFrame();
-    });
+    }));
     actions.append(toggle, rerun, up, down, remove);
-    item.append(title, actions);
+    item.append(meta, title, actions);
     layerList.appendChild(item);
   });
+  animateLayerRows(previousTops);
   if(layerStatus){
     const activeIndex = motionLayers.findIndex(layer => layer.id === activeLayerId);
     layerStatus.textContent = activeIndex >= 0 ? `Active: ${motionLayers[activeIndex].name}` : 'No active layer';
@@ -1284,9 +1466,14 @@ function setProcessingResolution(width, height){
   procCanvas.width = procW;
   procCanvas.height = procH;
 }
+// Motion is analysed at the source resolution, capped at 1920 px on the long edge (a 4K phone clip
+// would read 33 MB of pixels per frame) and scaled by the Analysis setting.
+const MAX_ANALYSIS_EDGE = 1920;
 function lockProcessingResolutionToSource(width, height){
   if(!width || !height) return;
-  setProcessingResolution(width, height);
+  const chosen = parseFloat(analysisScaleEl?.value);
+  const scale = Math.min([1, 0.5, 0.25].includes(chosen) ? chosen : 1, MAX_ANALYSIS_EDGE / Math.max(width, height));
+  setProcessingResolution(Math.max(16, Math.round(width * scale)), Math.max(16, Math.round(height * scale)));
 }
 
 function clampCanvasDimension(value, fallback, min, max){
@@ -1318,7 +1505,48 @@ function getCanvasPresetSize(sourceW, sourceH){
   return null;
 }
 
+function isSheetLayout(){
+  return document.body.classList.contains('ag-sheet');
+}
+
+// Mobile bottom sheet (settingsToggle.js): the canvas gets the area between the nav and the sheet.
+// withSheet false measures as if the sheet were at peek, so the artwork's resolution doesn't
+// depend on where the sheet happened to be when the video was loaded.
+function getSheetCanvasBox(withSheet = true){
+  const rect = canvasStage.getBoundingClientRect();
+  const styles = getComputedStyle(document.documentElement);
+  const sheetH = withSheet ? parseFloat(styles.getPropertyValue('--ag-sheet-h')) || 0 : 76;
+  const pad = 20;
+  return {
+    width: Math.max(160, Math.floor(rect.width - pad)),
+    height: Math.max(120, Math.floor(window.innerHeight - Math.max(0, rect.top) - sheetH - pad))
+  };
+}
+
+function fitAspect(box, aspect){
+  let width = Math.round(box.height * aspect);
+  let height = box.height;
+  if(width > box.width){
+    width = box.width;
+    height = Math.round(width / aspect);
+  }
+  return {width: Math.max(1, width), height: Math.max(1, height)};
+}
+
+// Sheet layout: the stage is exactly the strip above the sheet, so the canvas centres in what is visible.
+function syncStageHeight(){
+  if(!canvasStage) return;
+  if(!isSheetLayout()){
+    canvasStage.style.height = '';
+    return;
+  }
+  const sheetH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ag-sheet-h')) || 0;
+  const top = Math.max(0, canvasStage.getBoundingClientRect().top);
+  canvasStage.style.height = `${Math.max(140, Math.floor(window.innerHeight - top - sheetH))}px`;
+}
+
 function getCanvasViewportFit(aspect){
+  if(isSheetLayout()) return fitAspect(getSheetCanvasBox(true), aspect);
   const viewportHeight = Math.max(240, Math.floor(window.innerHeight || document.documentElement?.clientHeight || displayH || 720));
   const viewportWidth = Math.max(320, Math.floor(window.innerWidth || document.documentElement?.clientWidth || displayW || 1280));
   const lateralGap = stackedQuery.matches ? 0 : 32;
@@ -1337,6 +1565,24 @@ function getCanvasViewportFit(aspect){
     width: Math.max(320, cssWidth),
     height: Math.max(240, cssHeight)
   };
+}
+
+// "Fit screen" resolution: the CSS size on desktop (as before); on the phone sheet layout the
+// peek-sheet area at device pixel ratio (max 2), so exports aren't phone-thumbnail sized.
+function getScreenCanvasSize(aspect){
+  if(!isSheetLayout()) return getCanvasViewportFit(aspect);
+  const fit = fitAspect(getSheetCanvasBox(false), aspect);
+  const ratio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+  return {width: Math.round(fit.width * ratio), height: Math.round(fit.height * ratio)};
+}
+
+// Only the CSS size follows the window; the canvas pixels (and the painting in them) stay.
+function fitCanvasToStage(){
+  if(!canvasW || !canvasH) return;
+  const cssSize = getCanvasViewportFit(canvasW / canvasH);
+  canvas.style.width = `${cssSize.width}px`;
+  canvas.style.height = `${cssSize.height}px`;
+  layoutPlayhead();
 }
 
 function syncCanvasSizeControls(){
@@ -1372,6 +1618,13 @@ function resetProcessingState({clearPaint = false} = {}){
   }
 }
 function updatePaintSize(newW, newH){
+  syncStageHeight();
+  // A window resize (or the sheet / Hide button) used to resize the canvas pixels too, which wiped
+  // every layer's painting. With a video loaded the resolution is locked, so only refit the CSS size.
+  if(newW === undefined && baseVideoLoaded){
+    fitCanvasToStage();
+    return;
+  }
   const fixedSize = getCanvasPresetSize(newW, newH);
   let targetCanvasW = 0;
   let targetCanvasH = 0;
@@ -1394,8 +1647,9 @@ function updatePaintSize(newW, newH){
       displayAspect = 16 / 9;
     }
     cssSize = getCanvasViewportFit(displayAspect);
-    targetCanvasW = cssSize.width;
-    targetCanvasH = cssSize.height;
+    const screenSize = getScreenCanvasSize(displayAspect);
+    targetCanvasW = screenSize.width;
+    targetCanvasH = screenSize.height;
   }
 
   if(!isFinite(displayAspect) || displayAspect <= 0){
@@ -1418,6 +1672,7 @@ function updatePaintSize(newW, newH){
     paintCtx.clearRect(0,0,paintCanvas.width,paintCanvas.height);
     resizeLayerCanvases();
   }
+  layoutPlayhead();
 }
 setProcessingResolution(procW, procH);
 syncCanvasSizeControls();
@@ -1441,6 +1696,11 @@ canvasHeightInput?.addEventListener('input', () => {
   renderCompositeFrame();
 });
 resetProjectBtn?.addEventListener('click', resetProjectToNewCanvas);
+analysisScaleEl?.addEventListener('change', () => {
+  if(!video.videoWidth || !video.videoHeight) return;
+  lockProcessingResolutionToSource(video.videoWidth, video.videoHeight);
+  resetProcessingState();
+});
 
 function clampRangeValue(rangeEl, value){
   const fallback = parseFloat(rangeEl.value) || 0;
@@ -1523,15 +1783,27 @@ renderCustomShapeCanvas();
 
 // Blob detection helper. Groups neighboring motion pixels into real regions so
 // tracking stays tied to the place where movement happened in the frame.
-function findBlobsFromBinary(imgData, w, h, maxBlobs){
+// Work buffers, reused across frames (reallocated only when the analysis size changes).
+let motionMap = new Uint8Array(0);
+let blobVisited = new Uint8Array(0);
+let blobStack = new Int32Array(0);
+let prevFrameBuffer = null;
+
+function findBlobsFromBinary(mask, w, h, maxBlobs){
   const total = w * h;
-  const visited = new Uint8Array(total);
-  const stack = new Int32Array(total);
+  if(blobVisited.length !== total){
+    blobVisited = new Uint8Array(total);
+    blobStack = new Int32Array(total);
+  } else {
+    blobVisited.fill(0);
+  }
+  const visited = blobVisited;
+  const stack = blobStack;
   const blobs = [];
   const minArea = Math.max(8, Math.round(total * 0.00004));
 
   for(let start = 0; start < total; start++){
-    if(visited[start] || imgData[start * 4] === 0) continue;
+    if(visited[start] || mask[start] === 0) continue;
 
     let top = 0;
     let area = 0;
@@ -1566,7 +1838,7 @@ function findBlobsFromBinary(imgData, w, h, maxBlobs){
           const nx = x + ox;
           if(nx < 0 || nx >= w) continue;
           const next = ny * w + nx;
-          if(visited[next] || imgData[next * 4] === 0) continue;
+          if(visited[next] || mask[next] === 0) continue;
           visited[next] = 1;
           stack[top++] = next;
         }
@@ -1942,6 +2214,14 @@ function drawTrackedCenterDot(x, y, brushPx){
   paintCtx.restore();
 }
 
+function storePrevFrame(pixels){
+  if(!prevFrameBuffer || prevFrameBuffer.length !== pixels.length){
+    prevFrameBuffer = new Uint8ClampedArray(pixels.length);
+  }
+  prevFrameBuffer.set(pixels);
+  prevFrame = prevFrameBuffer;
+}
+
 function processCurrentVideoFrame(){
   const activeLayer = getActiveLayer();
   if(!activeLayer){
@@ -1954,28 +2234,36 @@ function processCurrentVideoFrame(){
 
   // compute difference with prev
   if(prevFrame === null){
-    prevFrame = new Uint8ClampedArray(currImage.data);
-    prevCtx.putImageData(currImage, 0, 0);
+    storePrevFrame(currImage.data);
     renderCompositeFrame();
     return false;
   }
 
-  // build binary motion map (RGBA)
-  const motion = new Uint8ClampedArray(procW * procH * 4);
+  // build binary motion map (one byte per pixel)
+  const pixels = currImage.data;
+  const total = procW * procH;
+  if(motionMap.length !== total) motionMap = new Uint8Array(total);
+  const motion = motionMap;
   const thresh = getMotionThreshold();
-  for(let i=0;i<currImage.data.length;i+=4){
-    const dr = Math.abs(currImage.data[i] - prevFrame[i]);
-    const dg = Math.abs(currImage.data[i+1] - prevFrame[i+1]);
-    const db = Math.abs(currImage.data[i+2] - prevFrame[i+2]);
-    const d = (dr + dg + db) / 3;
-    const flag = d > thresh ? 255 : 0;
-    motion[i] = motion[i+1] = motion[i+2] = flag;
-    motion[i+3] = 255;
+  let movingPixels = 0;
+  for(let i = 0, p = 0; p < total; i += 4, p++){
+    const dr = Math.abs(pixels[i] - prevFrame[i]);
+    const dg = Math.abs(pixels[i+1] - prevFrame[i+1]);
+    const db = Math.abs(pixels[i+2] - prevFrame[i+2]);
+    if((dr + dg + db) / 3 > thresh){
+      motion[p] = 1;
+      movingPixels++;
+    } else {
+      motion[p] = 0;
+    }
   }
+  frameStats.motion = movingPixels / total;
   // detect connected motion regions from the motion map
   const maxBlobs = parseInt(maxBlobsEl.value, 10);
   const blobs = findBlobsFromBinary(motion, procW, procH, maxBlobs);
   const currPoints = limitMotionBlobs(blobs, maxBlobs);
+  frameStats.regions = blobs.length;
+  frameStats.tracked = currPoints.length;
 
   // match prev->curr to estimate velocities
   const matches = matchBlobs(prevBlobs, currPoints);
@@ -2056,8 +2344,7 @@ function processCurrentVideoFrame(){
   renderCompositeFrame();
 
   // prepare for next frame
-  prevFrame = new Uint8ClampedArray(currImage.data);
-  prevCtx.putImageData(currImage, 0, 0);
+  storePrevFrame(pixels);
   prevBlobs = currPoints.map(keepTrackPoint);
 
   return true;
@@ -2065,7 +2352,7 @@ function processCurrentVideoFrame(){
 
 function processLoop(){
   if(video.paused || video.ended){ rafId = requestAnimationFrame(processLoop); return; }
-  processCurrentVideoFrame();
+  if(processCurrentVideoFrame()) hud.frame();
   rafId = requestAnimationFrame(processLoop);
 }
 
@@ -2152,15 +2439,6 @@ function makeExportCanvas({transparent = false, activeOnly = false} = {}){
   return out;
 }
 
-async function exportCanvasAsPng(canvasEl, filename){
-  try{
-    const blob = await canvasToPngBlob(canvasEl);
-    downloadBlob(blob, filename);
-  } catch(error){
-    alert(error.message || 'Unable to export PNG.');
-  }
-}
-
 function safeFileName(name){
   return String(name || 'layer').trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'layer';
 }
@@ -2200,7 +2478,7 @@ async function createZipBlob(files, rootName){
   let offset = 0;
 
   if(files.length > 65535){
-    throw new Error('This export contains too many files for a browser ZIP. Export only the PNG sequence to save it directly to a folder.');
+    throw new Error('This export contains too many files for a browser ZIP. Export a shorter clip, a lower Sequence FPS, or use Chrome/Edge (writes the ZIP straight to disk).');
   }
 
   for(const file of files){
@@ -2210,25 +2488,10 @@ async function createZipBlob(files, rootName){
     const checksum = crc32(data);
     const nextOffset = offset + 30 + nameBytes.length + data.length;
     if(nextOffset > 0xffffffff){
-      throw new Error('This export is too large for a browser ZIP. Export only the PNG sequence to save frames directly to a folder, or export a shorter clip.');
+      throw new Error('This export is too large for a browser ZIP. Export a shorter clip or a smaller Sequence Scale, or use Chrome/Edge (writes the ZIP straight to disk).');
     }
 
-    const localHeader = new Uint8Array(30 + nameBytes.length);
-    const localView = new DataView(localHeader.buffer);
-    let cursor = 0;
-    localView.setUint32(cursor, 0x04034b50, true); cursor += 4;
-    localView.setUint16(cursor, 20, true); cursor += 2;
-    localView.setUint16(cursor, 0, true); cursor += 2;
-    localView.setUint16(cursor, 0, true); cursor += 2;
-    localView.setUint16(cursor, now.time, true); cursor += 2;
-    localView.setUint16(cursor, now.day, true); cursor += 2;
-    localView.setUint32(cursor, checksum, true); cursor += 4;
-    localView.setUint32(cursor, data.length, true); cursor += 4;
-    localView.setUint32(cursor, data.length, true); cursor += 4;
-    localView.setUint16(cursor, nameBytes.length, true); cursor += 2;
-    localView.setUint16(cursor, 0, true); cursor += 2;
-    localHeader.set(nameBytes, cursor);
-
+    const localHeader = makeZipLocalHeader(nameBytes, data.length, checksum, now);
     zipParts.push(localHeader, data);
     entries.push({nameBytes, size: data.length, checksum, offset});
     offset = nextOffset;
@@ -2238,46 +2501,13 @@ async function createZipBlob(files, rootName){
   const centralStart = offset;
   const centralSize = entries.reduce((sum, entry) => sum + 46 + entry.nameBytes.length, 0);
   if(centralStart + centralSize + 22 > 0xffffffff){
-    throw new Error('This export is too large for a browser ZIP. Export only the PNG sequence to save frames directly to a folder, or export a shorter clip.');
+    throw new Error('This export is too large for a browser ZIP. Export a shorter clip or a smaller Sequence Scale, or use Chrome/Edge (writes the ZIP straight to disk).');
   }
 
   for(const entry of entries){
-    const centralHeader = new Uint8Array(46 + entry.nameBytes.length);
-    const view = new DataView(centralHeader.buffer);
-    let cursor = 0;
-    view.setUint32(cursor, 0x02014b50, true); cursor += 4;
-    view.setUint16(cursor, 20, true); cursor += 2;
-    view.setUint16(cursor, 20, true); cursor += 2;
-    view.setUint16(cursor, 0, true); cursor += 2;
-    view.setUint16(cursor, 0, true); cursor += 2;
-    view.setUint16(cursor, now.time, true); cursor += 2;
-    view.setUint16(cursor, now.day, true); cursor += 2;
-    view.setUint32(cursor, entry.checksum, true); cursor += 4;
-    view.setUint32(cursor, entry.size, true); cursor += 4;
-    view.setUint32(cursor, entry.size, true); cursor += 4;
-    view.setUint16(cursor, entry.nameBytes.length, true); cursor += 2;
-    view.setUint16(cursor, 0, true); cursor += 2;
-    view.setUint16(cursor, 0, true); cursor += 2;
-    view.setUint16(cursor, 0, true); cursor += 2;
-    view.setUint16(cursor, 0, true); cursor += 2;
-    view.setUint32(cursor, 0, true); cursor += 4;
-    view.setUint32(cursor, entry.offset, true); cursor += 4;
-    centralHeader.set(entry.nameBytes, cursor);
-    zipParts.push(centralHeader);
+    zipParts.push(makeZipCentralHeader(entry, now));
   }
-
-  const endRecord = new Uint8Array(22);
-  const endView = new DataView(endRecord.buffer);
-  let cursor = 0;
-  endView.setUint32(cursor, 0x06054b50, true); cursor += 4;
-  endView.setUint16(cursor, 0, true); cursor += 2;
-  endView.setUint16(cursor, 0, true); cursor += 2;
-  endView.setUint16(cursor, entries.length, true); cursor += 2;
-  endView.setUint16(cursor, entries.length, true); cursor += 2;
-  endView.setUint32(cursor, centralSize, true); cursor += 4;
-  endView.setUint32(cursor, centralStart, true); cursor += 4;
-  endView.setUint16(cursor, 0, true);
-  zipParts.push(endRecord);
+  zipParts.push(makeZipEndRecord(entries.length, centralSize, centralStart));
 
   return new Blob(zipParts, {type: 'application/zip'});
 }
@@ -2319,35 +2549,6 @@ function makeScaledSequenceCanvas(sourceCanvasEl, scale){
   outCtx.imageSmoothingQuality = 'high';
   outCtx.drawImage(sourceCanvasEl, 0, 0, out.width, out.height);
   return out;
-}
-
-function createDirectoryFrameWriter(rootHandle){
-  const directoryCache = new Map([['', rootHandle]]);
-  let writeQueue = Promise.resolve();
-
-  return function writeFrame(filename, blob){
-    const task = writeQueue.then(async () => {
-      const parts = filename.split('/').filter(Boolean);
-      const fileName = parts.pop();
-      let currentPath = '';
-      let directory = rootHandle;
-
-      for(const part of parts){
-        currentPath = currentPath ? `${currentPath}/${part}` : part;
-        if(!directoryCache.has(currentPath)){
-          directoryCache.set(currentPath, await directory.getDirectoryHandle(part, {create: true}));
-        }
-        directory = directoryCache.get(currentPath);
-      }
-
-      const fileHandle = await directory.getFileHandle(fileName, {create: true});
-      const writable = await fileHandle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-    });
-    writeQueue = task.catch(() => {});
-    return task;
-  };
 }
 
 function makeZipLocalHeader(nameBytes, size, checksum, now){
@@ -2644,103 +2845,46 @@ async function exportLayerPngSequence(layer, {layerIndex = 0, layerCount = 1, fp
   return frameFiles.sort((a, b) => a.filename.localeCompare(b.filename));
 }
 
-async function buildSelectedExportFiles(){
-  rememberActiveLayerSettings();
-  const selected = getExportSelections();
-  const files = [];
+// Renders every selected export and hands each file to addFile(filename, blob), in ZIP order.
+async function writeSelectedExports(selected, addFile){
   if(selected.background){
-    files.push({
-      filename: 'background.png',
-      blob: await canvasToPngBlob(makeExportCanvas({transparent: false}))
-    });
+    await addFile('background.png', await canvasToPngBlob(makeExportCanvas({transparent: false})));
   }
   if(selected.transparent){
-    files.push({
-      filename: 'transparent.png',
-      blob: await canvasToPngBlob(makeExportCanvas({transparent: true}))
-    });
+    await addFile('transparent.png', await canvasToPngBlob(makeExportCanvas({transparent: true})));
   }
   if(selected.activeLayer){
-    files.push({
-      filename: 'active-layer.png',
-      blob: await canvasToPngBlob(makeExportCanvas({transparent: true, activeOnly: true}))
-    });
+    await addFile('active-layer.png', await canvasToPngBlob(makeExportCanvas({transparent: true, activeOnly: true})));
   }
   if(selected.separateLayers){
     if(!motionLayers.length) throw new Error('No layers to export.');
     for(const [index, layer] of motionLayers.entries()){
-      files.push({
-        filename: `layers/${String(index + 1).padStart(2, '0')}-${safeFileName(layer.name)}.png`,
-        blob: await canvasToPngBlob(layer.canvas)
-      });
+      await addFile(`layers/${String(index + 1).padStart(2, '0')}-${safeFileName(layer.name)}.png`, await canvasToPngBlob(layer.canvas));
     }
   }
   if(selected.processVideo){
-    const blob = await exportProcessVideo({returnBlob: true});
-    if(blob){
-      files.push({
-        filename: 'process.mp4',
-        blob
-      });
-    }
-  }
-  if(selected.layerVideos){
-    files.push(...await buildLayerProcessVideoFiles(getSequenceExportSettings()));
-  }
-  if(!files.length){
-    throw new Error('Choose at least one export option.');
-  }
-  return files;
-}
-
-async function saveSelectedExportsToDirectory(selected){
-  if(typeof window.showDirectoryPicker !== 'function'){
-    throw new Error('Large PNG sequence folder export needs Chrome or Edge. In this browser, export a shorter clip as ZIP.');
-  }
-
-  rememberActiveLayerSettings();
-  const pickedDirectory = await window.showDirectoryPicker({mode: 'readwrite'});
-  const projectDirectory = await pickedDirectory.getDirectoryHandle(getProjectSlug(), {create: true});
-  const writeFile = createDirectoryFrameWriter(projectDirectory);
-  let fileCount = 0;
-
-  const writeNamedBlob = async (filename, blob) => {
-    await writeFile(filename, blob);
-    fileCount += 1;
-  };
-
-  if(selected.background){
-    await writeNamedBlob('background.png', await canvasToPngBlob(makeExportCanvas({transparent: false})));
-  }
-  if(selected.transparent){
-    await writeNamedBlob('transparent.png', await canvasToPngBlob(makeExportCanvas({transparent: true})));
-  }
-  if(selected.activeLayer){
-    await writeNamedBlob('active-layer.png', await canvasToPngBlob(makeExportCanvas({transparent: true, activeOnly: true})));
-  }
-  if(selected.separateLayers){
-    if(!motionLayers.length) throw new Error('No layers to export.');
-    for(const [index, layer] of motionLayers.entries()){
-      await writeNamedBlob(`layers/${String(index + 1).padStart(2, '0')}-${safeFileName(layer.name)}.png`, await canvasToPngBlob(layer.canvas));
-    }
-  }
-  if(selected.processVideo){
-    const blob = await exportProcessVideo({returnBlob: true});
-    if(blob){
-      await writeNamedBlob('process.mp4', blob);
-    }
+    const blob = await exportProcessVideo();
+    if(blob) await addFile('process.mp4', blob);
   }
   if(selected.layerVideos){
     const sequenceFiles = await buildLayerProcessVideoFiles({
       ...getSequenceExportSettings(),
-      onFrame: writeNamedBlob
+      onFrame: addFile
     });
     if(!sequenceFiles.length) throw new Error('No PNG sequence frames were exported.');
   }
-  if(!fileCount){
+}
+
+async function buildSelectedExportFiles(){
+  rememberActiveLayerSettings();
+  const files = [];
+  await writeSelectedExports(getExportSelections(), async (filename, blob) => {
+    files.push({filename, blob});
+  });
+  if(!files.length){
     throw new Error('Choose at least one export option.');
   }
-  return fileCount;
+  return files;
 }
 
 async function saveSelectedExportsToStreamingZip(selected){
@@ -2767,34 +2911,7 @@ async function saveSelectedExportsToStreamingZip(selected){
   };
 
   try{
-    if(selected.background){
-      await addNamedBlob('background.png', await canvasToPngBlob(makeExportCanvas({transparent: false})));
-    }
-    if(selected.transparent){
-      await addNamedBlob('transparent.png', await canvasToPngBlob(makeExportCanvas({transparent: true})));
-    }
-    if(selected.activeLayer){
-      await addNamedBlob('active-layer.png', await canvasToPngBlob(makeExportCanvas({transparent: true, activeOnly: true})));
-    }
-    if(selected.separateLayers){
-      if(!motionLayers.length) throw new Error('No layers to export.');
-      for(const [index, layer] of motionLayers.entries()){
-        await addNamedBlob(`layers/${String(index + 1).padStart(2, '0')}-${safeFileName(layer.name)}.png`, await canvasToPngBlob(layer.canvas));
-      }
-    }
-    if(selected.processVideo){
-      const blob = await exportProcessVideo({returnBlob: true});
-      if(blob){
-        await addNamedBlob('process.mp4', blob);
-      }
-    }
-    if(selected.layerVideos){
-      const sequenceFiles = await buildLayerProcessVideoFiles({
-        ...getSequenceExportSettings(),
-        onFrame: addNamedBlob
-      });
-      if(!sequenceFiles.length) throw new Error('No PNG sequence frames were exported.');
-    }
+    await writeSelectedExports(selected, addNamedBlob);
     if(!fileCount){
       throw new Error('Choose at least one export option.');
     }
@@ -2810,11 +2927,37 @@ async function saveSelectedExportsToStreamingZip(selected){
   }
 }
 
+const coarsePointerQuery = window.matchMedia ? window.matchMedia('(pointer: coarse)') : {matches: false};
+
+// Phones: the share sheet saves a PNG to Photos or a ZIP to Files, where a download link often only
+// opens a preview (iOS). Falls back to the download when sharing isn't possible or isn't allowed.
+async function deliverFile(blob, filename){
+  if(coarsePointerQuery.matches && typeof navigator.share === 'function' && typeof File === 'function'){
+    const file = new File([blob], filename, {type: blob.type || 'application/octet-stream'});
+    if(navigator.canShare?.({files: [file]})){
+      try{
+        await navigator.share({files: [file], title: filename});
+        return 'shared';
+      } catch(error){
+        if(error?.name === 'AbortError') return 'cancelled';
+      }
+    }
+  }
+  downloadBlob(blob, filename);
+  return 'downloaded';
+}
+
 async function saveExportFiles(files){
   const project = getProjectSlug();
+  // On a phone a single image or video is handed over as is, so it can go straight to Photos.
+  if(coarsePointerQuery.matches && files.length === 1){
+    const only = files[0];
+    const name = `${project}-${only.filename.split('/').pop()}`;
+    return {name, result: await deliverFile(only.blob, name)};
+  }
+  const name = `${project}.zip`;
   const zip = await createZipBlob(files, project);
-  downloadBlob(zip, `${project}.zip`);
-  return 'zip';
+  return {name, result: await deliverFile(zip, name)};
 }
 
 async function exportSelectedOutputs(){
@@ -2832,9 +2975,10 @@ async function exportSelectedOutputs(){
       }
     } else {
       const files = await buildSelectedExportFiles();
-      await saveExportFiles(files);
+      const saved = await saveExportFiles(files);
       if(exportStatus){
-        exportStatus.textContent = `Downloaded ${getProjectSlug()}.zip with ${files.length} file${files.length === 1 ? '' : 's'}.`;
+        const verb = saved.result === 'shared' ? 'Shared' : saved.result === 'cancelled' ? 'Cancelled' : 'Downloaded';
+        exportStatus.textContent = `${verb} ${saved.name}${saved.name.endsWith('.zip') ? ` with ${files.length} file${files.length === 1 ? '' : 's'}` : ''}.`;
       }
     }
   } catch(error){
@@ -2849,40 +2993,26 @@ async function exportSelectedOutputs(){
   }
 }
 
-async function exportProcessVideo({returnBlob = false, statusLabel = 'process video'} = {}){
-  if(isVideoExporting) return;
-  if(!baseVideoLoaded || !hasVideoSource()){
-    if(returnBlob) throw new Error('Load a video first.');
-    alert('Load a video first.');
-    return;
-  }
+// Replays the active video from the start and records the canvas; resolves with the MP4 blob.
+async function exportProcessVideo(){
+  const statusLabel = 'process video';
+  if(isVideoExporting) return null;
+  if(!baseVideoLoaded || !hasVideoSource()) throw new Error('Load a video first.');
   if(!Number.isFinite(video.duration) || video.duration <= 0){
-    if(returnBlob) throw new Error('The loaded video does not have a valid duration.');
-    alert('The loaded video does not have a valid duration.');
-    return;
+    throw new Error('The loaded video does not have a valid duration (the webcam cannot be recorded as a process video).');
   }
   if(typeof canvas.captureStream !== 'function' || typeof MediaRecorder === 'undefined'){
-    if(returnBlob) throw new Error('Video export is not supported by this browser.');
-    alert('Video export is not supported by this browser. Try a current version of Chrome, Edge, Firefox, or Safari.');
-    return;
+    throw new Error('Video export is not supported by this browser. Try a current version of Chrome, Edge, Firefox, or Safari.');
   }
 
   const mimeType = getMp4RecordingType();
-  if(!mimeType){
-    const message = 'This browser cannot record MP4 video.';
-    if(returnBlob) throw new Error(message);
-    alert(`${message} Use a current version of Chrome, Edge, or Safari.`);
-    return;
-  }
+  if(!mimeType) throw new Error('This browser cannot record MP4 video. Use a current version of Chrome, Edge, or Safari.');
 
   const controls = Array.from(controlsPanel.querySelectorAll('button, input, select'));
   const previousDisabled = controls.map(control => control.disabled);
   let recorder = null;
   let progressHandler = null;
-  const layerSnapshots = motionLayers.map(layer => ({
-    layer,
-    imageData: layer.ctx.getImageData(0, 0, layer.canvas.width, layer.canvas.height)
-  }));
+  const layerSnapshots = snapshotLayerCanvases();
   isVideoExporting = true;
   controls.forEach(control => { control.disabled = true; });
   exportBtn.textContent = 'Preparing Video';
@@ -2949,20 +3079,15 @@ async function exportProcessVideo({returnBlob = false, statusLabel = 'process vi
 
     const blob = new Blob(chunks, {type: mimeType});
     if(!blob.size) throw new Error('The exported video was empty.');
-    if(returnBlob) return blob;
-    downloadBlob(blob, `${getProjectSlug()}-process.mp4`);
+    return blob;
   } catch(error){
-    console.error(error);
     if(recorder?.state === 'recording') recorder.stop();
-    if(returnBlob) throw error;
-    alert(error.message || 'Unable to export the process video.');
+    throw error;
   } finally {
     video.pause();
     playBtn.setAttribute('aria-pressed', 'false');
     if(progressHandler) video.removeEventListener('timeupdate', progressHandler);
-    layerSnapshots.forEach(({layer, imageData}) => {
-      layer.ctx.putImageData(imageData, 0, 0);
-    });
+    restoreLayerCanvases(layerSnapshots);
     renderCompositeFrame();
     controls.forEach((control, index) => { control.disabled = previousDisabled[index]; });
     exportBtn.textContent = 'Export';
@@ -2983,11 +3108,59 @@ pauseBtn.addEventListener('click', ()=>{
 });
 clearBtn.addEventListener('click', clearAllLayers);
 exportBtn.addEventListener('click', exportSelectedOutputs);
+// Number readouts tick when they change (the panel's own number fields stay the displays).
+AGData.readouts(controlsPanel);
 
 // keep canvas sized nicely on window resize
 window.addEventListener('resize', ()=> {
   updatePaintSize();
 });
+
+// Settings groups open with a height ease and their content settling in just after it.
+function animateMotionGroups(){
+  controlsPanel.querySelectorAll('details.motion-group').forEach(group => {
+    const summary = group.querySelector(':scope > summary');
+    const body = group.querySelector(':scope > .motion-group-body');
+    if(!summary || !body) return;
+    let running = null;
+    summary.addEventListener('click', event => {
+      if(AGData.reducedMotion || typeof body.animate !== 'function') return;
+      event.preventDefault();
+      running?.cancel();
+      const opening = !group.open || group.classList.contains('is-closing');
+      group.classList.remove('is-closing');
+      const startHeight = group.open ? body.getBoundingClientRect().height : 0;
+      group.open = true;
+      const fullHeight = body.scrollHeight;
+      body.style.overflow = 'hidden';
+      running = body.animate([
+        {height: `${startHeight}px`},
+        {height: `${opening ? fullHeight : 0}px`}
+      ], {duration: opening ? 320 : 200, easing: 'cubic-bezier(.22, 1, .36, 1)'});
+      if(opening){
+        Array.from(body.children).slice(0, 8).forEach((child, index) => {
+          child.animate([
+            {opacity: 0, transform: 'translateY(-4px)'},
+            {opacity: 1, transform: 'none'}
+          ], {duration: 260, delay: 40 + index * 18, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'backwards'});
+        });
+      } else {
+        group.classList.add('is-closing');
+      }
+      const current = running;
+      current.finished.then(() => {
+        if(running !== current) return;
+        running = null;
+        body.style.overflow = '';
+        if(!opening){
+          group.classList.remove('is-closing');
+          group.open = false;
+        }
+      }, () => {});
+    });
+  });
+}
+animateMotionGroups();
 
 // Remember the settings between visits (scripts/savedSettings.js). The motion settings
 // become the starting point for the first layer; videos are not stored.
@@ -2995,7 +3168,8 @@ AGSettings.persist('motionstills', {
   controls: [
     'projectName', 'canvasSizePreset', 'canvasWidthInput', 'canvasHeightInput',
     'exportPngBackground', 'exportPngTransparent', 'exportActiveLayer', 'exportSeparateLayers',
-    'exportProcessVideoOption', 'exportLayerVideosOption', 'exportSequenceFps', 'exportSequenceScale'
+    'exportProcessVideoOption', 'exportLayerVideosOption', 'exportSequenceFps', 'exportSequenceScale',
+    'webcamFacing', 'analysisScale', 'loopVideo'
   ],
   get: () => ({ motion: readMotionSettings() }),
   set: (saved) => {
@@ -3006,8 +3180,6 @@ AGSettings.persist('motionstills', {
   },
 });
 
-// initial state: no video loaded
-console.log('MotionStills (CPU) ready. Load a video to begin.');
 </script>
 <div class="app-year">2026 Accidental Graphics</div>
 </body>
