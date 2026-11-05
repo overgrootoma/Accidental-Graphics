@@ -15,6 +15,7 @@
   <script defer src="../scripts/navConfig.js"></script>
   <script defer src="../scripts/navMenu.js"></script>
   <script defer src="../scripts/settingsToggle.js" data-panel="#controls"></script>
+  <script src="../scripts/savedSettings.js"></script>
 </head>
 
 <body class="app-page motion-page">
@@ -2929,6 +2930,23 @@ exportBtn.addEventListener('click', exportSelectedOutputs);
 // keep canvas sized nicely on window resize
 window.addEventListener('resize', ()=> {
   updatePaintSize();
+});
+
+// Remember the settings between visits (scripts/savedSettings.js). The motion settings
+// become the starting point for the first layer; videos are not stored.
+AGSettings.persist('motionstills', {
+  controls: [
+    'projectName', 'canvasSizePreset', 'canvasWidthInput', 'canvasHeightInput',
+    'exportPngBackground', 'exportPngTransparent', 'exportActiveLayer', 'exportSeparateLayers',
+    'exportProcessVideoOption', 'exportLayerVideosOption', 'exportSequenceFps', 'exportSequenceScale'
+  ],
+  get: () => ({ motion: readMotionSettings() }),
+  set: (saved) => {
+    if (saved.motion && typeof saved.motion === 'object') {
+      writeMotionSettings(saved.motion);
+      renderCompositeFrame();
+    }
+  },
 });
 
 // initial state: no video loaded
