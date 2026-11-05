@@ -15,6 +15,7 @@
   <script defer src="../scripts/navConfig.js"></script>
   <script defer src="../scripts/navMenu.js"></script>
   <script defer src="../scripts/settingsToggle.js" data-panel="#controls"></script>
+  <script src="../scripts/savedSettings.js"></script>
 </head>
 
 <body class="app-page panel-ui-page">
@@ -496,6 +497,16 @@ toggleGridBtn?.addEventListener('click', ()=>{
   showGrid = !showGrid;
   toggleGridBtn.textContent = showGrid ? 'Hide Grid' : 'Show Grid';
   toggleGridBtn.setAttribute('aria-pressed', String(!showGrid));
+});
+
+// Remember the settings between visits (scripts/savedSettings.js).
+AGSettings.persist('photogrid', {
+  controls: ['gridRes', 'lineThickness', 'distortion', 'speed'],
+  get: () => ({ mode, showGrid }),
+  set: (saved) => {
+    modeButtons.find((btn) => btn.dataset.mode === saved.mode)?.click();
+    if (typeof saved.showGrid === 'boolean' && saved.showGrid !== showGrid) toggleGridBtn?.click();
+  },
 });
 
 animate();

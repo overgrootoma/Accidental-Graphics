@@ -14,6 +14,7 @@
   <script defer src="../scripts/navConfig.js"></script>
   <script defer src="../scripts/navMenu.js"></script>
   <script defer src="../scripts/settingsToggle.js" data-panel="#controls"></script>
+  <script src="../scripts/savedSettings.js"></script>
   <script defer src="../scripts/sampleMedia.js"></script>
   <style>
     .control-stack {
@@ -308,6 +309,14 @@
       const layers = [];
       let activeLayerId = null;
       let baseAspect = 1.45;
+      // Settings a new layer starts with: the last ones you used, remembered between visits.
+      const layerDefaults = {
+        color: '#ff9c4c',
+        tolerance: 56,
+        brushSize: 8,
+        opacity: 0.88,
+        blendMode: 'normal',
+      };
       let pickMode = false;
       let viewWidth = 920;
       let viewHeight = 580;
@@ -478,11 +487,7 @@
             id: randomId(),
             name: label || `Layer ${layers.length + 1}`,
             image: img,
-            color: '#ff9c4c',
-            tolerance: 56,
-            brushSize: 8,
-            opacity: 0.88,
-            blendMode: 'normal',
+            ...layerDefaults,
             visible: true,
             buffer: null,
             dirty: true,
@@ -994,6 +999,27 @@
 
       window.addEventListener('resize', resizeCanvas);
       requestAnimationFrame(resizeCanvas);
+
+      // Remember the layer settings between visits (scripts/savedSettings.js). Images are not stored,
+      // so the settings of the layer you last worked on become the start for the next image you load.
+      AGSettings.persist('colorrangelab', {
+        get: () => {
+          const active = layers.find((l) => l.id === activeLayerId);
+          if (active) {
+            Object.keys(layerDefaults).forEach((key) => {
+              layerDefaults[key] = active[key];
+            });
+          }
+          return layerDefaults;
+        },
+        set: (saved) => {
+          if (/^#[0-9a-f]{6}$/i.test(saved.color)) layerDefaults.color = saved.color;
+          if (Number.isFinite(saved.tolerance)) layerDefaults.tolerance = Math.min(160, Math.max(8, saved.tolerance));
+          if (Number.isFinite(saved.brushSize)) layerDefaults.brushSize = Math.min(24, Math.max(0, saved.brushSize));
+          if (Number.isFinite(saved.opacity)) layerDefaults.opacity = Math.min(1, Math.max(0.1, saved.opacity));
+          if (blendModes.includes(saved.blendMode)) layerDefaults.blendMode = saved.blendMode;
+        },
+      });
     })();
   </script>
 </body>
