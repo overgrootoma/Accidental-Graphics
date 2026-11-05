@@ -12,6 +12,7 @@
   <script defer src="../scripts/navConfig.js"></script>
   <script defer src="../scripts/navMenu.js"></script>
   <script defer src="../scripts/settingsToggle.js" data-panel="#ui"></script>
+  <script src="../scripts/savedSettings.js"></script>
   <style>
     #c {
       --swing-bg: #111111;
@@ -653,6 +654,28 @@ function drawStar(ctx, x, y, outerRadius){
   }
   ctx.closePath();
 }
+// Remember the settings between visits (scripts/savedSettings.js).
+AGSettings.persist('swing', {
+  controls: ['color', 'size', 'segments', 'length', 'ropeColor', 'strokeColor', 'strokeWidth', 'bgColor'],
+  get: () => ({ stretchMode, showBall, showRope, showStroke, showBackground, ballShape }),
+  set: (saved) => {
+    if (typeof saved.stretchMode === 'boolean') stretchMode = saved.stretchMode;
+    if (typeof saved.showBall === 'boolean') showBall = saved.showBall;
+    if (typeof saved.showRope === 'boolean') showRope = saved.showRope;
+    if (typeof saved.showStroke === 'boolean') showStroke = saved.showStroke;
+    if (typeof saved.showBackground === 'boolean') showBackground = saved.showBackground;
+    syncToggle(stretchBtn, stretchMode, 'Stretch');
+    syncToggle(ballBtn, showBall, 'Ball');
+    syncToggle(ropeBtn, showRope, 'Rope');
+    syncToggle(strokeBtn, showStroke, 'Stroke');
+    applyBackground();
+    // An imported shape image is not stored, so fall back to the circle.
+    if (saved.ballShape !== 'image' && shapeButtons.some(btn => btn.dataset.shape === saved.ballShape)) {
+      setBallShape(saved.ballShape);
+    }
+  },
+});
+
 loop();
 </script>
 <div class="app-year">2026 Accidental Graphics</div>

@@ -15,6 +15,7 @@
   <script defer src="../scripts/navConfig.js"></script>
   <script defer src="../scripts/navMenu.js"></script>
   <script defer src="../scripts/settingsToggle.js" data-panel="#controls"></script>
+  <script src="../scripts/savedSettings.js"></script>
 </head>
 
 <body class="app-page panel-ui-page">
@@ -432,6 +433,15 @@ blendModeSelect?.addEventListener('change', ()=>{
   blendMode = blendModeSelect.value || 'source-over';
 });
 updatePreviewToggleLabel();
+
+// Remember the settings between visits (scripts/savedSettings.js). Images are not stored.
+AGSettings.persist('imageine', {
+  controls: ['gridSize', 'blendMode'],
+  get: () => ({ showVideoBase }),
+  set: (saved) => {
+    if (typeof saved.showVideoBase === 'boolean' && saved.showVideoBase !== showVideoBase) toggleBaseBtn?.click();
+  },
+});
 
 exportBtn.addEventListener('click', ()=>{
   const link = document.createElement('a');
