@@ -28,6 +28,8 @@ Code, commentaar en commitberichten zijn in het Engels.
 | `scripts/navConfig.js` | Laadt `content/*.json` → `window.AGContent`; gedeeld door alle pagina's |
 | `scripts/navMenu.js` | Zwarte menubalk bovenaan |
 | `scripts/settingsToggle.js` | Verberg/toon het instellingenpaneel (knop + H-toets) |
+| `scripts/dataLayer.js`, `css/data.css` | Gedeelde "labo-data"-stijl: `AGData.hud()` (meetwaarden rond het canvas, D-toets), `AGData.readouts()`, motion-tokens en `AGData.spring()`. API staat bovenaan het script |
+| `scripts/savedSettings.js` | `AGSettings.persist`: instellingen bewaren per tool |
 | `scripts/sampleMedia.js` | Voorbeeldbeelden/-video's in de tools |
 | `css/style.css`, `css/nav.css` | Gedeelde stijl |
 | `images/covers/` | Korte mp4-covers per tool (vervangen de oude GIF's) |
@@ -50,6 +52,15 @@ Code, commentaar en commitberichten zijn in het Engels.
 - Performance telt: tools tekenen live op canvas. Let op allocaties in de render-loop.
 - Commitstijl: `Toolnaam: wat er verandert` (bv. `Isolation: loop mode`), of `All apps: ...`.
 - `.DS_Store` hoort niet in git.
+
+## Stijl en mobiel
+
+- Data-stijl: echte meetwaarden (coördinaten, fps, tellers, specimen-nummers, resolutie), klein monospace,
+  haarlijnen. Altijd via `AGData` en als DOM-overlay: nooit in exports.
+- Motion: gebruik de tokens `--ag-ease-out`, `--ag-ease-spring`, `--ag-dur-1/2/3`; respecteer `prefers-reduced-motion`.
+- Mobiel (≤768px): `settingsToggle.js` maakt van het paneel een bottom sheet en zet `--ag-sheet-h`.
+  Laat het canvas de ruimte erboven vullen, gebruik pointer events en `touch-action: none` op tekenvlakken.
+  Desktop-layout niet wijzigen voor mobiele fixes.
 
 ## Testen
 

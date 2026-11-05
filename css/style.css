@@ -2260,7 +2260,8 @@ body.home-page {
   font-variant-numeric: tabular-nums;
   text-transform: uppercase;
   color: #fff;
-  text-shadow: 0 0 2px #000, 0 0 5px rgba(0, 0, 0, 0.8);
+  padding: 3px 5px;
+  background: rgba(0, 0, 0, 0.62);
   pointer-events: none;
   white-space: nowrap;
 }
