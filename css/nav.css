@@ -283,16 +283,6 @@
   }
 }
 
-/* Cursor trail (made in navMenu.js). Fixed, so moving the mouse never makes the page longer. */
-.cursor-trail {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-
 /* Live data strip in the footer (made in navMenu.js for .app-year[data-live]). */
 .app-year[data-live] {
   justify-content: space-between;
@@ -331,23 +321,22 @@
   color: rgba(255, 255, 255, 0.85);
 }
 
-@media (max-width: 900px) {
-  .app-year__item--ptr,
-  .app-year__item--upd {
-    display: none;
-  }
-}
-
 @media (max-width: 600px) {
-  .app-year__item--load {
-    display: none;
-  }
-
   .app-year__label {
     display: none;
   }
 
   .app-year[data-live] {
     justify-content: center;
+    gap: 0;
+    letter-spacing: 0.04em;
+  }
+
+  .app-year__data {
+    gap: 10px;
+  }
+
+  .app-year__key {
+    margin-right: 0.35em;
   }
 }

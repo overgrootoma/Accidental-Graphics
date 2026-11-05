@@ -19,7 +19,6 @@
 <body>
   <main class="gallery-wrapper">
     <section class="gallery-hero">
-      <p class="page-tag"><span>CAT. 02 — GALLERY</span><span id="galleryCount">--- SPECIMENS</span></p>
       <h1>Gallery</h1>
       <p class="gallery-lede" id="galleryIntro"></p>
       <div class="gallery-actions">
@@ -59,8 +58,6 @@
       intro.textContent = data.intro || '';
       intro.hidden = !data.intro;
       grid.innerHTML = '';
-      const count = Array.isArray(data.items) ? data.items.filter(item => item && item.image).length : 0;
-      document.getElementById('galleryCount').textContent = `${String(count).padStart(3, '0')} SPECIMENS`;
 
       let n = 0;
       (Array.isArray(data.items) ? data.items : []).filter(item => item && item.image).forEach(item => {

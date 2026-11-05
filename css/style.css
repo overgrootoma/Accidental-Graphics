@@ -1,7 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,100&display=swap');
 
 :root {
-  --cursor-default: url('../images/face cursor.png') 16 16, auto;
   --font-ui: "Doto", system-ui;
   --color-text: #111;
   --color-bg: #000;
@@ -12,16 +11,9 @@
   --button-card-scale: 1;
 }
 
-/* Default cursor for your app */
-body,
-#canvas,
-#imgOrderContainer {
-  cursor: var(--cursor-default);
-}
-
 /* Cursor when hovering over selectable items */
 .imgOrderItem:hover {
-  cursor: url('../images/face cursor.png') 16 16, pointer;
+  cursor: pointer;
 }
 
 /* =========================================================
@@ -33,7 +25,6 @@ html, body {
 }
 
 body {
-  cursor: var(--cursor-default);
   margin: 0;
   padding: 72px 0 0 0;
   font-family: var(--font-ui);
@@ -553,7 +544,7 @@ body.buttonedit-page .buttonedit-stage canvas {
   margin-bottom: 12px;
 }
 
-/* Catalogue table: NO. | SPECIMEN | DESCRIPTION | YEAR | RES / DUR */
+/* Catalogue table: NO. | SPECIMEN | DESCRIPTION | YEAR */
 .page-tag {
   display: flex;
   justify-content: space-between;
@@ -576,10 +567,22 @@ body.buttonedit-page .buttonedit-stage canvas {
   font-variation-settings: normal;
 }
 
+.title-count {
+  display: block;
+  margin-top: 10px;
+  font-family: var(--ag-data-font, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 10px;
+  font-weight: 400;
+  font-variation-settings: normal;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
 .archive-head,
 .archive-details {
   display: grid;
-  grid-template-columns: 48px 120px minmax(0, 1fr) 56px 150px;
+  grid-template-columns: 48px 120px minmax(0, 1fr) 56px;
   gap: 16px;
   align-items: start;
 }
@@ -634,8 +637,7 @@ body.buttonedit-page .buttonedit-stage canvas {
 }
 
 .archive-no,
-.archive-year,
-.archive-spec {
+.archive-year {
   font-family: var(--ag-data-font, ui-monospace, Menlo, Consolas, monospace);
   font-size: 11px;
   font-weight: 400;
@@ -663,7 +665,6 @@ body.buttonedit-page .buttonedit-stage canvas {
   .archive-year { grid-column: 2; grid-row: 1; }
   .archive-details > .archive-preview { grid-column: 1 / -1; grid-row: 2; width: 100%; height: auto; max-height: 240px; aspect-ratio: 4 / 3; }
   .archive-details > div { grid-column: 1 / -1; grid-row: 3; }
-  .archive-spec { grid-column: 1 / -1; grid-row: 4; }
 }
 
 .archive-heading {
@@ -2243,45 +2244,6 @@ body.home-page {
   transition: transform 600ms var(--ag-ease-out, cubic-bezier(.22, 1, .36, 1));
 }
 
-/* Catalogue data on every tile: NO./FIG. top left, RES/DUR/UPD top right (real values from the cover). */
-.app-card__stamp,
-.app-card__spec {
-  position: absolute;
-  top: 8px;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  font-family: var(--ag-data-font, ui-monospace, Menlo, Consolas, monospace);
-  font-size: 9px;
-  font-weight: 400;
-  line-height: 1.3;
-  letter-spacing: 0.08em;
-  font-variant-numeric: tabular-nums;
-  text-transform: uppercase;
-  color: #fff;
-  padding: 3px 5px;
-  background: rgba(0, 0, 0, 0.62);
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-.app-card__stamp { left: 10px; }
-.app-card__spec { right: 10px; text-align: right; }
-
-.app-card__datum,
-.app-card__datum span {
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  font-variation-settings: normal;
-}
-
-.app-card__key {
-  margin-right: 0.5em;
-  opacity: 0.6;
-}
-
 .app-card::after {
   content: "";
   position: absolute;
@@ -2432,9 +2394,6 @@ body.home-page {
     letter-spacing: 0.08em;
   }
 
-  .app-card__stamp { left: 7px; top: 6px; font-size: 8px; }
-  .app-card__spec { right: 7px; top: 6px; font-size: 8px; }
-  .app-card__spec .app-card__datum:nth-child(3) { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -17,7 +17,7 @@
   <script src="scripts/dataLayer.js"></script>
 </head>
 
-<body>
+<body class="about-page">
 
 
 
@@ -48,6 +48,34 @@
       list-style: none;
     }
 
+    /* Fits the viewport: the page never scrolls. */
+    body.about-page {
+      height: 100dvh;
+      min-height: 0;
+      overflow: hidden;
+      box-sizing: border-box;
+      padding-bottom: calc(30px + env(safe-area-inset-bottom));
+    }
+    body.about-page #main {
+      height: auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+    body.about-page #controls {
+      height: auto;
+      max-height: 100%;
+      overflow-y: auto;
+    }
+    body.about-page #right { min-height: 0; }
+    @media (max-width: 900px) {
+      body.about-page #main { gap: 12px; padding-bottom: 12px; }
+      body.about-page #controls { flex: 0 1 auto; padding: 12px 4px; gap: 8px; overflow-y: auto; }
+      body.about-page #controls h1 { margin: 0; font-size: 2rem; }
+      body.about-page #controls .text-block { font-size: 0.85rem; line-height: 1.4; margin: 0; }
+      body.about-page .about-links { margin-top: 8px; }
+      body.about-page #right { flex: 1 1 0; min-height: 80px; }
+    }
+
     #drawPrompt {
       position: absolute;
       top: 20%;
@@ -76,7 +104,6 @@
 <div id="main" >
   <!-- Left text column -->
   <div id="controls" >
-    <p class="page-tag"><span>CAT. 01 — ABOUT</span><span>FIG. 01 — DRAW</span></p>
     <h1>about</h1>
     <div id="aboutText" style="display: contents"></div>
     <div class="text-block">Made by <a href="https://jornescholiers.be" target="_blank" rel="noopener noreferrer" class="creator-link"><span class="stretch-text">Jorne Scholiers</span></a></div>
@@ -86,7 +113,7 @@
   <!-- Right canvas -->
   <div id="right" style="flex:1; position:relative; overflow:hidden;">
     <div id="drawPrompt">draw</div>
-    <canvas id="drawingCanvas" style="width:100%; height:100%; display:block; cursor: url('images/face cursor.png') 16 16, auto;"></canvas>
+    <canvas id="drawingCanvas" style="width:100%; height:100%; display:block;"></canvas>
   </div>
 </div>
 
@@ -132,7 +159,7 @@ function resizeCanvas() {
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
 }
-window.addEventListener('resize', () => { resizeCanvas(); if (hud) hud.refresh(); });
+window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 // Load brush images (1–15)
@@ -145,10 +172,6 @@ for (let i = 1; i <= 15; i++) {
 
 // Drawing
 let drawing = false;
-let stamps = 0;
-// Lab-notebook overlay on the drawing area (DOM only, never part of the drawing).
-const hud = window.AGData ? AGData.hud(document.getElementById('right'), { canvas, code: 'ABT', slots: { specimen: 'tr', size: 'tr', pointer: 'bl', timing: 'br' } }) : null;
-if (hud) hud.set('stamps', AGData.fmt(0, 0, 4), '', 'tr');
 function hidePrompt(){
   if(!promptVisible) return;
   promptVisible = false;
@@ -176,8 +199,6 @@ canvas.addEventListener('pointermove', (e) => {
   const size = 50 + Math.random() * 30; // random size
 
   ctx.drawImage(brush, x - size/2, y - size/2, size, size);
-  stamps++;
-  if (hud) hud.set('stamps', AGData.fmt(stamps, 0, 4), '', 'tr');
 });
 </script>
 

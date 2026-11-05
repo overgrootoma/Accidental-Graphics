@@ -19,13 +19,12 @@
 <body>
   <main class="archive-wrapper">
     <header class="archive-hero">
-      <p class="page-tag"><span>CAT. 03 — ARCHIVE</span><span id="archiveCount">-- ITEMS</span></p>
-      <h1>The Archive</h1>
+      <h1>The Archive <sup class="title-count" id="archiveCount">-- ITEMS</sup></h1>
       <p class="lede" id="archiveIntro"></p>
     </header>
 
     <div class="archive-head" aria-hidden="true">
-      <span>NO.</span><span>SPECIMEN</span><span>DESCRIPTION</span><span>YEAR</span><span>RES / DUR</span>
+      <span>NO.</span><span>SPECIMEN</span><span>DESCRIPTION</span><span>YEAR</span>
     </div>
     <ul class="archive-list" id="archiveList"></ul>
   </main>
@@ -56,10 +55,6 @@
         no.textContent = String(index + 1).padStart(3, '0');
         article.appendChild(no);
 
-        const spec = document.createElement('span');
-        spec.className = 'archive-spec';
-        spec.textContent = '--';
-
         if (tool.cover && tool.isVideo) {
           const video = document.createElement('video');
           video.className = 'archive-preview';
@@ -68,9 +63,6 @@
           video.preload = 'metadata';
           video.setAttribute('aria-hidden', 'true');
           video.src = `${tool.cover}#t=0.001`;
-          video.addEventListener('loadedmetadata', () => {
-            spec.textContent = `${video.videoWidth}×${video.videoHeight} / ${video.duration.toFixed(1)} S`;
-          }, { once: true });
           article.appendChild(video);
         } else if (tool.cover) {
           const img = document.createElement('img');
@@ -78,7 +70,6 @@
           img.src = tool.cover;
           img.alt = '';
           img.loading = 'lazy';
-          img.addEventListener('load', () => { spec.textContent = `${img.naturalWidth}×${img.naturalHeight}`; }, { once: true });
           article.appendChild(img);
         }
 
@@ -105,7 +96,7 @@
         const year = document.createElement('span');
         year.className = 'archive-year';
         year.textContent = tool.year || '----';
-        article.append(year, spec);
+        article.appendChild(year);
         item.appendChild(article);
         list.appendChild(item);
       });
