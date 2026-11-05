@@ -76,7 +76,9 @@
       box-shadow: 0 20px 35px rgba(0, 0, 0, 0.45);
       backdrop-filter: blur(6px);
       z-index: 200;
-      max-height: calc(100vh - 190px);
+      box-sizing: border-box;
+      /* Ends above the bottom-left overlay text. */
+      max-height: calc(100dvh - 190px);
       overflow-y: auto;
       color: #fff;
     }
@@ -569,6 +571,7 @@ document.getElementById('exportBtn').addEventListener('click', exportPainting);
 // nothing is drawn at the canvas centre before the first move or touch.
 const mouse = {x: 0, y: 0};
 let armed = false;
+const coarsePointer = window.matchMedia('(pointer: coarse)');
 function updateMousePosition(e){
   const rect = canvas.getBoundingClientRect();
   mouse.x = e.clientX - rect.left;
@@ -576,7 +579,9 @@ function updateMousePosition(e){
 }
 window.addEventListener('pointermove', e=>{
   updateMousePosition(e);
-  if (!armed) {
+  // On touch screens only a real touch starts the brush (stray mouse events at 0,0 are ignored); a mouse
+  // or pen arms it on its first move, ignoring the synthetic move some browsers fire at 0,0.
+  if (!armed && !coarsePointer.matches && !(e.clientX === 0 && e.clientY === 0)) {
     armed = true;
     hangFromPointer();
   }
@@ -683,13 +688,13 @@ function updateHud(now){
   const tip = segments[segments.length - 1];
   const dt = (now - lastTipAt) / 1000;
   if (dt > 0) {
-    hud.set('Tip', AGData.fmt(Math.hypot(tip.x - lastTipX, tip.y - lastTipY) / dt, 0, 4), 'px/s', 'bl');
+    hud.set('Tip', AGData.fmt(Math.hypot(tip.x - lastTipX, tip.y - lastTipY) / dt, 0, 4), 'px/s', 'br');
   }
   lastTipX = tip.x; lastTipY = tip.y; lastTipAt = now;
   // Angle of the first segment from straight down.
   const first = segments[0];
   const theta = Math.atan2(first.x - mouse.x, first.y - mouse.y) * 180 / Math.PI;
-  hud.set('Theta', (theta < 0 ? '-' : '+') + AGData.fmt(Math.abs(theta), 1, 3), '°', 'bl');
+  hud.set('Theta', (theta < 0 ? '-' : '+') + AGData.fmt(Math.abs(theta), 1, 3), '°', 'br');
   // Small-angle period of a simple pendulum of the whole rope length: T = 2π √(L / g).
   const g = gravity * 3600;
   hud.set('T0', g > 0 ? AGData.fmt(2 * Math.PI * Math.sqrt(ropeLength / g), 2) : '∞', 's', 'tr');
