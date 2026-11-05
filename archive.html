@@ -19,7 +19,7 @@
 <body>
   <main class="archive-wrapper">
     <header class="archive-hero">
-      <p class="page-tag"><span>CAT. 03 \u2014 ARCHIVE</span><span id="archiveCount">-- ITEMS</span></p>
+      <p class="page-tag"><span>CAT. 03 — ARCHIVE</span><span id="archiveCount">-- ITEMS</span></p>
       <h1>The Archive</h1>
       <p class="lede" id="archiveIntro"></p>
     </header>
@@ -88,12 +88,6 @@
         const name = document.createElement('strong');
         name.textContent = tool.name;
         heading.appendChild(name);
-        if (tool.year) {
-          const year = document.createElement('span');
-          year.className = 'archive-year';
-          year.textContent = tool.year;
-          article.dataset.year = tool.year;
-        }
         body.appendChild(heading);
 
         if (tool.description) {
@@ -108,7 +102,10 @@
         body.appendChild(link);
 
         article.appendChild(body);
-        article.appendChild(spec);
+        const year = document.createElement('span');
+        year.className = 'archive-year';
+        year.textContent = tool.year || '----';
+        article.append(year, spec);
         item.appendChild(article);
         list.appendChild(item);
       });

@@ -76,6 +76,7 @@
 <div id="main" >
   <!-- Left text column -->
   <div id="controls" >
+    <p class="page-tag"><span>CAT. 01 — ABOUT</span><span>FIG. 01 — DRAW</span></p>
     <h1>about</h1>
     <div id="aboutText" style="display: contents"></div>
     <div class="text-block">Made by <a href="https://jornescholiers.be" target="_blank" rel="noopener noreferrer" class="creator-link"><span class="stretch-text">Jorne Scholiers</span></a></div>
@@ -131,7 +132,7 @@ function resizeCanvas() {
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
 }
-window.addEventListener('resize', resizeCanvas);
+window.addEventListener('resize', () => { resizeCanvas(); if (hud) hud.refresh(); });
 resizeCanvas();
 
 // Load brush images (1–15)
@@ -144,6 +145,10 @@ for (let i = 1; i <= 15; i++) {
 
 // Drawing
 let drawing = false;
+let stamps = 0;
+// Lab-notebook overlay on the drawing area (DOM only, never part of the drawing).
+const hud = window.AGData ? AGData.hud(document.getElementById('right'), { canvas, code: 'ABT', slots: { specimen: 'tr', size: 'tr', pointer: 'bl', timing: 'br' } }) : null;
+if (hud) hud.set('stamps', AGData.fmt(0, 0, 4), '', 'tr');
 function hidePrompt(){
   if(!promptVisible) return;
   promptVisible = false;
@@ -171,6 +176,8 @@ canvas.addEventListener('pointermove', (e) => {
   const size = 50 + Math.random() * 30; // random size
 
   ctx.drawImage(brush, x - size/2, y - size/2, size, size);
+  stamps++;
+  if (hud) hud.set('stamps', AGData.fmt(stamps, 0, 4), '', 'tr');
 });
 </script>
 
