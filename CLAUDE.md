@@ -1,7 +1,9 @@
 # Accidental Graphics
 
 Experimentele browsertools om "per ongeluk" grafisch werk te maken, door Jorne Scholiers.
-Live via GitHub Pages vanaf `main`. Jorne schrijft Nederlands: antwoord in het Nederlands.
+Live via GitHub Pages vanaf `main`. Netlify (project `accidentalgraphics`) bouwt per PR een
+deploy preview op `https://deploy-preview-<nr>--accidentalgraphics.netlify.app`: gebruik die om een PR
+in een echte browser of op je telefoon te bekijken. Jorne schrijft Nederlands: antwoord in het Nederlands.
 Code, commentaar en commitberichten zijn in het Engels.
 
 ## Stack
