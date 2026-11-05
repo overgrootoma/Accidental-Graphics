@@ -8,9 +8,11 @@
   <meta name="description" content="Paint with a responsive pendulum brush and export the canvas.">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
+  <link rel="stylesheet" href="../css/data.css">
   <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
   <script defer src="../scripts/navConfig.js"></script>
   <script defer src="../scripts/navMenu.js"></script>
+  <script src="../scripts/dataLayer.js"></script>
   <script defer src="../scripts/settingsToggle.js" data-panel="#ui"></script>
   <script src="../scripts/savedSettings.js"></script>
   <style>
@@ -298,7 +300,10 @@ const ctx = canvas.getContext('2d');
 let W,H;
 function resize(){
   const headerHeight = document.querySelector('.site-nav')?.offsetHeight || (window.innerWidth <= 480 ? 60 : 72);
-  W=window.innerWidth; H=Math.max(1, window.innerHeight - headerHeight);
+  const nextW=window.innerWidth, nextH=Math.max(1, window.innerHeight - headerHeight);
+  // Setting the size clears the painting, so only do it when the size really changes.
+  if (nextW === W && nextH === H) return;
+  W=nextW; H=nextH;
   canvas.width=W; canvas.height=H;
 }
 window.addEventListener('resize',resize); resize();
@@ -312,6 +317,7 @@ window.addEventListener('keydown', e => {
   if (e.key.toLowerCase() === 'r') {
     // Reset canvas
     clearCanvas();
+    hud.newSpecimen();
   }
   if (e.key.toLowerCase() === 'e') {
     exportPainting();
@@ -507,6 +513,7 @@ setBallShape(ballShape);
 // Reset en export knoppen
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   clearCanvas();
+  hud.newSpecimen();
 });
 document.getElementById('exportBtn').addEventListener('click', exportPainting);
 
@@ -537,8 +544,15 @@ function initSegments(){
 }
 initSegments();
 
+// Data overlay (scripts/dataLayer.js): DOM only, so it never ends up in the exported PNG.
+const hud = AGData.hud(canvas, { canvas, code: 'SWG', slots: { specimen: 'tr' } });
+AGData.readouts(document.getElementById('ui'));
+let hudFrame = 0;
+let lastTipX = 0, lastTipY = 0;
+
 function loop(){
   requestAnimationFrame(loop);
+  hud.frame();
 
   if (!segments.length) initSegments();
   const segmentLength = ropeLength / segmentCount;
@@ -579,6 +593,11 @@ function loop(){
 
   const tip = segments[segments.length-1];
   if (!tip) return;
+  // Tip speed for the overlay, a few times per second (no strings per frame).
+  if (++hudFrame % 6 === 0) {
+    hud.set('Tip', AGData.fmt(Math.hypot(tip.x - lastTipX, tip.y - lastTipY), 0, 3), 'px/f', 'bl');
+  }
+  lastTipX = tip.x; lastTipY = tip.y;
 
   const shouldDrawBall = showBall || (showStroke && strokeWidth > 0);
   if (shouldDrawBall) {
