@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="styles.css" />
     <script defer src="../../scripts/navConfig.js"></script>
     <script defer src="../../scripts/navMenu.js"></script>
+    <script defer src="../../scripts/settingsToggle.js" data-panel=".panel"></script>
   </head>
   <body class="isolation-page">
     <main class="app">
@@ -17,6 +18,7 @@
           <div class="panel-title">
             <p class="eyebrow">Isolation Grid</p>
             <h1>Settings</h1>
+            <span class="settings-toggle-slot" data-settings-toggle-slot></span>
             <button id="shortcutsToggle" class="help-toggle" type="button" aria-expanded="false" aria-controls="shortcuts" title="Keyboard shortcuts (?)">?</button>
           </div>
           <div class="header-actions">
@@ -51,6 +53,7 @@
               <li><span>Play / pause</span><kbd>Space</kbd></li>
               <li><span>To start</span><kbd>Home</kbd></li>
               <li><span>Record</span><kbd>⇧R</kbd></li>
+              <li><span>Hide / show settings</span><kbd>H</kbd></li>
               <li><span>Stop drawing / close</span><kbd>Esc</kbd></li>
             </ul>
           </div>

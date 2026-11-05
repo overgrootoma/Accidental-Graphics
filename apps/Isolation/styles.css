@@ -107,12 +107,39 @@ input[type="range"] {
   gap: 8px;
 }
 
+/* Hide / show settings (scripts/settingsToggle.js), in the colours of this app. */
+.isolation-page {
+  --ag-toggle-bg: var(--paper);
+  --ag-toggle-fg: var(--ink);
+  --ag-toggle-border: var(--rule);
+}
+
+.settings-toggle-slot {
+  display: flex;
+  align-self: center;
+  margin-left: auto;
+}
+
+.settings-toggle-slot .ag-settings-toggle.ag-settings-toggle,
+.isolation-page .ag-settings-toggle.ag-settings-toggle {
+  min-height: 24px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+body.ag-settings-hidden .app {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .help-toggle {
   align-self: center;
   width: 24px;
   min-height: 24px;
   height: 24px;
-  margin-left: auto;
+  margin-left: 6px;
   padding: 0;
   font-size: 12px;
   line-height: 1;
@@ -1002,6 +1029,10 @@ output,
 }
 
 @media (max-width: 780px) {
+  body.ag-settings-hidden .app {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
   body {
     padding-top: 60px;
   }
