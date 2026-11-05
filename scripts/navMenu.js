@@ -46,8 +46,9 @@ document.addEventListener("DOMContentLoaded", () => {
     { name: "Gallery", url: "gallery.html" }
   ];
 
-  staticLinks.forEach(link => {
+  staticLinks.forEach((link, index) => {
     const a = document.createElement("a");
+    a.style.setProperty("--i", index);
     a.textContent = link.name;
     a.href = resolvePath(link.url);
     dropdown.appendChild(a);
@@ -90,11 +91,14 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // Preview on hover; pin the menu open on click.
-  menuBtn.addEventListener("pointerenter", () => {
+  // Touch has no hover: a tap only toggles the pinned state (pointerenter/leave would flicker it).
+  menuBtn.addEventListener("pointerenter", event => {
+    if (event.pointerType === "touch") return;
     if (!menuPinnedOpen) setMenuOpen(true, false);
   });
 
-  header.addEventListener("pointerleave", () => {
+  header.addEventListener("pointerleave", event => {
+    if (event.pointerType === "touch") return;
     if (!menuPinnedOpen) setMenuOpen(false, false);
   });
 
@@ -123,6 +127,78 @@ document.addEventListener("DOMContentLoaded", () => {
   // Add header to body
   document.body.prepend(header);
 
+  // Live "lab notebook" strip in the footer of the site pages (.app-year[data-live]): real local time,
+  // viewport size, pointer position, page load time, tool count and the page's last-modified date.
+  function initLiveStrip() {
+    const bar = document.querySelector(".app-year[data-live]");
+    if (!bar) return;
+    const pad = (n, w = 2) => String(Math.round(n)).padStart(w, "0");
+    const label = document.createElement("span");
+    label.className = "app-year__label";
+    label.textContent = bar.textContent.trim();
+    const data = document.createElement("span");
+    data.className = "app-year__data";
+    const items = {};
+    [["time", "LOCAL"], ["vp", "VP"], ["ptr", "PTR"], ["load", "LOAD"], ["tools", "TOOLS"], ["upd", "UPD"]].forEach(([key, name]) => {
+      const item = document.createElement("span");
+      item.className = `app-year__item app-year__item--${key}`;
+      const k = document.createElement("span");
+      k.className = "app-year__key";
+      k.textContent = name;
+      const v = document.createElement("span");
+      v.className = "app-year__value";
+      item.append(k, v);
+      data.appendChild(item);
+      items[key] = v;
+    });
+    bar.textContent = "";
+    bar.append(label, data);
+
+    const setTime = () => {
+      const d = new Date();
+      items.time.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+    const setViewport = () => {
+      items.vp.textContent = `${pad(window.innerWidth, 4)}×${pad(window.innerHeight, 4)}`;
+    };
+    setTime();
+    setViewport();
+    items.ptr.textContent = "----,----";
+    items.load.textContent = "---- MS";
+    items.tools.textContent = "--";
+    const modified = new Date(document.lastModified);
+    items.upd.textContent = isNaN(modified) ? "----" : `${modified.getFullYear()}-${pad(modified.getMonth() + 1)}-${pad(modified.getDate())}`;
+    setInterval(setTime, 1000);
+    window.addEventListener("resize", setViewport);
+
+    let pointerFrame = 0;
+    let px = 0;
+    let py = 0;
+    window.addEventListener("pointermove", event => {
+      px = event.clientX;
+      py = event.clientY;
+      if (pointerFrame) return;
+      pointerFrame = requestAnimationFrame(() => {
+        pointerFrame = 0;
+        items.ptr.textContent = `${pad(px, 4)},${pad(py, 4)}`;
+      });
+    }, { passive: true });
+
+    const setLoad = () => {
+      const nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+      const ms = nav && nav.loadEventEnd > 0 ? nav.loadEventEnd : performance.now();
+      items.load.textContent = `${pad(ms, 4)} MS`;
+    };
+    if (document.readyState === "complete") setTimeout(setLoad, 0);
+    else window.addEventListener("load", () => setTimeout(setLoad, 0), { once: true });
+
+    if (window.AGContent) {
+      window.AGContent.tools().then(tools => {
+        items.tools.textContent = pad(tools.filter(tool => !tool.archived).length);
+      }).catch(() => {});
+    }
+  }
+
   const stretchTargetSelector = ".site-nav a";
 
   const wrapStretchLabels = root => {
@@ -146,6 +222,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   wrapStretchLabels(header);
+  initLiveStrip();
   const stretchLabelObserver = new MutationObserver(mutations => {
     mutations.forEach(mutation => {
       wrapStretchLabels(mutation.target);

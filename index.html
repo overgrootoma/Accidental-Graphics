@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Accidental Graphics</title>
   <meta name="description" content="Experimental browser tools for making graphics by accident. By Jorne Scholiers.">
   <link rel="stylesheet" href="css/style.css">
@@ -22,19 +22,76 @@
   <main class="app-grid-wrapper">
     <div class="app-grid" id="appGrid" role="list" aria-label="Available experiments"></div>
   </main>
-  <div class="app-year">2026 Accidental Graphics</div>
+  <div class="app-year" data-live>2026 Accidental Graphics</div>
 
   <script>
   window.addEventListener('DOMContentLoaded', () => {
     const appGrid = document.getElementById('appGrid');
     if (!appGrid || !window.AGContent) return;
 
-    const makeCard = ({ href, label, meta, cover, isVideo, extraClass }) => {
+    const pad = (n, w = 2) => String(n).padStart(w, '0');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+    const dataLine = (key, value) => {
+      const line = document.createElement('span');
+      line.className = 'app-card__datum';
+      const k = document.createElement('span');
+      k.className = 'app-card__key';
+      k.textContent = key;
+      const v = document.createElement('span');
+      v.textContent = value;
+      line.append(k, v);
+      return { line, set: text => { v.textContent = text; } };
+    };
+
+    // Pauses covers that are off screen and tilts the cover / follows the pointer with the label.
+    const visibility = 'IntersectionObserver' in window
+      ? new IntersectionObserver(entries => entries.forEach(entry => {
+          const video = entry.target;
+          if (entry.isIntersecting) video.play().catch(() => {});
+          else video.pause();
+        }), { rootMargin: '120px' })
+      : null;
+
+    const addTilt = card => {
+      if (!finePointer || reduced) return;
+      card.addEventListener('pointermove', event => {
+        const box = card.getBoundingClientRect();
+        const x = (event.clientX - box.left) / box.width - 0.5;
+        const y = (event.clientY - box.top) / box.height - 0.5;
+        card.style.setProperty('--tx', x.toFixed(3));
+        card.style.setProperty('--ty', y.toFixed(3));
+      });
+      card.addEventListener('pointerleave', () => {
+        card.style.setProperty('--tx', 0);
+        card.style.setProperty('--ty', 0);
+      });
+    };
+
+    const makeCard = ({ href, label, meta, cover, isVideo, extraClass, index, year, fig }) => {
       const card = document.createElement('a');
       card.href = href;
       card.className = `app-card${extraClass ? ` ${extraClass}` : ''}`;
       card.setAttribute('role', 'listitem');
       card.setAttribute('aria-label', label);
+      card.style.setProperty('--i', index);
+
+      const stamp = document.createElement('span');
+      stamp.className = 'app-card__stamp';
+      stamp.setAttribute('aria-hidden', 'true');
+      const noLine = dataLine('NO.', pad(index + 1));
+      const figLine = dataLine('FIG.', pad(fig === undefined ? index + 1 : fig));
+      stamp.append(noLine.line, figLine.line);
+
+      const spec = document.createElement('span');
+      spec.className = 'app-card__spec';
+      spec.setAttribute('aria-hidden', 'true');
+      const sizeLine = dataLine('RES', '----');
+      const timeLine = dataLine('DUR', '--');
+      const updLine = dataLine('UPD', '----');
+      if (cover && isVideo) spec.append(sizeLine.line, timeLine.line, updLine.line);
+      else spec.append(dataLine('ITEMS', year || '--').line);
 
       if (cover && isVideo) {
         const video = document.createElement('video');
@@ -46,6 +103,16 @@
         video.src = `${cover}#t=0.001`;
         card.appendChild(video);
         video.addEventListener('canplay', () => video.play().catch(() => {}), { once: true });
+        video.addEventListener('loadedmetadata', () => {
+          sizeLine.set(`${video.videoWidth}×${video.videoHeight}`);
+          timeLine.set(`${video.duration.toFixed(1)} S`);
+        }, { once: true });
+        if (visibility) visibility.observe(video);
+        // Real last-updated date of the cover file, when the server tells us.
+        fetch(cover, { method: 'HEAD' }).then(res => {
+          const modified = new Date(res.headers.get('last-modified'));
+          if (!isNaN(modified)) updLine.set(`${modified.getFullYear()}-${pad(modified.getMonth() + 1)}-${pad(modified.getDate())}`);
+        }).catch(() => {});
       } else if (cover) {
         card.style.backgroundImage = `url("${cover}")`;
       }
@@ -58,7 +125,8 @@
       const metaEl = document.createElement('span');
       metaEl.className = 'app-card__meta';
       metaEl.textContent = meta;
-      card.appendChild(metaEl);
+      card.append(metaEl, stamp, spec);
+      addTilt(card);
       return card;
     };
 
@@ -76,10 +144,12 @@
       const activeTools = tools.filter(tool => !tool.archived);
       appGrid.innerHTML = '';
 
-      activeTools.forEach(tool => {
+      activeTools.forEach((tool, index) => {
         appGrid.appendChild(makeCard({
           href: tool.url,
           label: tool.name,
+          index,
+          year: tool.year,
           meta: tool.year ? `Since ${tool.year}` : '',
           cover: tool.cover || AGContent.resolve('images/icon_Blue.png'),
           isVideo: tool.isVideo,
@@ -89,6 +159,9 @@
       appGrid.appendChild(makeCard({
         href: AGContent.resolve('archive.html'),
         label: 'Archive',
+        index: activeTools.length,
+        fig: 0,
+        year: String(tools.filter(tool => tool.archived).length).padStart(2, '0'),
         meta: 'Older tools',
         extraClass: 'app-card--archive',
       }));

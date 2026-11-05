@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Archive · Accidental Graphics</title>
   <meta name="description" content="Older Accidental Graphics tools. They still work.">
   <link rel="stylesheet" href="css/style.css">
@@ -19,13 +19,17 @@
 <body>
   <main class="archive-wrapper">
     <header class="archive-hero">
+      <p class="page-tag"><span>CAT. 03 \u2014 ARCHIVE</span><span id="archiveCount">-- ITEMS</span></p>
       <h1>The Archive</h1>
       <p class="lede" id="archiveIntro"></p>
     </header>
 
+    <div class="archive-head" aria-hidden="true">
+      <span>NO.</span><span>SPECIMEN</span><span>DESCRIPTION</span><span>YEAR</span><span>RES / DUR</span>
+    </div>
     <ul class="archive-list" id="archiveList"></ul>
   </main>
-  <div class="app-year">2026 Accidental Graphics</div>
+  <div class="app-year" data-live>2026 Accidental Graphics</div>
 
   <script>
   window.addEventListener('DOMContentLoaded', () => {
@@ -39,10 +43,22 @@
       return AGContent.tools();
     }).then(tools => {
       list.innerHTML = '';
-      tools.filter(tool => tool.archived).forEach(tool => {
+      const archived = tools.filter(tool => tool.archived);
+      document.getElementById('archiveCount').textContent = `${String(archived.length).padStart(2, '0')} ITEMS`;
+      archived.forEach((tool, index) => {
         const item = document.createElement('li');
         const article = document.createElement('article');
         article.className = 'archive-details';
+        item.style.setProperty('--i', index);
+
+        const no = document.createElement('span');
+        no.className = 'archive-no';
+        no.textContent = String(index + 1).padStart(3, '0');
+        article.appendChild(no);
+
+        const spec = document.createElement('span');
+        spec.className = 'archive-spec';
+        spec.textContent = '--';
 
         if (tool.cover && tool.isVideo) {
           const video = document.createElement('video');
@@ -52,6 +68,9 @@
           video.preload = 'metadata';
           video.setAttribute('aria-hidden', 'true');
           video.src = `${tool.cover}#t=0.001`;
+          video.addEventListener('loadedmetadata', () => {
+            spec.textContent = `${video.videoWidth}×${video.videoHeight} / ${video.duration.toFixed(1)} S`;
+          }, { once: true });
           article.appendChild(video);
         } else if (tool.cover) {
           const img = document.createElement('img');
@@ -59,6 +78,7 @@
           img.src = tool.cover;
           img.alt = '';
           img.loading = 'lazy';
+          img.addEventListener('load', () => { spec.textContent = `${img.naturalWidth}×${img.naturalHeight}`; }, { once: true });
           article.appendChild(img);
         }
 
@@ -71,8 +91,8 @@
         if (tool.year) {
           const year = document.createElement('span');
           year.className = 'archive-year';
-          year.textContent = `Since ${tool.year}`;
-          heading.appendChild(year);
+          year.textContent = tool.year;
+          article.dataset.year = tool.year;
         }
         body.appendChild(heading);
 
@@ -88,6 +108,7 @@
         body.appendChild(link);
 
         article.appendChild(body);
+        article.appendChild(spec);
         item.appendChild(article);
         list.appendChild(item);
       });

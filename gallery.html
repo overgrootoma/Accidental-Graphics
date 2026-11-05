@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Gallery · Accidental Graphics</title>
   <meta name="description" content="Work made with the Accidental Graphics tools.">
   <link rel="stylesheet" href="css/style.css">
@@ -19,6 +19,7 @@
 <body>
   <main class="gallery-wrapper">
     <section class="gallery-hero">
+      <p class="page-tag"><span>CAT. 02 \u2014 GALLERY</span><span id="galleryCount">--- SPECIMENS</span></p>
       <h1>Gallery</h1>
       <p class="gallery-lede" id="galleryIntro"></p>
       <div class="gallery-actions">
@@ -35,7 +36,7 @@
       <div class="gallery-grid" id="galleryGrid"></div>
     </section>
   </main>
-  <div class="app-year">2026 Accidental Graphics</div>
+  <div class="app-year" data-live>2026 Accidental Graphics</div>
 
   <script>
   window.addEventListener('DOMContentLoaded', () => {
@@ -58,16 +59,33 @@
       intro.textContent = data.intro || '';
       intro.hidden = !data.intro;
       grid.innerHTML = '';
+      const count = Array.isArray(data.items) ? data.items.filter(item => item && item.image).length : 0;
+      document.getElementById('galleryCount').textContent = `${String(count).padStart(3, '0')} SPECIMENS`;
 
+      let n = 0;
       (Array.isArray(data.items) ? data.items : []).filter(item => item && item.image).forEach(item => {
         const card = document.createElement('article');
         card.className = 'gallery-card';
+        card.style.setProperty('--i', n);
+        const index = ++n;
 
         const img = document.createElement('img');
         img.src = AGContent.resolve(item.image);
         img.alt = item.alt || (item.tool ? `Made with ${item.tool}` : 'Made with Accidental Graphics');
         img.loading = 'lazy';
         card.appendChild(img);
+
+        // Specimen number top left, real pixel size bottom right (filled in when the image has loaded).
+        const specimen = document.createElement('span');
+        specimen.className = 'gallery-card__tag gallery-card__tag--tl';
+        specimen.setAttribute('aria-hidden', 'true');
+        specimen.textContent = `SPEC. G-${String(index).padStart(3, '0')}`;
+        const dims = document.createElement('span');
+        dims.className = 'gallery-card__tag gallery-card__tag--tr';
+        dims.setAttribute('aria-hidden', 'true');
+        const showSize = () => { dims.textContent = `${img.naturalWidth} × ${img.naturalHeight} PX`; };
+        if (img.complete && img.naturalWidth) showSize(); else img.addEventListener('load', showSize, { once: true });
+        card.append(specimen, dims);
 
         const meta = document.createElement('div');
         meta.className = 'gallery-card__meta';
@@ -78,6 +96,11 @@
           credit.append('by ', item.maker_link ? link(item.maker_link, item.maker) : item.maker);
           meta.appendChild(credit);
         }
+
+        const fig = document.createElement('p');
+        fig.className = 'gallery-card__fig';
+        fig.textContent = `FIG. ${String(index).padStart(2, '0')} \u2014 ${(item.alt || '').replace(/^Made with .*/, '')}`.replace(/ \u2014 $/, '');
+        meta.insertBefore(fig, meta.firstChild);
 
         if (item.tool) {
           const toolLine = document.createElement('p');
