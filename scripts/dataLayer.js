@@ -6,22 +6,27 @@
 //
 // API (window.AGData)
 //   AGData.hud(stageEl, opts) -> hud
-//     Overlay with rulers, registration marks and live readouts over a stage. stageEl is the element that
-//     wraps the canvas (it must be positioned: relative/absolute/fixed). If stageEl is the <canvas> itself
-//     (or another replaced element), the HUD is a fixed overlay that follows the element's box instead.
+//     Rulers, registration marks and live readouts AROUND a canvas: everything sits just outside the
+//     canvas box (one-line text bands above and below it, top/left ruler and corner crosses past the
+//     edges), so nothing covers the artwork. Colours follow the page (--ag-data-fg / currentColor).
+//     The tool leaves room for it: var(--ag-hud-band) (24px, 20px on mobile) above and below the canvas,
+//     ~15px beside it for the ruler/marks. A band without room (nav, footer text, bottom sheet in the
+//     way) is left out; a band that is too narrow drops its lowest-priority lines (date, frame counter,
+//     T+, then app stats from the end). stageEl is the element that wraps the canvas (positioned:
+//     relative/absolute/fixed). If stageEl is the <canvas> itself (or another replaced element), the HUD
+//     is a fixed overlay that follows the element's box instead.
 //     opts.canvas   <canvas> to measure: pointer X/Y are reported in canvas pixels (CSS scaling undone)
 //                   and the frame/rulers hug the canvas' box. Default: stageEl if it is a canvas.
 //     opts.code     specimen code, e.g. "ISO" -> "SPEC. ISO-0007" (counter in localStorage
 //                   "ag-specimen:<code>"). Omit for no specimen line.
 //     opts.pointer / opts.size / opts.fps / opts.time / opts.rulers / opts.marks   false hides that part.
+//                   fps is only shown while the app reports frames (hud.frame()) and runs at >= 1 fps.
 //     opts.slots    where the built-in lines go, default { specimen: "tl", size: "tr", pointer: "bl", timing: "br" }
-//                   (e.g. { specimen: "tr" } when the settings panel covers the top-left corner).
-//     opts.blend    default true: white + mix-blend-mode difference (readable on any artwork).
-//                   false: uses --ag-data-fg / currentColor.
+//                   (tl/tr = band above the canvas, bl/br = band below).
 //     hud.set(key, value, unit?, slot?)  app stat (strokes, layers, colours...). slot: "tl"|"tr"|"bl"|"br",
 //                   default "tr". value null removes it. Numbers are shown as is: pass AGData.fmt() output.
 //     hud.frame(now?)   call once per rendered frame: fps then measures the app's real frame rate and a
-//                   frame counter appears. Without calls, fps follows requestAnimationFrame.
+//                   frame counter appears.
 //     hud.newSpecimen() -> "ISO-0008"   next specimen id; also resets elapsed time and frame count.
 //     hud.refresh()     re-measure after a layout change the HUD can't see (it watches resize + scroll).
 //     hud.destroy()
@@ -241,7 +246,9 @@
     const canvas = opts.canvas || (stageEl.tagName === "CANVAS" ? stageEl : null);
     const show = (name) => opts[name] !== false;
 
-    const box = el("div", "ag-hud ag-data" + (isReplaced ? " ag-hud--fixed" : "") + (opts.blend === false ? "" : " ag-hud--blend"));
+    // Everything sits OUTSIDE the canvas box (bands above/below, ruler and marks past the edges), so the
+    // readouts never cover the artwork. The box itself follows the canvas; its children overflow it.
+    const box = el("div", "ag-hud ag-data" + (isReplaced ? " ag-hud--fixed" : ""));
     box.setAttribute("aria-hidden", "true");
     const frameEl = el("div", "ag-hud__frame", box);
     if (show("rulers")) {
@@ -251,14 +258,18 @@
     if (show("marks")) {
       ["tl", "tr", "bl", "br"].forEach((corner) => el("span", `ag-reg ag-reg--${corner}`, frameEl));
     }
+    const bands = { top: el("div", "ag-hud__band ag-hud__band--top", frameEl), bottom: el("div", "ag-hud__band ag-hud__band--bottom", frameEl) };
     const slots = {};
     ["tl", "tr", "bl", "br"].forEach((corner) => {
-      slots[corner] = el("div", `ag-hud__slot ag-hud__slot--${corner}`, frameEl);
+      slots[corner] = el("div", `ag-hud__slot ag-hud__slot--${corner}`, bands[corner[0] === "t" ? "top" : "bottom"]);
     });
 
-    // One readout line: [label] value [unit]; returns its text nodes.
-    const line = (slot, label, unit) => {
+    // One readout line: [label] value [unit]; returns its text nodes. prio: which lines give way first
+    // when a band runs out of width (highest number first, then the last one in the band).
+    let fitQueued = true;
+    const line = (slot, label, unit, prio) => {
       const row = el("span", "ag-readout", slots[slot]);
+      row.dataset.prio = String(prio || 0);
       const parts = { row, label: null, value: document.createTextNode(""), unit: null };
       if (label) {
         el("span", "ag-readout__label", row).textContent = label;
@@ -270,6 +281,7 @@
       if (!unit) {
         unitEl.hidden = true;
       }
+      fitQueued = true;
       return parts;
     };
 
@@ -279,18 +291,27 @@
     if (code && !readSpecimen(code)) {
       storageSet(`ag-specimen:${code}`, String(specimen));
     }
-    const specLine = code ? line(place.specimen, "Spec.") : null;
-    const dateLine = code ? line(place.specimen, "") : null;
+    const specLine = code ? line(place.specimen, "Spec.", "", 0) : null;
+    const dateLine = code ? line(place.specimen, "", "", 5) : null;
     if (dateLine) {
       const now = new Date();
       setText(dateLine.value, `${now.getFullYear()}.${fmt(now.getMonth() + 1, 0, 2)}.${fmt(now.getDate(), 0, 2)}`);
     }
-    const sizeLine = show("size") && canvas ? line(place.size, "", "px") : null;
-    const pointerLine = show("pointer") ? line(place.pointer, "") : null;
-    const fpsLine = show("fps") ? line(place.timing, "", "fps") : null;
-    const timeLine = show("time") ? line(place.timing, "T+") : null;
+    const sizeLine = show("size") && canvas ? line(place.size, "", "px", 1) : null;
+    const pointerLine = show("pointer") ? line(place.pointer, "", "", 1) : null;
+    const fpsLine = show("fps") ? line(place.timing, "", "fps", 2) : null;
+    const timeLine = show("time") ? line(place.timing, "T+", "", 3) : null;
+    // fps only means something while the app is producing frames: hidden until a measured window has some.
+    let fpsShown = false;
+    const showFps = (on) => {
+      if (fpsLine && on !== fpsShown) {
+        fpsShown = on;
+        fpsLine.row.classList.toggle("is-idle", !on);
+        fitQueued = true;
+      }
+    };
     if (fpsLine) {
-      setText(fpsLine.value, "--");
+      fpsLine.row.classList.add("is-idle");
     }
     let frameLine = null;
     const custom = new Map();
@@ -312,11 +333,60 @@
     let clientY = NaN;
     let lastPointerText = "";
 
+    // Each band is one line: when a band is too narrow, lines give way by priority (see line()).
+    const fit = () => {
+      fitQueued = false;
+      ["top", "bottom"].forEach((name) => {
+        const band = bands[name];
+        const rows = band.querySelectorAll(".ag-readout");
+        rows.forEach((row) => row.classList.remove("is-overflow"));
+        if (box.classList.contains(`ag-hud--no-${name}`) || !band.clientWidth) {
+          return;
+        }
+        // Widths are summed (rows never shrink), so overflow on either side counts.
+        const bandSlots = Array.prototype.filter.call(band.children, (slot) => slot.classList.contains("ag-hud__slot"));
+        const bandGap = parseFloat(getComputedStyle(band).columnGap) || 0;
+        const rowGap = bandSlots.length ? parseFloat(getComputedStyle(bandSlots[0]).columnGap) || 0 : 0;
+        const available = band.clientWidth;
+        const shown = (row) => !row.classList.contains("is-overflow") && !row.classList.contains("is-idle");
+        for (let guard = 0; guard < 40; guard += 1) {
+          let need = 0;
+          let used = 0;
+          let victim = null;
+          bandSlots.forEach((slot) => {
+            const visibleRows = Array.prototype.filter.call(slot.children, shown);
+            if (!visibleRows.length) {
+              return;
+            }
+            used += 1;
+            visibleRows.forEach((row) => {
+              need += row.offsetWidth;
+            });
+            need += rowGap * (visibleRows.length - 1);
+            // The first line of a corner always stays.
+            visibleRows.slice(1).forEach((row) => {
+              if (!victim || Number(row.dataset.prio) >= Number(victim.dataset.prio)) {
+                victim = row;
+              }
+            });
+          });
+          need += bandGap * Math.max(0, used - 1);
+          if (need <= available || !victim) {
+            break;
+          }
+          victim.classList.add("is-overflow");
+        }
+      });
+    };
+
     // Layout, cached; refreshed on resize/scroll/ResizeObserver, never per frame.
     let canvasRect = null;
     let scaleX = 1;
     let scaleY = 1;
     const layout = () => {
+      // navMenu.js builds these after the app scripts ran, so look them up each time.
+      const nav = document.querySelector(".site-nav");
+      const foot = document.querySelector(".app-year");
       const stageRect = stageEl.getBoundingClientRect();
       const target = canvas || stageEl;
       const rect = target.getBoundingClientRect();
@@ -325,14 +395,39 @@
         scaleX = canvas.width / rect.width;
         scaleY = canvas.height / rect.height;
       }
-      // Keep the frame above a mobile bottom sheet (settingsToggle.js sets --ag-sheet-h).
+      // Free room around the canvas: below the nav, above a mobile bottom sheet (settingsToggle.js sets
+      // --ag-sheet-h) and the footer text, inside the canvas' parent horizontally.
       const sheet = document.body.classList.contains("ag-sheet")
         ? parseFloat(getComputedStyle(root).getPropertyValue("--ag-sheet-h")) || 0
         : 0;
-      const visibleBottom = Math.min(rect.bottom, window.innerHeight - sheet);
+      const screenBottom = window.innerHeight - sheet;
+      let topLimit = 0;
+      if (nav) {
+        const navBottom = nav.getBoundingClientRect().bottom;
+        topLimit = navBottom > 0 ? navBottom : 0;
+      }
+      let bottomLimit = screenBottom;
+      if (foot && foot.getClientRects().length) {
+        const range = document.createRange();
+        range.selectNodeContents(foot);
+        const text = range.getBoundingClientRect();
+        if (text.width && text.right > rect.left && text.left < rect.right) {
+          bottomLimit = Math.min(bottomLimit, text.top);
+        }
+      }
+      const parent = target.parentElement;
+      const parentRect = parent && parent !== document.body ? parent.getBoundingClientRect() : { left: 0, right: window.innerWidth };
+      const band = parseFloat(getComputedStyle(box).getPropertyValue("--ag-hud-band")) || 20;
+      const sideRoom = Math.min(rect.left - Math.max(0, parentRect.left), Math.min(window.innerWidth, parentRect.right) - rect.right);
+      box.classList.toggle("ag-hud--no-top", rect.top - topLimit < band - 2);
+      box.classList.toggle("ag-hud--no-bottom", bottomLimit - rect.bottom < band - 4);
+      box.classList.toggle("ag-hud--no-side", sideRoom < 9);
+      box.classList.toggle("ag-hud--no-marks", sideRoom < 15);
+      // Canvas edge on the screen edge (phones): the text keeps a small gutter.
+      box.classList.toggle("ag-hud--edge", rect.left < 4 || rect.right > window.innerWidth - 4);
+
+      const visibleBottom = Math.min(rect.bottom, screenBottom);
       const height = Math.max(0, visibleBottom - rect.top);
-      // Too little room left (sheet open at full): keep only the marks.
-      box.classList.toggle("ag-hud--cramped", height < 140);
       if (isReplaced) {
         box.style.left = `${rect.left}px`;
         box.style.top = `${rect.top}px`;
@@ -352,6 +447,7 @@
       if (sizeLine) {
         setText(sizeLine.value, `${fmt(canvas.width, 0, 4)} × ${fmt(canvas.height, 0, 4)}`);
       }
+      fit();
     };
     let layoutQueued = false;
     const queueLayout = () => {
@@ -365,6 +461,14 @@
     };
     window.addEventListener("resize", queueLayout);
     window.addEventListener("scroll", queueLayout, { passive: true, capture: true });
+    // The nav and footer (navMenu.js, deferred) and web fonts arrive later and change the free room.
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", queueLayout, { once: true });
+    }
+    window.addEventListener("load", queueLayout, { once: true });
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(queueLayout);
+    }
     let observer = null;
     if (typeof ResizeObserver === "function") {
       observer = new ResizeObserver(queueLayout);
@@ -394,6 +498,7 @@
     let lastCanvasW = canvas ? canvas.width : 0;
     let lastCanvasH = canvas ? canvas.height : 0;
     let raf = 0;
+    let lastFit = 0;
     let alive = true;
 
     const update = (now) => {
@@ -417,6 +522,7 @@
         windowFrames = 0;
         windowStart = now;
         setText(fpsLine.value, fmt(fps, 0, 2));
+        showFps(usesAppFrames && fps >= 1);
       }
       if (timeLine) {
         const t = (now - start) / 1000;
@@ -425,6 +531,11 @@
       }
       if (frameLine) {
         setText(frameLine.value, fmt(appFrames, 0, 6));
+      }
+      // Values change width now and then (LIVE vs a clock): re-check the bands once a second.
+      if (fitQueued || now - lastFit > 1000) {
+        lastFit = now;
+        fit();
       }
     };
 
@@ -455,11 +566,12 @@
           if (entry) {
             entry.row.remove();
             custom.delete(key);
+            fitQueued = true;
           }
           return api;
         }
         if (!entry) {
-          entry = line(slot || "tr", key, unit);
+          entry = line(slot || "tr", key, unit, 2);
           custom.set(key, entry);
         } else if (unit !== undefined) {
           setText(entry.unit, unit || "");
@@ -474,7 +586,7 @@
           windowFrames = 0;
           windowStart = performance.now();
           if (show("fps")) {
-            frameLine = line(place.timing, "F");
+            frameLine = line(place.timing, "F", "", 4);
           }
         }
         appFrames += 1;

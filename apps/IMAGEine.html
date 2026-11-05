@@ -19,8 +19,13 @@
   <script defer src="../scripts/settingsToggle.js" data-panel="#controls"></script>
   <script src="../scripts/savedSettings.js"></script>
   <style>
-    /* The canvas fills the stage; its bitmap is sized from the stage box in the script. */
-    #asciiCanvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; -webkit-tap-highlight-color: transparent; }
+    /* The canvas fills the stage minus a margin for the lab data (css/data.css), which sits outside it;
+       its bitmap is sized from the canvas box in the script. */
+    #asciiCanvas {
+      position: absolute; top: var(--ag-hud-band, 22px); left: var(--ag-hud-side, 16px);
+      width: calc(100% - 2 * var(--ag-hud-side, 16px)); height: calc(100% - 2 * var(--ag-hud-band, 22px));
+      touch-action: none; -webkit-tap-highlight-color: transparent;
+    }
     .imgOrderItem__controls button { min-width: 32px; min-height: 32px; }
     @media (max-width: 768px), (pointer: coarse) {
       .imgOrderItem__controls button { min-width: 40px; min-height: 40px; font-size: 16px; }
@@ -31,6 +36,7 @@
     body.ag-sheet.panel-ui-page #main {
       height: calc(100dvh - var(--ag-nav-h, 60px) - var(--ag-sheet-h, 0px));
       min-height: 0; padding: 0; overflow: hidden; border-top: 0;
+      flex: none; /* ends at the sheet instead of growing to the body height */
     }
     body.ag-sheet.panel-ui-page .canvas-stage { flex: 1 1 auto; min-height: 0; padding: 0; }
     /* Desktop: end the stage at the footer line so the HUD corners stay visible. */
@@ -185,10 +191,10 @@ function bindOutput(input, outputId, format) {
 bindOutput(gridInput, 'gridSizeOut', v => `${v} px`);
 bindOutput(contrastInput, 'contrastOut', v => (v > 0 ? '+' : '') + v);
 
-// ---------- Canvas size: the bitmap follows the stage box ----------
+// ---------- Canvas size: the bitmap follows the canvas box (stage minus the data margin) ----------
 function syncAsciiCanvasSize() {
-  const width = Math.max(1, stage.clientWidth);
-  const height = Math.max(1, stage.clientHeight);
+  const width = Math.max(1, canvas.clientWidth);
+  const height = Math.max(1, canvas.clientHeight);
   if (canvas.width === width && canvas.height === height) return;
   canvas.width = width;
   canvas.height = height;

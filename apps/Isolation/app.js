@@ -2742,7 +2742,13 @@
   }
 
   function fitCanvasToStage(requestedScale) {
-    const shell = canvas.parentElement.getBoundingClientRect();
+    // The shell's padding is the margin for the lab data around the canvas (css/data.css).
+    const shellEl = canvas.parentElement;
+    const pad = getComputedStyle(shellEl);
+    const shell = {
+      width: Math.max(1, shellEl.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight)),
+      height: Math.max(1, shellEl.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom)),
+    };
     const fitScale = Math.min(shell.width / canvas.width, shell.height / canvas.height);
     const scale = Number.isFinite(requestedScale) ? Math.min(requestedScale, fitScale) : fitScale;
     canvas.style.width = `${Math.max(1, Math.floor(canvas.width * scale))}px`;
@@ -7492,7 +7498,7 @@
   }
 
   // ---------- Lab data (shared HUD, scripts/dataLayer.js) ----------
-  // DOM only, over the canvas' box: never part of PNG, SVG or video exports.
+  // DOM only, around the canvas (outside its box): never part of PNG, SVG or video exports.
   const CAP_LABELS = { butt: "Flat", square: "Square", round: "Round", point: "Point", arrow: "Arrow", dot: "Dot", diamond: "Diamond", bar: "Bar", taper: "Taper" };
   const hud = window.AGData ? window.AGData.hud(canvas, { canvas, code: "ISO" }) : null;
   const hudStats = { renderMs: 0 };

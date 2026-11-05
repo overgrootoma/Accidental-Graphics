@@ -173,16 +173,19 @@
 
     @media (max-width: 768px), (pointer: coarse) { body.panel-ui-page #controls select { font-size: 16px; } }
 
-    /* Desktop: end the stage at the footer line so the HUD corners stay visible. */
+    /* Desktop: end the stage at the footer line. */
     @media (min-width: 901px) { body.panel-ui-page:not(.ag-sheet) .canvas-stage { align-self: flex-start; height: calc(100dvh - 72px - 34px); flex: 1 1 0; } }
+    /* Margin around the picture for the lab data (css/data.css), which sits outside the canvas. */
+    body.panel-ui-page .canvas-stage { box-sizing: border-box; padding: var(--ag-hud-band, 22px) var(--ag-hud-side, 16px); }
     /* Bottom-sheet layout: the stage is exactly the area above the sheet, the page never scrolls. */
     body.ag-sheet.panel-ui-page { height: 100dvh; overflow: hidden; --ag-nav-h: 72px; }
     @media (max-width: 480px) { body.ag-sheet.panel-ui-page { --ag-nav-h: 60px; } }
     body.ag-sheet.panel-ui-page #main {
       height: calc(100dvh - var(--ag-nav-h) - var(--ag-sheet-h, 0px));
       min-height: 0; padding: 0; overflow: hidden; border-top: 0;
+      flex: none; /* ends at the sheet instead of growing to the body height */
     }
-    body.ag-sheet.panel-ui-page .canvas-stage { flex: 1 1 auto; min-height: 0; padding: 0; }
+    body.ag-sheet.panel-ui-page .canvas-stage { flex: 1 1 auto; min-height: 0; padding: var(--ag-hud-band, 18px) var(--ag-hud-side, 0px); }
     body.ag-sheet .app-year { display: none; }
 
     .muted {
@@ -480,8 +483,10 @@
 
       function resizeCanvas() {
         const aspect = getAspect();
-        const maxWidth = Math.max(1, stage.clientWidth);
-        const maxHeight = Math.max(1, stage.clientHeight);
+        // The stage's padding is the margin for the lab data around the canvas.
+        const pad = getComputedStyle(stage);
+        const maxWidth = Math.max(1, stage.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight));
+        const maxHeight = Math.max(1, stage.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom));
         let width = maxWidth;
         let height = width / aspect;
         if (height > maxHeight) {

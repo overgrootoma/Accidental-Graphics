@@ -1512,14 +1512,21 @@ function isSheetLayout(){
 // Mobile bottom sheet (settingsToggle.js): the canvas gets the area between the nav and the sheet.
 // withSheet false measures as if the sheet were at peek, so the artwork's resolution doesn't
 // depend on where the sheet happened to be when the video was loaded.
+// Room above and below the canvas for the lab data (css/data.css), which sits outside the canvas.
+function hudBand(){
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ag-hud-band')) || 0;
+}
+
 function getSheetCanvasBox(withSheet = true){
   const rect = canvasStage.getBoundingClientRect();
   const styles = getComputedStyle(document.documentElement);
   const sheetH = withSheet ? parseFloat(styles.getPropertyValue('--ag-sheet-h')) || 0 : 76;
   const pad = 20;
+  // The export resolution (withSheet false) stays as it was; only the on-screen box leaves the data room.
+  const padY = withSheet ? Math.max(pad, 2 * hudBand() + 4) : pad;
   return {
     width: Math.max(160, Math.floor(rect.width - pad)),
-    height: Math.max(120, Math.floor(window.innerHeight - Math.max(0, rect.top) - sheetH - pad))
+    height: Math.max(120, Math.floor(window.innerHeight - Math.max(0, rect.top) - sheetH - padY))
   };
 }
 
@@ -1553,7 +1560,10 @@ function getCanvasViewportFit(aspect){
   const controlsWidth = !stackedQuery.matches && controlsPanel ? controlsPanel.getBoundingClientRect().width : 0;
   const availableWidth = Math.max(320, viewportWidth - controlsWidth - lateralGap);
 
-  let cssHeight = viewportHeight;
+  // Side by side: below the stage top, with a band above and below the canvas for the lab data.
+  // Stacked (stage under the panel, page scrolls): as before.
+  const stageTop = canvasStage && !stackedQuery.matches ? Math.max(0, canvasStage.getBoundingClientRect().top) : 0;
+  let cssHeight = stackedQuery.matches ? viewportHeight : Math.max(240, viewportHeight - stageTop - 2 * hudBand());
   let cssWidth = Math.round(cssHeight * aspect);
 
   if(cssWidth > availableWidth){

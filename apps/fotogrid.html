@@ -38,8 +38,9 @@
         max-width: none;
         max-height: none;
         align-self: flex-start;
-        /* Stops above the fixed footer so the overlay text at the bottom is not cut off. */
-        height: calc(100dvh - var(--fg-top, 72px) - 1px - var(--fg-foot, 34px));
+        /* Stops above the fixed footer, with a margin for the lab data (css/data.css) outside the canvas. */
+        margin: var(--ag-hud-band, 22px) var(--ag-hud-side, 16px) 0;
+        height: calc(100dvh - var(--fg-top, 72px) - 1px - var(--fg-foot, 34px) - 2 * var(--ag-hud-band, 22px));
       }
     }
     /* Stacked layout without the sheet (tablet widths with a mouse). */
@@ -50,10 +51,6 @@
         max-width: none;
         max-height: none;
       }
-    }
-    /* Overlay text sits on photos: white with a soft dark halo instead of the difference blend. */
-    .ag-hud {
-      text-shadow: 0 0 2px rgba(0, 0, 0, .95), 0 0 6px rgba(0, 0, 0, .7);
     }
     #gridColor {
       height: 40px;
@@ -70,7 +67,10 @@
     body.ag-sheet.app-page #main {
       height: calc(100dvh - var(--fg-top, 72px) - var(--ag-sheet-h, 0px));
       min-height: 0;
-      padding: 0;
+      /* Room for the lab data above and below the canvas. */
+      padding: var(--ag-hud-band, 18px) 0;
+      /* Not flex-grown to the body height: the canvas has to end at the sheet, with the data below it. */
+      flex: none;
       border-top: 1px solid rgba(255, 255, 255, 0.28);
       overflow: hidden;
     }
@@ -410,7 +410,7 @@ function drawCell(i1, i2, i3, i4){
 }
 
 // ---- data overlay (scripts/dataLayer.js): DOM only, never part of the exported PNG ---------------------
-const hud = AGData.hud(canvas, { canvas, code: 'PGR', blend: false });
+const hud = AGData.hud(canvas, { canvas, code: 'PGR' });
 AGData.readouts(document.getElementById('controls'));
 const PHASE_RANGE = Math.PI * 4;
 let hudAt = 0;

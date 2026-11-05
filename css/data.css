@@ -87,55 +87,61 @@
 }
 .ag-guide--v { border-top: 0; border-left: var(--ag-data-line) dashed var(--ag-data-dim); align-self: stretch; }
 
-/* ---------- Registration / crop marks: put .ag-reg.ag-reg--tl etc. in a positioned box ---------- */
+/* ---------- Registration marks: put .ag-reg.ag-reg--tl etc. in a positioned box ----------
+   Small crosses just OUTSIDE each corner, diagonally away from it (they never touch the artwork). */
 .ag-reg {
   position: absolute;
-  width: 14px;
-  height: 14px;
+  width: 9px;
+  height: 9px;
   pointer-events: none;
   color: var(--ag-data-fg);
 }
 .ag-reg::before,
 .ag-reg::after { content: ""; position: absolute; background: currentColor; }
-.ag-reg::before { left: 0; right: 0; top: 50%; height: var(--ag-data-line); }
-.ag-reg::after { top: 0; bottom: 0; left: 50%; width: var(--ag-data-line); }
-.ag-reg--tl { left: -7px; top: -7px; }
-.ag-reg--tr { right: -7px; top: -7px; }
-.ag-reg--bl { left: -7px; bottom: -7px; }
-.ag-reg--br { right: -7px; bottom: -7px; }
+.ag-reg::before { left: 0; right: 0; top: 4px; height: var(--ag-data-line); }
+.ag-reg::after { top: 0; bottom: 0; left: 4px; width: var(--ag-data-line); }
+.ag-reg--tl { left: -14px; top: -14px; }
+.ag-reg--tr { right: -14px; top: -14px; }
+.ag-reg--bl { left: -14px; bottom: -14px; }
+.ag-reg--br { right: -14px; bottom: -14px; }
 
-/* ---------- Edge tick ruler: --ag-tick = minor spacing (CSS px), major every 10 ---------- */
+/* ---------- Edge tick ruler: --ag-tick = minor spacing (CSS px), major every 10 ----------
+   Sits outside the edge it measures; the ticks grow from the outer side toward the canvas. */
 .ag-ruler {
   --ag-tick: 10px;
   position: absolute;
   pointer-events: none;
   color: var(--ag-data-fg);
-  opacity: .7;
+  opacity: .6;
 }
 .ag-ruler--top,
 .ag-ruler--bottom {
   left: 0;
   right: 0;
-  height: 7px;
+  height: 6px;
   background:
-    repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px calc(var(--ag-tick) * 10)) top left / 100% 7px no-repeat,
-    repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px var(--ag-tick)) top left / 100% 3px no-repeat;
+    repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px calc(var(--ag-tick) * 10)) bottom left / 100% 6px no-repeat,
+    repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px var(--ag-tick)) bottom left / 100% 3px no-repeat;
 }
-.ag-ruler--top { top: 0; }
-.ag-ruler--bottom { bottom: 0; transform: scaleY(-1); }
+.ag-ruler--top { bottom: calc(100% + 1px); }
+.ag-ruler--bottom { top: calc(100% + 1px); transform: scaleY(-1); }
 .ag-ruler--left,
 .ag-ruler--right {
   top: 0;
   bottom: 0;
-  width: 7px;
+  width: 6px;
   background:
-    repeating-linear-gradient(to bottom, currentColor 0 1px, transparent 1px calc(var(--ag-tick) * 10)) top left / 7px 100% no-repeat,
-    repeating-linear-gradient(to bottom, currentColor 0 1px, transparent 1px var(--ag-tick)) top left / 3px 100% no-repeat;
+    repeating-linear-gradient(to bottom, currentColor 0 1px, transparent 1px calc(var(--ag-tick) * 10)) top right / 6px 100% no-repeat,
+    repeating-linear-gradient(to bottom, currentColor 0 1px, transparent 1px var(--ag-tick)) top right / 3px 100% no-repeat;
 }
-.ag-ruler--left { left: 0; }
-.ag-ruler--right { right: 0; transform: scaleX(-1); }
+.ag-ruler--left { right: calc(100% + 1px); }
+.ag-ruler--right { left: calc(100% + 1px); transform: scaleX(-1); }
 
-/* ---------- HUD overlay (AGData.hud) ---------- */
+/* ---------- HUD (AGData.hud) ----------
+   The box follows the canvas; rulers, marks and the two one-line text bands sit just outside it.
+   --ag-hud-band is the room a tool leaves above and below its canvas for them, --ag-hud-side beside it
+   (ruler + marks; 0 on mobile, where they are left out). */
+:root { --ag-hud-band: 24px; --ag-hud-side: 16px; }
 .ag-hud {
   position: absolute;
   inset: 0;
@@ -147,23 +153,43 @@
   contain: layout style;
 }
 .ag-hud--fixed { position: fixed; inset: auto; }
-/* Readable over any artwork: white + difference = inverse of what is underneath. */
-.ag-hud--blend { --ag-data-fg: #fff; --ag-data-dim: rgba(255, 255, 255, .6); mix-blend-mode: difference; }
 .ag-hud__frame { position: absolute; }
-.ag-hud__slot {
+.ag-hud__band {
   position: absolute;
+  left: 0;
+  right: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 48%;
-  padding: 12px 14px;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 18px;
+  white-space: nowrap;
 }
-.ag-hud__slot--tl { left: 0; top: 0; align-items: flex-start; }
-.ag-hud__slot--tr { right: 0; top: 0; align-items: flex-end; text-align: right; }
-.ag-hud__slot--bl { left: 0; bottom: 0; align-items: flex-start; }
-.ag-hud__slot--br { right: 0; bottom: 0; align-items: flex-end; text-align: right; }
-.ag-hud .ag-readout { gap: .45em; }
-.ag-hud--cramped .ag-hud__slot { display: none; }
+.ag-hud__band--top { bottom: calc(100% + 9px); }
+.ag-hud__band--bottom { top: calc(100% + 5px); }
+.ag-hud__slot {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: baseline;
+  gap: 0 14px;
+  min-width: 0;
+  overflow: hidden;
+}
+.ag-hud__slot:empty { display: none; }
+.ag-hud__slot--tr,
+.ag-hud__slot--br { margin-left: auto; justify-content: flex-end; }
+.ag-hud .ag-readout { gap: .45em; flex: none; }
+.ag-hud .ag-readout.is-overflow,
+.ag-hud .ag-readout.is-idle { display: none; }
+.ag-hud--edge .ag-hud__band { left: 8px; right: 8px; }
+.ag-hud--no-top .ag-hud__band--top,
+.ag-hud--no-top .ag-ruler--top,
+.ag-hud--no-top .ag-reg--tl,
+.ag-hud--no-top .ag-reg--tr,
+.ag-hud--no-bottom .ag-hud__band--bottom,
+.ag-hud--no-bottom .ag-reg--bl,
+.ag-hud--no-bottom .ag-reg--br,
+.ag-hud--no-side .ag-ruler--left,
+.ag-hud--no-marks .ag-reg { display: none; }
 
 /* Global D toggle: fades every .ag-data element. */
 .ag-data {
@@ -174,9 +200,13 @@ html.ag-data-hidden .ag-data {
   visibility: hidden;
   transition: opacity var(--ag-dur-2) var(--ag-ease-out), visibility 0s linear var(--ag-dur-2);
 }
-@media (max-width: 480px) {
+@media (max-width: 768px) {
+  :root { --ag-hud-band: 20px; --ag-hud-side: 0px; }
   .ag-hud { --ag-data-size: 9px; }
-  .ag-hud__slot { padding: 8px 10px; }
+  .ag-hud__band--top { bottom: calc(100% + 7px); }
+  .ag-hud__band--bottom { top: calc(100% + 4px); }
+  .ag-hud__band { gap: 12px; }
+  .ag-hud__slot { gap: 0 10px; }
 }
 
 /* ---------- Secondary motion (html.ag-motion is set by dataLayer.js; remove it to opt out) ----------

@@ -21,11 +21,12 @@
       background-color: var(--swing-bg);
       display: block;
       position: fixed;
-      top: var(--swing-top, 72px);
-      left: 0;
-      width: 100%;
-      /* Stops above the fixed footer so the overlay text is not covered; the sheet covers it on mobile. */
-      height: calc(100dvh - var(--swing-top, 72px) - var(--swing-foot, 34px));
+      /* Inset below the nav, above the footer and from the sides: the lab data (css/data.css) sits in
+         that margin, outside the painting. The sheet covers the bottom on mobile. */
+      top: calc(var(--swing-top, 72px) + var(--ag-hud-band, 22px));
+      left: var(--ag-hud-side, 16px);
+      width: calc(100% - 2 * var(--ag-hud-side, 16px));
+      height: calc(100dvh - var(--swing-top, 72px) - var(--swing-foot, 34px) - 2 * var(--ag-hud-band, 22px));
       touch-action: none;
       -webkit-tap-highlight-color: transparent;
       -webkit-touch-callout: none;
@@ -33,10 +34,14 @@
       user-select: none;
     }
     body.ag-sheet #c {
-      height: calc(100dvh - var(--swing-top, 72px));
+      height: calc(100dvh - var(--swing-top, 72px) - var(--ag-hud-band, 18px));
     }
     html, body.app-page {
       overscroll-behavior: none;
+    }
+    /* Lab data around the canvas: on the black page, not on the painting. */
+    .ag-hud {
+      color: #fff;
     }
     #c.bg-off {
       background-color: #1a1a1a;
