@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Isolation · Accidental Graphics</title>
     <meta name="description" content="Draw reactive grid compositions with image, line, and isolation controls." />
     <link rel="stylesheet" href="../../css/nav.css" />
@@ -44,6 +44,7 @@
               <li><span>Move object</span><kbd>← ↑ → ↓</kbd></li>
               <li><span>Move further</span><kbd>⇧ ← ↑ → ↓</kbd></li>
               <li><span>Draw shape</span><kbd>D</kbd></li>
+              <li><span>Lab data</span><kbd>⇧D</kbd></li>
               <li><span>Grid lines</span><kbd>G</kbd></li>
               <li><span>Show image</span><kbd>I</kbd></li>
               <li><span>Randomize</span><kbd>R</kbd></li>
@@ -141,19 +142,47 @@
             <input id="lineColor" type="color" value="#000000" />
           </div>
           <div class="control">
-            <label for="strokeWeight">Outline</label>
+            <label for="strokeWeight">Outline Size</label>
             <input id="strokeWeight" type="range" min="0.2" max="24" step="0.1" value="1.2" />
             <output id="strokeWeightValue">1.2</output>
           </div>
           <div class="split">
             <div class="field">
               <label for="lineCap">Ends</label>
-              <select id="lineCap">
+              <select id="lineCap" title="The shape at both ends of every line, or only at the start when Finish has its own">
                 <option value="butt">Flat</option>
                 <option value="square">Square</option>
                 <option value="round" selected>Round</option>
+                <option value="point">Point</option>
+                <option value="arrow">Arrow</option>
+                <option value="dot">Dot</option>
+                <option value="diamond">Diamond</option>
+                <option value="bar">Bar</option>
+                <option value="taper">Taper</option>
               </select>
             </div>
+            <div class="field">
+              <label for="lineCapEnd">Finish</label>
+              <select id="lineCapEnd" title="A different shape for where each line finishes (the way you drew it)">
+                <option value="same" selected>Same</option>
+                <option value="butt">Flat</option>
+                <option value="square">Square</option>
+                <option value="round">Round</option>
+                <option value="point">Point</option>
+                <option value="arrow">Arrow</option>
+                <option value="dot">Dot</option>
+                <option value="diamond">Diamond</option>
+                <option value="bar">Bar</option>
+                <option value="taper">Taper</option>
+              </select>
+            </div>
+          </div>
+          <div id="capSizeRow" class="control" hidden>
+            <label for="capSize">End Size</label>
+            <input id="capSize" type="range" min="25" max="400" step="5" value="100" data-unit="%" title="Size of arrow, dot, diamond, bar, point and taper ends, relative to the line width" />
+            <output id="capSizeValue">100%</output>
+          </div>
+          <div class="split">
             <div class="field">
               <label for="lineJoin">Corners</label>
               <select id="lineJoin">
@@ -164,13 +193,13 @@
             </div>
           </div>
           <div class="control">
-            <label for="randomLineCount">Random</label>
+            <label for="randomLineCount">Count</label>
             <input id="randomLineCount" type="range" min="4" max="400" step="1" value="28" title="How many lines Random Lines makes" />
             <output id="randomLineCountValue">28</output>
           </div>
           <div class="control">
             <label for="randomLineLength">Length</label>
-            <input id="randomLineLength" type="range" min="2" max="40" step="1" value="10" />
+            <input id="randomLineLength" type="range" min="2" max="40" step="1" value="10" title="How many grid steps each random line takes, at most" />
             <output id="randomLineLengthValue">10</output>
           </div>
           <div class="button-row">
@@ -565,6 +594,10 @@
           </div>
           <button id="applySize" type="button">Apply Size</button>
           <p id="pixelSize" class="meter">2953 x 2953 px</p>
+          <label class="check" title="Measurements around the canvas: size, grid, lines, pointer, time. Never in exports. (⇧D)">
+            <input id="showData" type="checkbox" checked />
+            <span>Lab Data</span>
+          </label>
           </div>
         </details>
 

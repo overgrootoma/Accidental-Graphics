@@ -68,6 +68,12 @@
   const TIMELINE_OPEN_KEY = "isolation-timeline-open";
   const SHAPES = ["block", "circle", "diamond", "triangle", "hexagon", "hourglass", "wedge", "cross", "star", "blob", "custom", "imageMask", "textMask"];
   const MAX_MASK_POINTS = 400;
+  // Line ends. The first three are the canvas' own caps; the others are drawn as filled shapes at each end
+  // (see buildCappedLine), the same on screen, in PNG, SVG and video. "same" (end only) follows the start.
+  const LINE_CAPS = ["butt", "square", "round", "point", "arrow", "dot", "diamond", "bar", "taper"];
+  const NATIVE_CAPS = ["butt", "square", "round"];
+  const CAP_SIZE_MIN = 25;
+  const CAP_SIZE_MAX = 400;
   const MASK_RESOLUTION = 200;
 
   // Parameters that can be keyframed. kind: number (smooth), integer, grid (odd steps), color (smooth RGB),
@@ -82,7 +88,9 @@
     drawStroke: { label: "Outline", kind: "bool" },
     lineColor: { label: "Outline Color", kind: "color" },
     strokeWeight: { label: "Outline Size", kind: "number" },
-    lineCap: { label: "Ends", kind: "select", options: ["butt", "square", "round"] },
+    lineCap: { label: "Ends", kind: "select", options: LINE_CAPS },
+    lineCapEnd: { label: "Finish", kind: "select", options: ["same", ...LINE_CAPS] },
+    capSize: { label: "End Size", kind: "number" },
     lineJoin: { label: "Corners", kind: "select", options: ["miter", "bevel", "round"] },
     imageLinesHorizontal: { label: "Horizontal", kind: "bool" },
     imageLinesVertical: { label: "Vertical", kind: "bool" },
@@ -145,6 +153,8 @@
     lineFillColor: "#ffffff",
     lineColor: "#000000",
     lineCap: "round",
+    lineCapEnd: "same",
+    capSize: 100,
     lineJoin: "round",
     randomLineCount: 28,
     randomLineAdd: false,
@@ -245,6 +255,10 @@
     strokeWeight: document.getElementById("strokeWeight"),
     strokeWeightValue: document.getElementById("strokeWeightValue"),
     lineCap: document.getElementById("lineCap"),
+    lineCapEnd: document.getElementById("lineCapEnd"),
+    capSize: document.getElementById("capSize"),
+    capSizeValue: document.getElementById("capSizeValue"),
+    capSizeRow: document.getElementById("capSizeRow"),
     lineJoin: document.getElementById("lineJoin"),
     randomLineCount: document.getElementById("randomLineCount"),
     randomLineCountValue: document.getElementById("randomLineCountValue"),
@@ -555,6 +569,8 @@
     merged.lineFillColor = validHex(merged.lineFillColor) ? merged.lineFillColor : base.lineFillColor;
     merged.lineColor = validHex(merged.lineColor) ? merged.lineColor : base.lineColor;
     merged.lineCap = validLineCap(merged.lineCap) ? merged.lineCap : base.lineCap;
+    merged.lineCapEnd = merged.lineCapEnd === "same" || validLineCap(merged.lineCapEnd) ? merged.lineCapEnd : base.lineCapEnd;
+    merged.capSize = clampNumber(merged.capSize, CAP_SIZE_MIN, CAP_SIZE_MAX, base.capSize);
     merged.lineJoin = validLineJoin(merged.lineJoin) ? merged.lineJoin : base.lineJoin;
     merged.randomLineCount = clampNumber(merged.randomLineCount, 4, MAX_RANDOM_LINES, base.randomLineCount);
     merged.randomLineAdd = merged.randomLineAdd === true;
@@ -2503,7 +2519,7 @@
   }
 
   function validLineCap(value) {
-    return ["butt", "square", "round"].includes(value);
+    return LINE_CAPS.includes(value);
   }
 
   function validLineJoin(value) {
@@ -2744,6 +2760,9 @@
     els.lineColor.value = state.lineColor;
     els.strokeWeight.value = state.strokeWeight;
     els.lineCap.value = state.lineCap;
+    els.lineCapEnd.value = state.lineCapEnd;
+    els.capSize.value = state.capSize;
+    els.capSizeRow.hidden = !usesCapSize();
     els.lineJoin.value = state.lineJoin;
     els.randomLineCount.value = state.randomLineCount;
     els.randomLineAdd.checked = state.randomLineAdd;
@@ -2798,6 +2817,7 @@
     els.reactionValue.textContent = Math.round(state.reaction);
     els.fillWeightValue.textContent = Math.round(state.fillWeight);
     els.strokeWeightValue.textContent = Number(state.strokeWeight).toFixed(1);
+    els.capSizeValue.textContent = `${Math.round(state.capSize)}%`;
     els.randomLineCountValue.textContent = Math.round(state.randomLineCount);
     els.randomLineLengthValue.textContent = Math.round(state.randomLineLength);
     els.imageThresholdValue.textContent = Math.round(getLayerValue(selectedLayerId, "threshold"));
@@ -3019,7 +3039,6 @@
       strokeColor: item.strokeColor,
     }));
     const shapes = ["block", "circle", "diamond", "triangle", "hexagon", "hourglass", "wedge", "cross", "star", "blob"];
-    const caps = ["butt", "square", "round"];
     const joins = ["miter", "bevel", "round"];
     const isolationCount = 1 + Math.floor(random() * 3);
     const drawMode = Math.floor(random() * 3);
@@ -3038,7 +3057,14 @@
         state.lineFillColor = randomHexColor(random);
         state.lineColor = randomHexColor(random);
       }
-      state.lineCap = caps[Math.floor(random() * caps.length)];
+      // Mostly the plain ends, now and then a shape, sometimes only at the end.
+      const pickCap = () => {
+        const list = random() < 0.55 ? NATIVE_CAPS : LINE_CAPS;
+        return list[Math.floor(random() * list.length)];
+      };
+      state.lineCap = pickCap();
+      state.lineCapEnd = random() < 0.6 ? "same" : pickCap();
+      state.capSize = Math.round(60 + random() * 160);
       state.lineJoin = joins[Math.floor(random() * joins.length)];
       state.randomLineCount = Math.round(4 + random() * 76);
       state.randomLineLength = Math.round(2 + random() * 38);
@@ -3208,6 +3234,7 @@
 
   // overlays: on-screen helpers (the selected object's motion path) that never go into exports.
   function render(target, width, height, overlays) {
+    const renderStart = overlays ? performance.now() : 0;
     const minSide = Math.min(width, height);
     const maxSide = Math.max(width, height);
     const grid = getGrid(width, height, minSide * 0.055);
@@ -3234,6 +3261,11 @@
       drawSelectionOverlay(target, grid);
     }
     target.restore();
+    if (overlays && hud) {
+      hudStats.renderMs = performance.now() - renderStart;
+      hud.frame();
+      updateHud(grid);
+    }
   }
 
   // Extra line layers each keep their own image lines, rebuilt only when their own settings change.
@@ -3469,31 +3501,55 @@
     return [];
   }
 
+  // One offscreen layer, reused between frames (a new canvas per frame is a big allocation at print sizes).
+  let lineLayerCanvas = null;
+
+  function getLineLayer(width, height) {
+    if (!lineLayerCanvas) {
+      lineLayerCanvas = document.createElement("canvas");
+    }
+    if (lineLayerCanvas.width !== width || lineLayerCanvas.height !== height) {
+      lineLayerCanvas.width = width;
+      lineLayerCanvas.height = height;
+    }
+    const layer = lineLayerCanvas.getContext("2d", { alpha: true });
+    layer.clearRect(0, 0, width, height);
+    return layer;
+  }
+
   function drawStoredLines(target, grid, geos, maxSide) {
     const alpha = getLineAlpha();
-    const layerCanvas = document.createElement("canvas");
-    layerCanvas.width = target.canvas.width;
-    layerCanvas.height = target.canvas.height;
-    const layer = layerCanvas.getContext("2d", { alpha: true });
+    const layer = getLineLayer(target.canvas.width, target.canvas.height);
+    const caps = getCapStyle();
 
     layer.save();
-    layer.lineCap = state.lineCap;
+    layer.lineCap = caps.native ? caps.start : "butt";
     layer.lineJoin = state.lineJoin;
     layer.miterLimit = 2;
 
     getLineSets(maxSide).forEach((set) => {
+      const capBase = getCapBase(set.strokes);
       set.paths.forEach((path) => {
-        const line = buildReactiveLine(path.points, grid, geos);
+        let line = buildReactiveLine(path.points, grid, geos);
+        let ends = null;
+        if (!caps.native) {
+          const capped = buildCappedLine(line, caps, capBase);
+          line = capped.line;
+          ends = capped.ends;
+        }
         set.strokes.forEach((stroke) => {
           getStrokePieces(line, stroke, geos).forEach((piece) => {
             strokeLinePath(layer, piece.commands, withAlpha(piece.color, alpha), stroke.width);
           });
+          if (ends && ends.length) {
+            fillCapShapes(layer, ends, stroke, capBase, alpha, geos);
+          }
         });
       });
     });
 
     layer.restore();
-    target.drawImage(layerCanvas, 0, 0);
+    target.drawImage(layer.canvas, 0, 0);
   }
 
   // Reacted line as a flat list of commands: [isMove (1/0), x, y, ...]. Computed once, stroked once per style.
@@ -3620,6 +3676,361 @@
       }
     }
     target.stroke();
+  }
+
+  // ---------- Line ends ----------
+  // The plain ends (Flat, Square, Round) use the canvas' own lineCap when both ends are the same, exactly as
+  // before. Any other combination strokes the line with flat ends and fills a shape at each end. Shapes are
+  // built from the narrowest stroke of a line (the fill when Fill and Outline are both on); the outline
+  // stroke gets the same shape grown by the outline width, so the outline wraps the end like it wraps the line.
+  function getCapStyle() {
+    const start = state.lineCap;
+    const end = state.lineCapEnd === "same" ? start : state.lineCapEnd;
+    return {
+      start,
+      end,
+      native: start === end && NATIVE_CAPS.includes(start),
+      size: state.capSize / 100,
+      // Shapes reach 1 px back under the stroke so no anti-aliasing seam shows where they meet. With
+      // Transparent Drawing that overlap would show darker, so there they only touch.
+      seam: getLineAlpha() < 1 ? 0 : 1,
+    };
+  }
+
+  function usesCapSize() {
+    const caps = getCapStyle();
+    return !NATIVE_CAPS.includes(caps.start) || !NATIVE_CAPS.includes(caps.end);
+  }
+
+  // Half the width of the narrowest stroke: the size every end shape is built from.
+  function getCapBase(strokes) {
+    let width = Infinity;
+    strokes.forEach((stroke) => {
+      width = Math.min(width, stroke.width);
+    });
+    return Number.isFinite(width) ? width / 2 : 0;
+  }
+
+  // Sizes of an end shape in its own frame: a runs outward along the line, b across it. trim is how much
+  // the stroke is shortened so it meets the shape without poking out of it.
+  function getCapMetrics(cap, h, size, seam) {
+    switch (cap) {
+      case "point":
+        return { length: 2 * h * size, trim: 0 };
+      case "arrow": {
+        const half = Math.max(h * 1.25, 2.5 * h * size);
+        return { half, length: half * 1.5, trim: 0 };
+      }
+      case "dot": {
+        const radius = Math.max(h * 1.25, 1.8 * h * size);
+        return { radius, trim: Math.max(0, Math.sqrt(radius * radius - h * h) - seam) };
+      }
+      case "diamond": {
+        const half = Math.max(h * 1.3, 2.4 * h * size);
+        return { half, trim: Math.max(0, half - h - seam) };
+      }
+      case "bar": {
+        const thickness = h * 1.2;
+        return { half: Math.max(h * 1.5, 3 * h * size), thickness, trim: thickness / 2 };
+      }
+      case "taper":
+        return { trim: 6 * h * size };
+      default:
+        return { trim: 0 };
+    }
+  }
+
+  // Shortens every piece of a reacted line for its end shapes and lists the ends: where they are, which way
+  // they point (outward), which object tints them and, for a taper, the part of the line it replaces.
+  function buildCappedLine(line, caps, h) {
+    const out = [];
+    if (line.owners) {
+      out.owners = [];
+    }
+    const ends = [];
+    let first = 0;
+    for (let index = 3; index <= line.length; index += 3) {
+      if (index === line.length || line[index]) {
+        capSubpath(line, first, index, caps, h, out, ends);
+        first = index;
+      }
+    }
+    return { line: out, ends };
+  }
+
+  function capSubpath(line, from, to, caps, h, out, ends) {
+    const count = (to - from) / 3;
+    const owners = line.owners;
+    const ownerAt = (point) => (owners ? owners[from / 3 + point] : -1);
+    const xAt = (point) => line[from + point * 3 + 1];
+    const yAt = (point) => line[from + point * 3 + 2];
+    if (count < 2) {
+      // A lone point draws nothing, with or without ends.
+      for (let point = 0; point < count; point += 1) {
+        out.push(line[from + point * 3], xAt(point), yAt(point));
+        if (out.owners) {
+          out.owners.push(ownerAt(point));
+        }
+      }
+      return;
+    }
+
+    const cumulative = [0];
+    for (let point = 1; point < count; point += 1) {
+      cumulative.push(cumulative[point - 1] + Math.hypot(xAt(point) - xAt(point - 1), yAt(point) - yAt(point - 1)));
+    }
+    const total = cumulative[count - 1];
+    const startMetrics = getCapMetrics(caps.start, h, caps.size, caps.seam);
+    const endMetrics = getCapMetrics(caps.end, h, caps.size, caps.seam);
+    let startTrim = startMetrics.trim;
+    let endTrim = endMetrics.trim;
+    // Short lines keep at least a tenth of their length as stroke.
+    if (startTrim + endTrim > total * 0.9) {
+      const fit = (total * 0.9) / (startTrim + endTrim || 1);
+      startTrim *= fit;
+      endTrim *= fit;
+    }
+
+    const pointAt = (distance) => {
+      let segment = 1;
+      while (segment < count - 1 && cumulative[segment] < distance) {
+        segment += 1;
+      }
+      const span = cumulative[segment] - cumulative[segment - 1];
+      const t = span > 0 ? clamp((distance - cumulative[segment - 1]) / span, 0, 1) : 0;
+      return {
+        x: xAt(segment - 1) + (xAt(segment) - xAt(segment - 1)) * t,
+        y: yAt(segment - 1) + (yAt(segment) - yAt(segment - 1)) * t,
+        owner: ownerAt(t < 0.5 ? segment - 1 : segment),
+        segment,
+      };
+    };
+    // Outward direction at an end, measured over about a line width so a tiny last wiggle can't turn it.
+    const reach = Math.min(total / 2, Math.max(h * 2, 1e-3));
+    const direction = (point, distance, fallback) => {
+      const other = pointAt(distance);
+      const dx = xAt(point) - other.x;
+      const dy = yAt(point) - other.y;
+      const length = Math.hypot(dx, dy);
+      return length > 1e-6 ? { x: dx / length, y: dy / length } : { x: fallback, y: 0 };
+    };
+
+    const startPoint = pointAt(startTrim);
+    const endPoint = pointAt(total - endTrim);
+    const push = (isMove, x, y, owner) => {
+      out.push(isMove, x, y);
+      if (out.owners) {
+        out.owners.push(owner);
+      }
+    };
+    push(1, startPoint.x, startPoint.y, startPoint.owner);
+    for (let point = 1; point < count - 1; point += 1) {
+      if (cumulative[point] > startTrim && cumulative[point] < total - endTrim) {
+        push(0, xAt(point), yAt(point), ownerAt(point));
+      }
+    }
+    push(0, endPoint.x, endPoint.y, endPoint.owner);
+
+    const spine = (fromPoint, toIndex, step, length) => {
+      // From where the stroke stops to the tip, with the distance along the line.
+      const points = [{ x: fromPoint.x, y: fromPoint.y, a: 0 }];
+      let a = 0;
+      let last = fromPoint;
+      for (let point = toIndex; point >= 0 && point < count; point += step) {
+        const x = xAt(point);
+        const y = yAt(point);
+        a += Math.hypot(x - last.x, y - last.y);
+        if (a > 1e-9 && a - points[points.length - 1].a > 1e-6) {
+          points.push({ x, y, a: Math.min(a, length) });
+        }
+        last = { x, y };
+      }
+      return points;
+    };
+    if (caps.start !== "butt") {
+      const end = { cap: caps.start, x: xAt(0), y: yAt(0), u: direction(0, reach, -1), owner: startPoint.owner, m: startMetrics, seam: caps.seam };
+      if (caps.start === "taper") {
+        end.spine = spine(startPoint, startPoint.segment - 1, -1, startTrim);
+        end.length = startTrim;
+      }
+      ends.push(end);
+    }
+    if (caps.end !== "butt") {
+      const end = { cap: caps.end, x: xAt(count - 1), y: yAt(count - 1), u: direction(count - 1, total - reach, 1), owner: endPoint.owner, m: endMetrics, seam: caps.seam };
+      if (caps.end === "taper") {
+        end.spine = spine(endPoint, endPoint.segment, 1, endTrim);
+        end.length = endTrim;
+      }
+      ends.push(end);
+    }
+  }
+
+  // Convex polygon in the end's frame, each edge pushed out by its own distance (miter corners).
+  function offsetConvex(points, offsets) {
+    const count = points.length;
+    let area = 0;
+    for (let index = 0; index < count; index += 1) {
+      const next = points[(index + 1) % count];
+      area += points[index][0] * next[1] - next[0] * points[index][1];
+    }
+    const sign = area >= 0 ? 1 : -1;
+    const lines = points.map((point, index) => {
+      const next = points[(index + 1) % count];
+      const length = Math.hypot(next[0] - point[0], next[1] - point[1]) || 1;
+      const nx = (sign * (next[1] - point[1])) / length;
+      const ny = (sign * -(next[0] - point[0])) / length;
+      return { nx, ny, c: nx * point[0] + ny * point[1] + offsets[index] };
+    });
+    return points.map((point, index) => {
+      const a = lines[(index + count - 1) % count];
+      const b = lines[index];
+      const det = a.nx * b.ny - a.ny * b.nx;
+      if (Math.abs(det) < 1e-9) {
+        return [point[0] + b.nx * offsets[index], point[1] + b.ny * offsets[index]];
+      }
+      return [(a.c * b.ny - a.ny * b.c) / det, (a.nx * b.c - a.c * b.nx) / det];
+    });
+  }
+
+  // Adds one closed end shape to the current path (canvas context or SVG pen). Every shape winds the same
+  // way, so overlapping ends fill as one with the default nonzero rule.
+  function addCapShape(target, end, h, grow) {
+    const { x, y, u, m } = end;
+    const e = end.seam;
+    const toWorld = (point) => [x + u.x * point[0] - u.y * point[1], y + u.y * point[0] + u.x * point[1]];
+    const polygon = (points, offsets) => {
+      const world = (grow > 0 ? offsetConvex(points, offsets) : points).map(toWorld);
+      addWoundPolygon(target, world);
+    };
+    const g = grow;
+    switch (end.cap) {
+      case "square":
+        polygon([[-e, -h - g], [h + g, -h - g], [h + g, h + g], [-e, h + g]], [0, 0, 0, 0]);
+        return;
+      case "dot":
+        target.moveTo(x + m.radius + g, y);
+        target.ellipse(x, y, m.radius + g, m.radius + g, 0, 0, Math.PI * 2);
+        target.closePath();
+        return;
+      case "round": {
+        // Half disc, with a strip under the stroke's end.
+        const radius = h + g;
+        const angle = Math.atan2(u.y, u.x);
+        const from = angle - Math.PI / 2;
+        target.moveTo(x + Math.cos(from) * radius, y + Math.sin(from) * radius);
+        target.ellipse(x, y, radius, radius, 0, from, from + Math.PI);
+        if (e > 0) {
+          const back = toWorld([-e, radius]);
+          const backOther = toWorld([-e, -radius]);
+          target.lineTo(back[0], back[1]);
+          target.lineTo(backOther[0], backOther[1]);
+        }
+        target.closePath();
+        return;
+      }
+      case "point":
+        polygon(e > 0 ? [[-e, -h], [0, -h], [m.length, 0], [0, h], [-e, h]] : [[0, -h], [m.length, 0], [0, h]], e > 0 ? [g, g, g, g, 0] : [g, g, 0]);
+        return;
+      case "arrow":
+        polygon(e > 0 ? [[-e, -h - g], [0, -h - g], [0, -m.half], [m.length, 0], [0, m.half], [0, h + g], [-e, h + g]] : [[0, -m.half], [m.length, 0], [0, m.half]], e > 0 ? [0, 0, g, g, 0, 0, 0] : [g, g, 0]);
+        return;
+      case "diamond":
+        polygon([[-m.half, 0], [0, -m.half], [m.half, 0], [0, m.half]], [g, g, g, g]);
+        return;
+      case "bar": {
+        const t = m.thickness / 2;
+        polygon([[-t, -m.half], [t, -m.half], [t, m.half], [-t, m.half]], [g, g, g, 0]);
+        if (e > 0) {
+          polygon([[-t - e, -h - g], [-t + 0.01, -h - g], [-t + 0.01, h + g], [-t - e, h + g]], [0, 0, 0, 0]);
+        }
+        return;
+      }
+      case "taper":
+        addTaperShape(target, end, h + g, g, e);
+        return;
+      default:
+    }
+  }
+
+  // The line narrows from its full width where the stroke stops to a point at its end.
+  function addTaperShape(target, end, half, grow, seam) {
+    const spine = end.spine;
+    if (!spine || spine.length < 2 || !(end.length > 0)) {
+      return;
+    }
+    const left = [];
+    const right = [];
+    for (let index = 0; index < spine.length; index += 1) {
+      const before = spine[Math.max(0, index - 1)];
+      const after = spine[Math.min(spine.length - 1, index + 1)];
+      let dx = after.x - before.x;
+      let dy = after.y - before.y;
+      const length = Math.hypot(dx, dy);
+      if (length > 1e-9) {
+        dx /= length;
+        dy /= length;
+      } else {
+        dx = end.u.x;
+        dy = end.u.y;
+      }
+      const width = half * Math.max(0, 1 - spine[index].a / end.length);
+      left.push([spine[index].x - dy * width, spine[index].y + dx * width]);
+      right.push([spine[index].x + dy * width, spine[index].y - dx * width]);
+    }
+    if (seam > 0) {
+      // Reach back under the stroke along the line.
+      const back = spine[0];
+      const next = spine[1];
+      const length = Math.hypot(next.x - back.x, next.y - back.y) || 1;
+      const bx = ((back.x - next.x) / length) * seam;
+      const by = ((back.y - next.y) / length) * seam;
+      left.unshift([left[0][0] + bx, left[0][1] + by]);
+      right.unshift([right[0][0] + bx, right[0][1] + by]);
+    }
+    const tip = spine[spine.length - 1];
+    const points = left.concat([[tip.x + end.u.x * grow, tip.y + end.u.y * grow]], right.reverse());
+    addWoundPolygon(target, points);
+  }
+
+  function addWoundPolygon(target, points) {
+    let area = 0;
+    for (let index = 0; index < points.length; index += 1) {
+      const next = points[(index + 1) % points.length];
+      area += points[index][0] * next[1] - next[0] * points[index][1];
+    }
+    const ordered = area < 0 ? points.slice().reverse() : points;
+    target.moveTo(ordered[0][0], ordered[0][1]);
+    for (let index = 1; index < ordered.length; index += 1) {
+      target.lineTo(ordered[index][0], ordered[index][1]);
+    }
+    target.closePath();
+  }
+
+  // End shapes of one line for one stroke, as paths grouped by colour: [{ color, ends }].
+  function groupCapEnds(ends, stroke, geos) {
+    const tinted = stroke.tint && ends.some((end) => end.owner >= 0 && geos[end.owner]);
+    if (!tinted) {
+      return [{ color: stroke.color, ends }];
+    }
+    const groups = new Map();
+    ends.forEach((end) => {
+      const color = end.owner >= 0 && geos[end.owner] ? geos[end.owner].tintColor : stroke.color;
+      if (!groups.has(color)) {
+        groups.set(color, []);
+      }
+      groups.get(color).push(end);
+    });
+    return Array.from(groups, ([color, list]) => ({ color, ends: list }));
+  }
+
+  function fillCapShapes(target, ends, stroke, h, alpha, geos) {
+    const grow = Math.max(0, stroke.width / 2 - h);
+    groupCapEnds(ends, stroke, geos).forEach((group) => {
+      target.fillStyle = withAlpha(group.color, alpha);
+      target.beginPath();
+      group.ends.forEach((end) => addCapShape(target, end, h, grow));
+      target.fill();
+    });
   }
 
   function ratioToCanvas(point, grid) {
@@ -4645,14 +5056,22 @@
     }
 
     const alpha = getLineAlpha();
+    const caps = getCapStyle();
     getLineSets(maxSide).forEach((set) => {
+      const capBase = getCapBase(set.strokes);
       out.push(
-        `<g id="${set.id}" fill="none" stroke-linecap="${state.lineCap}" stroke-linejoin="${state.lineJoin}" stroke-miterlimit="2"${
+        `<g id="${set.id}" fill="none" stroke-linecap="${caps.native ? caps.start : "butt"}" stroke-linejoin="${state.lineJoin}" stroke-miterlimit="2"${
           alpha < 1 ? ` stroke-opacity="${alpha}"` : ""
         }>`
       );
       set.paths.forEach((path) => {
-        const line = buildReactiveLine(path.points, grid, geos);
+        let line = buildReactiveLine(path.points, grid, geos);
+        let ends = null;
+        if (!caps.native) {
+          const capped = buildCappedLine(line, caps, capBase);
+          line = capped.line;
+          ends = capped.ends;
+        }
         set.strokes.forEach((stroke) => {
           getStrokePieces(line, stroke, geos).forEach((piece) => {
             const d = lineCommandsToSvg(piece.commands);
@@ -4660,6 +5079,18 @@
               out.push(`<path d="${d}" stroke="${piece.color}" stroke-width="${svgNumber(stroke.width)}"/>`);
             }
           });
+          if (ends && ends.length) {
+            // End shapes are filled paths (no stroke), grown by the outline width for the outline.
+            const grow = Math.max(0, stroke.width / 2 - capBase);
+            groupCapEnds(ends, stroke, geos).forEach((group) => {
+              const pen = createSvgPen(width, height);
+              group.ends.forEach((end) => addCapShape(pen, end, capBase, grow));
+              const d = pen.data();
+              if (d) {
+                out.push(`<path d="${d}" fill="${group.color}" stroke="none"${alpha < 1 ? ` fill-opacity="${alpha}"` : ""}/>`);
+              }
+            });
+          }
         });
       });
       out.push("</g>");
@@ -6012,10 +6443,19 @@
     });
   }
 
+  // The time axis inset inside the timeline (--track-left / --track-right on .timeline-body; smaller on phones).
+  function getTimelineInsets() {
+    const style = getComputedStyle(els.timelineBody);
+    const left = parseFloat(style.getPropertyValue("--track-left"));
+    const right = parseFloat(style.getPropertyValue("--track-right"));
+    return { left: Number.isFinite(left) ? left : TIMELINE_TRACK_LEFT, right: Number.isFinite(right) ? right : TIMELINE_TRACK_RIGHT };
+  }
+
   function timeFromTimelineEvent(event) {
     const rect = els.timelineRuler.getBoundingClientRect();
-    const left = rect.left + TIMELINE_TRACK_LEFT;
-    const width = Math.max(1, rect.width - TIMELINE_TRACK_LEFT - TIMELINE_TRACK_RIGHT);
+    const insets = getTimelineInsets();
+    const left = rect.left + insets.left;
+    const width = Math.max(1, rect.width - insets.left - insets.right);
     return clamp(((event.clientX - left) / width) * state.animation.duration, 0, state.animation.duration);
   }
 
@@ -6036,7 +6476,7 @@
       return;
     }
 
-    const insideTracks = event.clientX >= els.timelineRuler.getBoundingClientRect().left + TIMELINE_TRACK_LEFT - 8;
+    const insideTracks = event.clientX >= els.timelineRuler.getBoundingClientRect().left + getTimelineInsets().left - 8;
     if (!dot && !insideTracks) {
       return;
     }
@@ -6525,6 +6965,11 @@
       state.lineCap = validLineCap(els.lineCap.value) ? els.lineCap.value : "butt";
       commitChange();
     });
+    els.lineCapEnd.addEventListener("change", () => {
+      state.lineCapEnd = validLineCap(els.lineCapEnd.value) ? els.lineCapEnd.value : "same";
+      commitChange();
+    });
+    els.capSize.addEventListener("input", () => setRangeState("capSize", els.capSize));
     els.lineJoin.addEventListener("change", () => {
       state.lineJoin = validLineJoin(els.lineJoin.value) ? els.lineJoin.value : "miter";
       commitChange();
@@ -6664,6 +7109,20 @@
     window.addEventListener("hashchange", loadStateFromLink);
     els.shortcutsToggle.addEventListener("click", () => toggleShortcuts());
     document.addEventListener("keydown", handleShortcut);
+    // D draws a shape here, so the shared data layer's D toggle must not see it (it listens on document):
+    // this app handles D itself, and Shift+D shows or hides the lab data.
+    window.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key.toLowerCase() === "d" && !event.metaKey && !event.ctrlKey && !event.altKey && !isTypingTarget(event.target)) {
+          event.stopPropagation();
+          if (!event.repeat) {
+            handleShortcut(event);
+          }
+        }
+      },
+      true
+    );
     document.addEventListener("pointerdown", (event) => {
       if (!els.shortcuts.hidden && !els.shortcuts.contains(event.target) && event.target !== els.shortcutsToggle) {
         toggleShortcuts(false);
@@ -6672,6 +7131,10 @@
 
     canvas.addEventListener("pointerdown", (event) => {
       event.preventDefault();
+      // A second finger would start a new line on top of the first one.
+      if (!event.isPrimary) {
+        return;
+      }
       if (canvas.setPointerCapture) {
         canvas.setPointerCapture(event.pointerId);
       }
@@ -6716,7 +7179,11 @@
     });
 
     canvas.addEventListener("pointermove", (event) => {
+      if (!event.isPrimary) {
+        return;
+      }
       pointer.hover = pointerToGridRatio(event);
+      updateHudCell(pointer.hover);
       if (!pointer.down) {
         return;
       }
@@ -6734,9 +7201,13 @@
 
     canvas.addEventListener("pointerleave", () => {
       pointer.hover = null;
+      updateHudCell(null);
     });
 
     canvas.addEventListener("pointerup", (event) => {
+      if (!event.isPrimary || !pointer.down) {
+        return;
+      }
       const mode = pointer.mode;
       pointer.down = false;
       pointer.mode = "";
@@ -6754,7 +7225,10 @@
       }
     });
 
-    canvas.addEventListener("pointercancel", () => {
+    canvas.addEventListener("pointercancel", (event) => {
+      if (!event.isPrimary) {
+        return;
+      }
       customIsolationDraft.active = false;
       customIsolationDraft.points = [];
       pointer.down = false;
@@ -6983,6 +7457,10 @@
       }
     } else if (key === "t") {
       setTimelineOpen(!motion.timelineOpen);
+    } else if (key === "d" && event.shiftKey) {
+      if (window.AGData) {
+        window.AGData.setVisible(!window.AGData.visible);
+      }
     } else if (key === "d") {
       setIsolationDrawMode(!isolationDrawMode);
     } else if (key === "g") {
@@ -7013,6 +7491,74 @@
     return `iso-${index}`;
   }
 
+  // ---------- Lab data (shared HUD, scripts/dataLayer.js) ----------
+  // DOM only, over the canvas' box: never part of PNG, SVG or video exports.
+  const CAP_LABELS = { butt: "Flat", square: "Square", round: "Round", point: "Point", arrow: "Arrow", dot: "Dot", diamond: "Diamond", bar: "Bar", taper: "Taper" };
+  const hud = window.AGData ? window.AGData.hud(canvas, { canvas, code: "ISO" }) : null;
+  const hudStats = { renderMs: 0 };
+
+  function updateHud(grid) {
+    if (!hud) {
+      return;
+    }
+    const fmt = window.AGData.fmt;
+    let points = 0;
+    state.paths.forEach((path) => {
+      points += path.points.length;
+    });
+    let imageLines = importedImage.paths.length;
+    state.imageLayers.forEach((layer) => {
+      imageLines += (importedImage.layerPaths[layer.id] || []).length;
+    });
+    const enabled = state.isolations.filter((item) => item.enabled !== false).length;
+    const layerIndex = selectedLayerId === "base" ? 1 : state.imageLayers.findIndex((layer) => layer.id === selectedLayerId) + 2;
+    // A small canvas (phones) keeps the essentials so the lab data stays out of the drawing.
+    const compact = canvas.clientWidth < 520;
+    const lines = imageLines ? `${fmt(state.paths.length, 0, 3)} + ${fmt(imageLines, 0, 4)} img` : fmt(state.paths.length, 0, 3);
+    hud.set("Lines", compact ? `${lines} · ${fmt(points, 0, 5)} pts` : lines, "", "tl");
+    hud.set("Pts", compact ? null : fmt(points, 0, 5), "", "tl");
+    hud.set("Obj", compact ? null : `${fmt(enabled, 0, 2)}/${fmt(state.isolations.length, 0, 2)}`, "", "tl");
+    hud.set("Layer", compact ? null : `${layerIndex}/${state.imageLayers.length + 1}`, "", "tl");
+    hud.set("Grid", `${grid.columns} × ${grid.rows}`, "cells", "tr");
+    const caps = getCapStyle();
+    hud.set("Ends", compact ? null : caps.start === caps.end ? CAP_LABELS[caps.start] : `${CAP_LABELS[caps.start]} → ${CAP_LABELS[caps.end]}`, "", "tr");
+    let keyCount = 0;
+    Object.values(state.animation.tracks).forEach((keys) => {
+      keyCount += keys.length;
+    });
+    const animated = motion.timelineOpen || keyCount > 0;
+    hud.set("T", animated ? `${formatTime(motion.time)} / ${state.animation.duration.toFixed(1)}` : null, "s", "br");
+    hud.set("Keys", animated ? fmt(keyCount, 0, 3) : null, "", "br");
+    hud.set("Render", compact ? null : fmt(hudStats.renderMs, 1, 3), "ms", "br");
+  }
+
+  function updateHudCell(ratio) {
+    if (!hud) {
+      return;
+    }
+    if (!ratio) {
+      hud.set("Cell", null);
+      return;
+    }
+    const grid = currentGrid();
+    const fmt = window.AGData.fmt;
+    hud.set("Cell", `${fmt(Math.round(clamp(ratio.x, 0, 1) * (grid.columns - 1)), 0, 3)} · ${fmt(Math.round(clamp(ratio.y, 0, 1) * (grid.rows - 1)), 0, 3)}`, "", "bl");
+  }
+
+  function wireDataControls() {
+    const toggle = document.getElementById("showData");
+    if (!window.AGData) {
+      toggle.closest(".check").hidden = true;
+      return;
+    }
+    toggle.checked = window.AGData.visible;
+    toggle.addEventListener("change", () => window.AGData.setVisible(toggle.checked));
+    window.addEventListener("ag-data-visibility", (event) => {
+      toggle.checked = event.detail.visible;
+    });
+    window.AGData.readouts(document.querySelector(".panel"));
+  }
+
   if (!/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) {
     document.querySelectorAll(".mod-key").forEach((key) => {
       key.textContent = "Ctrl+";
@@ -7026,6 +7572,7 @@
   wireControls();
   wireTimeline();
   wireVideoExport();
+  wireDataControls();
   setTimelineOpen(readTimelineOpen());
   loadStateFromLink();
 })();
