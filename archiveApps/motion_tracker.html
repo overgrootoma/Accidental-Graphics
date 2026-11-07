@@ -15,6 +15,7 @@
 <script defer src="../scripts/navConfig.js"></script>
 <script defer src="../scripts/navMenu.js"></script>
 <script defer src="../scripts/settingsToggle.js" data-panel="#controls"></script>
+<script src="../scripts/savedSettings.js"></script>
 <style>
   #controls h1 {
     overflow-wrap: anywhere;
@@ -201,6 +202,8 @@ window.addEventListener('load', resizeCanvas);
 
 // UI events
 colorPicker.addEventListener('input', e => { lineColor = e.target.value; });
+// Remember the line color between visits (scripts/savedSettings.js).
+AGSettings.persist('motiontracker', { controls: ['colorPicker'] });
 
 function stopTracking() {
   tracking = false;

@@ -46,8 +46,9 @@ document.addEventListener("DOMContentLoaded", () => {
     { name: "Gallery", url: "gallery.html" }
   ];
 
-  staticLinks.forEach(link => {
+  staticLinks.forEach((link, index) => {
     const a = document.createElement("a");
+    a.style.setProperty("--i", index);
     a.textContent = link.name;
     a.href = resolvePath(link.url);
     dropdown.appendChild(a);
@@ -90,11 +91,14 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // Preview on hover; pin the menu open on click.
-  menuBtn.addEventListener("pointerenter", () => {
+  // Touch has no hover: a tap only toggles the pinned state (pointerenter/leave would flicker it).
+  menuBtn.addEventListener("pointerenter", event => {
+    if (event.pointerType === "touch") return;
     if (!menuPinnedOpen) setMenuOpen(true, false);
   });
 
-  header.addEventListener("pointerleave", () => {
+  header.addEventListener("pointerleave", event => {
+    if (event.pointerType === "touch") return;
     if (!menuPinnedOpen) setMenuOpen(false, false);
   });
 
@@ -123,6 +127,139 @@ document.addEventListener("DOMContentLoaded", () => {
   // Add header to body
   document.body.prepend(header);
 
+  // Live "lab notebook" strip in the footer of the site pages (.app-year[data-live]): only real, measured values
+  // (no permission prompts): local time, viewport, pointer position / speed, page load time, tool count,
+  // last-modified date, scroll position, session time, rendered fps, pixel ratio, colour scheme, connection type.
+  function initLiveStrip() {
+    const bar = document.querySelector(".app-year[data-live]");
+    if (!bar) return;
+    const pad = (n, w = 2) => String(Math.round(n)).padStart(w, "0");
+    const label = document.createElement("span");
+    label.className = "app-year__label";
+    label.textContent = bar.textContent.trim();
+    const data = document.createElement("span");
+    data.className = "app-year__data";
+    const items = {};
+    // Order = display order; the last items are dropped first when the line gets too wide.
+    const defs = [["time", "LOCAL"], ["vp", "VP"], ["ptr", "PTR"], ["load", "LOAD"], ["tools", "TOOLS"], ["upd", "UPD"],
+      ["scroll", "SCR"], ["spd", "SPD"], ["t", "T+"], ["fps", "FPS"], ["dpr", "DPR"], ["scheme", "SCHEME"], ["net", "NET"]];
+    defs.forEach(([key, name]) => {
+      const item = document.createElement("span");
+      item.className = `app-year__item app-year__item--${key}`;
+      const k = document.createElement("span");
+      k.className = "app-year__key";
+      k.textContent = name;
+      const v = document.createElement("span");
+      v.className = "app-year__value";
+      item.append(k, v);
+      data.appendChild(item);
+      items[key] = v;
+      items[key].item = item;
+    });
+    bar.textContent = "";
+    bar.append(label, data);
+
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (!conn || !conn.effectiveType) items.net.item.hidden = true;
+    const dark = window.matchMedia("(prefers-color-scheme: dark)");
+
+    // Hides the lowest-priority items until the line fits without overflow.
+    const fit = () => {
+      const all = [...data.children].filter(el => !el.hidden);
+      all.forEach(el => { el.style.display = ""; });
+      for (let i = all.length - 1; i > 0 && data.scrollWidth > data.clientWidth + 1; i--) all[i].style.display = "none";
+    };
+    const setViewport = () => {
+      items.vp.textContent = `${pad(window.innerWidth, 4)}×${pad(window.innerHeight, 4)}`;
+      items.dpr.textContent = `${window.devicePixelRatio.toFixed(2)}X`;
+      fit();
+    };
+    const setScroll = () => {
+      const root = document.scrollingElement || document.documentElement;
+      const max = root.scrollHeight - root.clientHeight;
+      items.scroll.textContent = `${pad(max > 0 ? Math.min(100, root.scrollTop / max * 100) : 0, 3)}%`;
+    };
+    const setScheme = () => { items.scheme.textContent = dark.matches ? "DARK" : "LIGHT"; };
+    const setNet = () => {
+      if (conn && conn.effectiveType) items.net.textContent = conn.effectiveType.toUpperCase();
+    };
+    setViewport();
+    setScroll();
+    setScheme();
+    setNet();
+    items.ptr.textContent = "----,----";
+    items.spd.textContent = "0000 PX/S";
+    items.load.textContent = "---- MS";
+    items.tools.textContent = "--";
+    items.fps.textContent = "--";
+    items.t.textContent = "00:00";
+    const modified = new Date(document.lastModified);
+    items.upd.textContent = isNaN(modified) ? "----" : `${modified.getFullYear()}-${pad(modified.getMonth() + 1)}-${pad(modified.getDate())}`;
+    window.addEventListener("resize", () => { setViewport(); setScroll(); });
+    window.addEventListener("scroll", setScroll, { passive: true });
+    if (dark.addEventListener) dark.addEventListener("change", setScheme);
+    if (conn && conn.addEventListener) conn.addEventListener("change", setNet);
+
+    // Pointer position (per frame) and speed (px/s over the last tick).
+    let pointerFrame = 0;
+    let px = 0;
+    let py = 0;
+    let travelled = 0;
+    let lastX = null;
+    let lastY = 0;
+    window.addEventListener("pointermove", event => {
+      px = event.clientX;
+      py = event.clientY;
+      if (lastX !== null) travelled += Math.hypot(px - lastX, py - lastY);
+      lastX = px;
+      lastY = py;
+      if (pointerFrame) return;
+      pointerFrame = requestAnimationFrame(() => {
+        pointerFrame = 0;
+        items.ptr.textContent = `${pad(px, 4)},${pad(py, 4)}`;
+      });
+    }, { passive: true });
+
+    // Rendered frames of the page (rAF count), refreshed together with clock, session time and pointer speed.
+    let frames = 0;
+    const countFrame = () => { frames++; requestAnimationFrame(countFrame); };
+    requestAnimationFrame(countFrame);
+    const start = performance.now();
+    let last = start;
+    const tick = () => {
+      const now = performance.now();
+      const dt = Math.max(1, now - last);
+      last = now;
+      const d = new Date();
+      items.time.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      const secs = Math.floor((now - start) / 1000);
+      items.t.textContent = `${pad(secs / 60)}:${pad(secs % 60)}`;
+      items.fps.textContent = pad(frames * 1000 / dt);
+      items.spd.textContent = `${pad(travelled * 1000 / dt, 4)} PX/S`;
+      frames = 0;
+      travelled = 0;
+      fit();
+    };
+    setInterval(tick, 500);
+
+    const setLoad = () => {
+      const nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+      const ms = nav && nav.loadEventEnd > 0 ? nav.loadEventEnd : performance.now();
+      items.load.textContent = `${pad(ms, 4)} MS`;
+      fit();
+    };
+    if (document.readyState === "complete") setTimeout(setLoad, 0);
+    else window.addEventListener("load", () => setTimeout(setLoad, 0), { once: true });
+
+    if (window.AGContent) {
+      window.AGContent.tools().then(tools => {
+        items.tools.textContent = pad(tools.filter(tool => !tool.archived).length);
+        fit();
+      }).catch(() => {});
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  }
+
   const stretchTargetSelector = ".site-nav a";
 
   const wrapStretchLabels = root => {
@@ -146,6 +283,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   wrapStretchLabels(header);
+  initLiveStrip();
   const stretchLabelObserver = new MutationObserver(mutations => {
     mutations.forEach(mutation => {
       wrapStretchLabels(mutation.target);
@@ -154,56 +292,3 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   stretchLabelObserver.observe(header, { childList: true, subtree: true });
 });
-
-
-
-
-
-
-
-
-
-if (
-  !document.body.classList.contains("isolation-page") &&
-  window.matchMedia("(pointer: fine)").matches &&
-  !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-) {
-  // Number of trail elements
-  const trailCount = 10;
-  const trailElements = [];
-
-  // Create trail elements
-  for (let i = 0; i < trailCount; i++) {
-    const div = document.createElement('div');
-    div.classList.add('cursor-trail');
-    document.body.appendChild(div);
-    trailElements.push({ el: div, x: 0, y: 0 });
-  }
-
-  let targetX = 0;
-  let targetY = 0;
-  let trailFrame = 0;
-
-  const renderTrail = () => {
-    let previousX = targetX;
-    let previousY = targetY;
-    let stillMoving = false;
-    trailElements.forEach((trail, i) => {
-      const follow = i === 0 ? 0.42 : 0.3;
-      trail.x += (previousX - trail.x) * follow;
-      trail.y += (previousY - trail.y) * follow;
-      if (Math.abs(previousX - trail.x) > 0.1 || Math.abs(previousY - trail.y) > 0.1) stillMoving = true;
-      previousX = trail.x;
-      previousY = trail.y;
-      trail.el.style.transform = `translate3d(${trail.x}px, ${trail.y}px, 0)`;
-      trail.el.style.opacity = `${1 - i / trailCount}`;
-    });
-    trailFrame = stillMoving ? requestAnimationFrame(renderTrail) : 0;
-  };
-
-  document.addEventListener('mousemove', e => {
-    targetX = e.clientX;
-    targetY = e.clientY;
-    if (!trailFrame) trailFrame = requestAnimationFrame(renderTrail);
-  }, { passive: true });
-}

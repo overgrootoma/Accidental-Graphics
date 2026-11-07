@@ -3,25 +3,45 @@
 
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Swing · Accidental Graphics</title>
   <meta name="description" content="Paint with a responsive pendulum brush and export the canvas.">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
+  <link rel="stylesheet" href="../css/data.css">
   <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
   <script defer src="../scripts/navConfig.js"></script>
   <script defer src="../scripts/navMenu.js"></script>
+  <script src="../scripts/dataLayer.js"></script>
   <script defer src="../scripts/settingsToggle.js" data-panel="#ui"></script>
+  <script src="../scripts/savedSettings.js"></script>
   <style>
     #c {
       --swing-bg: #111111;
       background-color: var(--swing-bg);
       display: block;
       position: fixed;
-      inset: 72px 0 0;
-      width: 100%;
-      height: calc(100dvh - 72px);
+      /* Inset below the nav, above the footer and from the sides: the lab data (css/data.css) sits in
+         that margin, outside the painting. The sheet covers the bottom on mobile. */
+      top: calc(var(--swing-top, 72px) + var(--ag-hud-band, 22px));
+      left: var(--ag-hud-side, 16px);
+      width: calc(100% - 2 * var(--ag-hud-side, 16px));
+      height: calc(100dvh - var(--swing-top, 72px) - var(--swing-foot, 34px) - 2 * var(--ag-hud-band, 22px));
       touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    body.ag-sheet #c {
+      height: calc(100dvh - var(--swing-top, 72px) - var(--ag-hud-band, 18px));
+    }
+    html, body.app-page {
+      overscroll-behavior: none;
+    }
+    /* Lab data around the canvas: on the black page, not on the painting. */
+    .ag-hud {
+      color: #fff;
     }
     #c.bg-off {
       background-color: #1a1a1a;
@@ -61,7 +81,9 @@
       box-shadow: 0 20px 35px rgba(0, 0, 0, 0.45);
       backdrop-filter: blur(6px);
       z-index: 200;
-      max-height: calc(100vh - 190px);
+      box-sizing: border-box;
+      /* Ends above the bottom-left overlay text. */
+      max-height: calc(100dvh - 190px);
       overflow-y: auto;
       color: #fff;
     }
@@ -147,13 +169,20 @@
       min-width: 50px;
       text-align: right;
     }
+    /* Fixed 28px box scaled with transform, so big brushes never push the panel layout around. */
     .size-preview {
-      width: 12px;
-      height: 12px;
+      flex: 0 0 auto;
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
       background: #ff2d55;
-      border: 2px solid rgba(255,255,255,0.6);
-      box-shadow: 0 0 8px rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.6);
+      box-sizing: border-box;
+      transform: scale(var(--preview-scale, .43));
+      transition: transform var(--ag-dur-2, 220ms) var(--ag-ease-spring, ease-out), background-color var(--ag-dur-2, 220ms);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .size-preview { transition: none; }
     }
     .shape-buttons {
       display: flex;
@@ -184,45 +213,28 @@
       background: #fff;
       color: #111;
     }
-    @media (max-width: 768px) {
-      #ui {
-        position: fixed;
-        top: auto;
-        bottom: 12px;
-        left: 10px;
-        width: calc(100% - 20px);
-        max-width: none;
-        margin: 0;
-        max-height: min(48dvh, 430px);
-        overflow-y: auto;
-        overscroll-behavior: contain;
-      }
-      #ui button {
-        width: 100%;
-      }
-      .slider-row {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto;
-      }
-      .slider-row label,
-      .slider-row .value-label {
-        text-align: left;
-      }
-      .slider-row input[type="range"] {
-        width: 100%;
-      }
-      .action-row {
-        align-items: stretch;
-      }
-      .action-row button {
-        width: auto;
-      }
-    }
     @media (max-width: 480px) {
       #c {
-        inset: 60px 0 0;
-        height: calc(100dvh - 60px);
+        --swing-top: 60px;
       }
+    }
+    /* Bottom sheet (scripts/settingsToggle.js): roomy tap targets, 16px inputs, no iOS zoom. */
+    body.ag-sheet #ui select,
+    body.ag-sheet #ui input[type="number"] {
+      font-size: 16px;
+    }
+    body.ag-sheet #ui button,
+    body.ag-sheet .shape-btn {
+      min-height: 44px;
+    }
+    body.ag-sheet .shape-btn {
+      min-width: 44px;
+    }
+    body.ag-sheet .color-input {
+      min-height: 44px;
+    }
+    body.ag-sheet #ui input[type="range"] {
+      min-height: 32px;
     }
   </style>
 </head>
@@ -243,7 +255,7 @@
       <input type="color" id="ropeColor" value="#ffffff" class="color-input">
     </div>
     <div class="color-block">
-      <label for="strokeColor" class="control-label">Stroke</label>
+      <label for="strokeColor" class="control-label">Outline</label>
       <input type="color" id="strokeColor" value="#ffffff" class="color-input">
     </div>
   </div>
@@ -254,7 +266,7 @@
     <span class="size-preview" id="sizePreview" aria-hidden="true"></span>
   </div>
   <div class="slider-row">
-    <label for="strokeWidth">Stroke</label>
+    <label for="strokeWidth">Outline</label>
     <input type="range" id="strokeWidth" min="0" max="40" value="0" class="slider">
     <span class="value-label" id="strokeWidthLabel">0 px</span>
   </div>
@@ -262,17 +274,22 @@
   <input type="range" id="segments" min="1" max="6" value="1" class="slider">
   <label for="length">Length: <span id="lengthLabel">200 px</span></label>
   <input type="range" id="length" min="40" max="800" value="200" class="slider">
+  <label for="gravity">Gravity: <span id="gravityLabel">1.0 ×</span></label>
+  <input type="range" id="gravity" min="0" max="3" step="0.1" value="1" class="slider">
+  <label for="friction">Friction: <span id="frictionLabel">2.0 %</span></label>
+  <input type="range" id="friction" min="0" max="10" step="0.5" value="2" class="slider">
+  <label for="ropeWidth">Rope width: <span id="ropeWidthLabel">2 px</span></label>
+  <input type="range" id="ropeWidth" min="1" max="20" value="2" class="slider">
   <div class="toggle-row">
-    <button id="stretchBtn" class="toggle-btn">Stretch: Off</button>
+    <button id="stretchBtn" class="toggle-btn" type="button">Stretch: Off</button>
   </div>
   <div class="bg-row">
     <button id="bgBtn" class="toggle-btn active" type="button">Background: On</button>
     <input type="color" id="bgColor" value="#111111" class="color-input" aria-label="Background color">
   </div>
   <div class="toggle-row">
-    <button id="ballBtn" class="toggle-btn active">Ball: On</button>
-    <button id="ropeBtn" class="toggle-btn active">Rope: On</button>
-    <button id="strokeBtn" class="toggle-btn">Stroke: Off</button>
+    <button id="ballBtn" class="toggle-btn active" type="button">Ball: On</button>
+    <button id="ropeBtn" class="toggle-btn active" type="button">Rope: On</button>
   </div>
   <label class="control-label">Ball Shape</label>
   <div class="shape-buttons">
@@ -287,38 +304,61 @@
     <button type="button" class="shape-btn" id="importShapeBtn" data-shape="image" data-import="true" title="Import image">IMG</button>
   </div>
   <div class="action-row">
-    <button id="resetBtn">Reset (R)</button>
-    <button id="exportBtn">Export (E)</button>
+    <button id="resetBtn" type="button">Reset (R)</button>
+    <button id="exportBtn" type="button">Export (E)</button>
   </div>
 </div>
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-let W,H;
-function resize(){
-  const headerHeight = document.querySelector('.site-nav')?.offsetHeight || (window.innerWidth <= 480 ? 60 : 72);
-  W=window.innerWidth; H=Math.max(1, window.innerHeight - headerHeight);
-  canvas.width=W; canvas.height=H;
+let W = 0, H = 0;
+
+// The canvas box is sized by CSS (below the nav, above the footer; full height behind the mobile sheet).
+// Resizing a canvas clears it, so the painting is copied across and kept (top-left anchored).
+function fitInsets(){
+  const root = document.documentElement;
+  const nav = document.querySelector('.site-nav');
+  const foot = document.querySelector('.app-year');
+  if (nav) root.style.setProperty('--swing-top', `${nav.offsetHeight}px`);
+  if (foot) root.style.setProperty('--swing-foot', `${foot.offsetHeight}px`);
 }
-window.addEventListener('resize',resize); resize();
+function resize(){
+  const nextW = canvas.clientWidth, nextH = canvas.clientHeight;
+  if (!nextW || !nextH || (nextW === W && nextH === H)) return;
+  let keep = null;
+  if (W && H) {
+    keep = document.createElement('canvas');
+    keep.width = W;
+    keep.height = H;
+    keep.getContext('2d').drawImage(canvas, 0, 0);
+  }
+  W = nextW; H = nextH;
+  canvas.width = W; canvas.height = H;
+  if (keep) ctx.drawImage(keep, 0, 0);
+}
+fitInsets();
+resize();
+window.addEventListener('load', () => { fitInsets(); resize(); });
+window.addEventListener('resize', () => { fitInsets(); resize(); });
+if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas);
+
 function clearCanvas(){
   ctx.clearRect(0,0,W,H);
+  stamps = 0;
 }
-clearCanvas();
+function resetPainting(){
+  clearCanvas();
+  hud.newSpecimen();
+}
 // Keyboard shortcuts
 window.addEventListener('keydown', e => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
-  if (e.key.toLowerCase() === 'r') {
-    // Reset canvas
-    clearCanvas();
-  }
-  if (e.key.toLowerCase() === 'e') {
-    exportPainting();
-  }
+  if (e.key.toLowerCase() === 'r') resetPainting();
+  if (e.key.toLowerCase() === 'e') exportPainting();
 });
 
-// Achtergrond: alleen zichtbaar via CSS, zodat aan/uit en kleur altijd kunnen wisselen.
-// Bij export wordt ze achter de tekening gezet; uit = transparante PNG.
+// Background: only shown through CSS, so on/off and colour can always change.
+// On export it is put behind the painting; off = transparent PNG.
 const bgBtn = document.getElementById('bgBtn');
 const bgColorInput = document.getElementById('bgColor');
 let showBackground = true;
@@ -341,6 +381,8 @@ bgColorInput.addEventListener('input', e=>{
 });
 applyBackground();
 
+// PNG export (the data overlay is DOM only, so it is never in the file). On phones the share sheet is
+// used when it can take files (iOS ignores the download attribute on blobs in some versions).
 function exportPainting(){
   let source = canvas;
   if (showBackground) {
@@ -352,13 +394,25 @@ function exportPainting(){
     exportCtx.fillRect(0, 0, source.width, source.height);
     exportCtx.drawImage(canvas, 0, 0);
   }
-  const link = document.createElement('a');
-  link.download = 'schilderij.png';
-  link.href = source.toDataURL('image/png');
-  link.click();
+  source.toBlob(blob=>{
+    if (!blob) return;
+    const file = new File([blob], 'schilderij.png', { type: 'image/png' });
+    if (window.matchMedia('(pointer: coarse)').matches && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file] }).catch(()=>{});
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = 'schilderij.png';
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  }, 'image/png');
 }
 
-// instellingen
+// settings
 const colorInput = document.getElementById('color');
 const sizeInput = document.getElementById('size');
 const sizeLabel = document.getElementById('sizeLabel');
@@ -373,6 +427,18 @@ const lengthInput = document.getElementById('length');
 const lengthLabel = document.getElementById('lengthLabel');
 let ropeLength = Number(lengthInput.value);
 lengthLabel.textContent = `${ropeLength} px`;
+const gravityInput = document.getElementById('gravity');
+const gravityLabel = document.getElementById('gravityLabel');
+const frictionInput = document.getElementById('friction');
+const frictionLabel = document.getElementById('frictionLabel');
+const ropeWidthInput = document.getElementById('ropeWidth');
+const ropeWidthLabel = document.getElementById('ropeWidthLabel');
+// Physics runs in fixed steps of 1/60 s: gravity is px per step squared at gravity 1.0x, friction the share
+// of velocity lost per step.
+const GRAVITY_UNIT = 0.5;
+let gravity = GRAVITY_UNIT * Number(gravityInput.value);
+let damping = 1 - Number(frictionInput.value) / 100;
+let ropeWidth = Number(ropeWidthInput.value);
 const stretchBtn = document.getElementById('stretchBtn');
 const ballBtn = document.getElementById('ballBtn');
 const ropeColorInput = document.getElementById('ropeColor');
@@ -382,7 +448,6 @@ const importShapeInput = document.getElementById('importShapeInput');
 const strokeColorInput = document.getElementById('strokeColor');
 const strokeWidthInput = document.getElementById('strokeWidth');
 const strokeWidthLabel = document.getElementById('strokeWidthLabel');
-const strokeBtn = document.getElementById('strokeBtn');
 let stretchMode = false;
 let showBall = true;
 let ballShape = 'circle';
@@ -390,9 +455,9 @@ let ropeColor = ropeColorInput.value;
 let showRope = true;
 let importedImage = null;
 let strokeColor = strokeColorInput.value;
+// Ball outline: a width of 0 means no outline.
 let strokeWidth = Number(strokeWidthInput.value);
-let showStroke = false;
-if(strokeWidthLabel) strokeWidthLabel.textContent = `${strokeWidth} px`;
+strokeWidthLabel.textContent = `${strokeWidth} px`;
 
 colorInput.addEventListener('input', e=>{
   paintColor = e.target.value;
@@ -411,6 +476,18 @@ lengthInput.addEventListener('input', e=>{
   lengthLabel.textContent = `${ropeLength} px`;
   initSegments();
 });
+gravityInput.addEventListener('input', e=>{
+  gravity = GRAVITY_UNIT * Number(e.target.value);
+  gravityLabel.textContent = `${Number(e.target.value).toFixed(1)} ×`;
+});
+frictionInput.addEventListener('input', e=>{
+  damping = 1 - Number(e.target.value) / 100;
+  frictionLabel.textContent = `${Number(e.target.value).toFixed(1)} %`;
+});
+ropeWidthInput.addEventListener('input', e=>{
+  ropeWidth = Number(e.target.value);
+  ropeWidthLabel.textContent = `${ropeWidth} px`;
+});
 
 function syncToggle(btn, state, label){
   btn.textContent = `${label}: ${state ? 'On' : 'Off'}`;
@@ -420,7 +497,6 @@ function syncToggle(btn, state, label){
 syncToggle(stretchBtn, stretchMode, 'Stretch');
 syncToggle(ballBtn, showBall, 'Ball');
 syncToggle(ropeBtn, showRope, 'Rope');
-syncToggle(strokeBtn, showStroke, 'Stroke');
 
 stretchBtn.addEventListener('click', ()=>{
   stretchMode = !stretchMode;
@@ -442,24 +518,15 @@ strokeColorInput.addEventListener('input', e=>{
 });
 strokeWidthInput.addEventListener('input', e=>{
   strokeWidth = Number(e.target.value);
-  if(strokeWidthLabel) strokeWidthLabel.textContent = `${strokeWidth} px`;
-});
-strokeBtn.addEventListener('click', ()=>{
-  showStroke = !showStroke;
-  syncToggle(strokeBtn, showStroke, 'Stroke');
+  strokeWidthLabel.textContent = `${strokeWidth} px`;
 });
 
-function updateSizePreview(value){
-  const size = value ?? Number(sizeInput.value);
+function updateSizePreview(size){
   paintSize = size;
-  if (sizeLabel) {
-    sizeLabel.textContent = `${size} px`;
-  }
-  if (sizePreview) {
-    sizePreview.style.width = `${size}px`;
-    sizePreview.style.height = `${size}px`;
-    sizePreview.style.background = paintColor;
-  }
+  sizeLabel.textContent = `${size} px`;
+  // The dot shows the brush up to 28 px; bigger brushes just fill it.
+  sizePreview.style.setProperty('--preview-scale', (Math.min(size, 28) / 28).toFixed(3));
+  sizePreview.style.backgroundColor = paintColor;
 }
 updateSizePreview(paintSize);
 
@@ -488,41 +555,52 @@ shapeButtons.forEach(btn=>{
 importShapeInput.addEventListener('change', e=>{
   const file = e.target.files && e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = event=>{
-    const img = new Image();
-    img.onload = ()=>{
-      importedImage = img;
-      setBallShape('image');
-    };
-    img.src = event.target.result;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = ()=>{
+    importedImage = img;
+    setBallShape('image');
+    URL.revokeObjectURL(url);
   };
-  reader.readAsDataURL(file);
+  img.onerror = ()=>URL.revokeObjectURL(url);
+  img.src = url;
   importShapeInput.value = '';
 });
 
 setBallShape(ballShape);
 
-// Reset en export knoppen
-document.getElementById('resetBtn').addEventListener('click', ()=>{
-  clearCanvas();
-});
+document.getElementById('resetBtn').addEventListener('click', resetPainting);
 document.getElementById('exportBtn').addEventListener('click', exportPainting);
 
-// muispositie
-let mouse = {x:canvas.width/2,y:canvas.height/2};
-function updateMousePosition(clientX, clientY){
+// Pointer position (mouse, pen and touch). The brush only paints once the pointer has been used, so
+// nothing is drawn at the canvas centre before the first move or touch.
+const mouse = {x: 0, y: 0};
+let armed = false;
+const coarsePointer = window.matchMedia('(pointer: coarse)');
+function updateMousePosition(e){
   const rect = canvas.getBoundingClientRect();
-  mouse.x = clientX - rect.left;
-  mouse.y = clientY - rect.top;
+  mouse.x = e.clientX - rect.left;
+  mouse.y = e.clientY - rect.top;
 }
 window.addEventListener('pointermove', e=>{
-  updateMousePosition(e.clientX, e.clientY);
+  updateMousePosition(e);
+  // On touch screens only a real touch starts the brush (stray mouse events at 0,0 are ignored); a mouse
+  // or pen arms it on its first move, ignoring the synthetic move some browsers fire at 0,0.
+  if (!armed && !coarsePointer.matches && !(e.clientX === 0 && e.clientY === 0)) {
+    armed = true;
+    hangFromPointer();
+  }
+});
+// A touch can land anywhere: the rope starts hanging from the new spot instead of swinging in from the old one.
+canvas.addEventListener('pointerdown', e=>{
+  updateMousePosition(e);
+  if (e.pointerType !== 'mouse' || !armed) {
+    armed = true;
+    hangFromPointer();
+  }
 });
 
-// slinger massa's
-const gravity = 0.5;
-const damping = 0.98;
+// pendulum masses
 let segments = [];
 
 function initSegments(){
@@ -534,28 +612,45 @@ function initSegments(){
     py: mouse.y + (i + 1) * segmentLength
   }));
 }
+function hangFromPointer(){
+  prevAnchorX = mouse.x;
+  prevAnchorY = mouse.y;
+  initSegments();
+}
+mouse.x = canvas.clientWidth / 2;
+mouse.y = canvas.clientHeight / 2;
+let prevAnchorX = mouse.x, prevAnchorY = mouse.y;
 initSegments();
 
-function loop(){
-  requestAnimationFrame(loop);
+// Data overlay (scripts/dataLayer.js): DOM only, so it never ends up in the exported PNG.
+const hud = AGData.hud(canvas, { canvas, code: 'SWG', slots: { specimen: 'tr' } });
+AGData.readouts(document.getElementById('ui'));
+let stamps = 0;
+let hudAt = 0;
+let lastTipX = 0, lastTipY = 0, lastTipAt = 0;
 
-  if (!segments.length) initSegments();
+const STEP = 1 / 60;       // seconds per physics step (and per painted stamp)
+const MAX_FRAME = 0.1;     // a background tab or hitch never fast-forwards the pendulum
+let acc = 0;
+let lastNow = 0;
+
+// One verlet step with the anchor at (ax, ay).
+function stepPhysics(ax, ay){
   const segmentLength = ropeLength / segmentCount;
-  let anchorX = mouse.x;
-  let anchorY = mouse.y;
-
-  // verlet integratie voor inertie
-  segments.forEach(seg => {
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
     const vx = (seg.x - seg.px) * damping;
     const vy = (seg.y - seg.py) * damping + gravity;
     seg.px = seg.x;
     seg.py = seg.y;
     seg.x += vx;
     seg.y += vy;
-  });
-
-  // beperk elke segment op vaste lengte
-  segments.forEach(seg => {
+  }
+  // fixed length for every segment, from the anchor down the chain
+  let anchorX = ax;
+  let anchorY = ay;
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
     const dx = seg.x - anchorX;
     const dy = seg.y - anchorY;
     let dist = Math.sqrt(dx*dx + dy*dy);
@@ -571,29 +666,75 @@ function loop(){
       seg.x = anchorX + nx * segmentLength;
       seg.y = anchorY + ny * segmentLength;
     }
-
     anchorX = seg.x;
     anchorY = seg.y;
-  });
+  }
+}
 
-  const tip = segments[segments.length-1];
-  if (!tip) return;
-
-  const shouldDrawBall = showBall || (showStroke && strokeWidth > 0);
-  if (shouldDrawBall) {
+function paintStamp(ax, ay){
+  const tip = segments[segments.length - 1];
+  if (showBall || strokeWidth > 0) {
     drawBallTip(tip.x, tip.y, showBall);
   }
-
   if (showRope) {
-    // touw met meerdere segmenten tekenen
     ctx.beginPath();
     ctx.strokeStyle = ropeColor;
-    ctx.lineWidth = 2;
-    ctx.moveTo(mouse.x, mouse.y);
-    segments.forEach(seg=>{
-      ctx.lineTo(seg.x, seg.y);
-    });
+    ctx.lineWidth = ropeWidth;
+    ctx.moveTo(ax, ay);
+    for (let i = 0; i < segments.length; i++) {
+      ctx.lineTo(segments[i].x, segments[i].y);
+    }
     ctx.stroke();
+  }
+  stamps++;
+}
+
+function updateHud(now){
+  const tip = segments[segments.length - 1];
+  const dt = (now - lastTipAt) / 1000;
+  if (dt > 0) {
+    hud.set('Tip', AGData.fmt(Math.hypot(tip.x - lastTipX, tip.y - lastTipY) / dt, 0, 4), 'px/s', 'br');
+  }
+  lastTipX = tip.x; lastTipY = tip.y; lastTipAt = now;
+  // Angle of the first segment from straight down.
+  const first = segments[0];
+  const theta = Math.atan2(first.x - mouse.x, first.y - mouse.y) * 180 / Math.PI;
+  hud.set('Theta', (theta < 0 ? '-' : '+') + AGData.fmt(Math.abs(theta), 1, 3), '°', 'br');
+  // Small-angle period of a simple pendulum of the whole rope length: T = 2π √(L / g).
+  const g = gravity * 3600;
+  hud.set('T0', g > 0 ? AGData.fmt(2 * Math.PI * Math.sqrt(ropeLength / g), 2) : '∞', 's', 'tr');
+  hud.set('Rope', `${segmentCount} × ${AGData.fmt(ropeLength / segmentCount, 0, 3)}`, 'px', 'tr');
+  hud.set('Stamps', AGData.fmt(stamps, 0, 6), '', 'tr');
+}
+
+function loop(now){
+  requestAnimationFrame(loop);
+  hud.frame(now);
+  if (!segments.length) initSegments();
+
+  const dt = Math.min(MAX_FRAME, Math.max(0, (now - lastNow) / 1000));
+  lastNow = now;
+  acc += dt;
+  const steps = Math.floor(acc / STEP);
+  acc -= steps * STEP;
+
+  // Steps run at a fixed rate whatever the display refresh (30, 60 or 120 Hz), so the swing and the
+  // density of the strokes stay the same. The anchor glides across the steps of a slow frame.
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const ax = prevAnchorX + (mouse.x - prevAnchorX) * t;
+    const ay = prevAnchorY + (mouse.y - prevAnchorY) * t;
+    stepPhysics(ax, ay);
+    if (armed) paintStamp(ax, ay);
+  }
+  if (steps) {
+    prevAnchorX = mouse.x;
+    prevAnchorY = mouse.y;
+  }
+
+  if (now - hudAt > 100) {
+    hudAt = now;
+    updateHud(now);
   }
 }
 
@@ -634,7 +775,7 @@ function drawBallTip(x, y, fillBall = true){
     }
   }
 
-  if(showStroke && strokeWidth > 0){
+  if(strokeWidth > 0){
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = strokeWidth;
     ctx.stroke();
@@ -653,7 +794,32 @@ function drawStar(ctx, x, y, outerRadius){
   }
   ctx.closePath();
 }
-loop();
+// Remember the settings between visits (scripts/savedSettings.js).
+AGSettings.persist('swing', {
+  controls: ['color', 'size', 'segments', 'length', 'gravity', 'friction', 'ropeWidth', 'ropeColor', 'strokeColor', 'strokeWidth', 'bgColor'],
+  get: () => ({ stretchMode, showBall, showRope, showBackground, ballShape }),
+  set: (saved) => {
+    if (typeof saved.stretchMode === 'boolean') stretchMode = saved.stretchMode;
+    if (typeof saved.showBall === 'boolean') showBall = saved.showBall;
+    if (typeof saved.showRope === 'boolean') showRope = saved.showRope;
+    if (typeof saved.showBackground === 'boolean') showBackground = saved.showBackground;
+    // Older versions had a separate outline toggle: "off" now means a width of 0.
+    if (saved.showStroke === false && strokeWidth !== 0) {
+      strokeWidthInput.value = '0';
+      strokeWidthInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    syncToggle(stretchBtn, stretchMode, 'Stretch');
+    syncToggle(ballBtn, showBall, 'Ball');
+    syncToggle(ropeBtn, showRope, 'Rope');
+    applyBackground();
+    // An imported shape image is not stored, so fall back to the circle.
+    if (saved.ballShape !== 'image' && shapeButtons.some(btn => btn.dataset.shape === saved.ballShape)) {
+      setBallShape(saved.ballShape);
+    }
+  },
+});
+
+requestAnimationFrame(loop);
 </script>
 <div class="app-year">2026 Accidental Graphics</div>
 </body>
