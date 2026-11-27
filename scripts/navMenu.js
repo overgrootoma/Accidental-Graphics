@@ -129,7 +129,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Live "lab notebook" strip in the footer of the site pages (.app-year[data-live]): only real, measured values
   // (no permission prompts): local time, viewport, pointer position / speed, page load time, tool count,
-  // last-modified date, scroll position, session time, rendered fps, pixel ratio, colour scheme, connection type.
+  // last-modified date, scroll position, time on the site (all pages), rendered fps, pixel ratio, colour scheme, connection type.
   function initLiveStrip() {
     const bar = document.querySelector(".app-year[data-live]");
     if (!bar) return;
@@ -142,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const items = {};
     // Order = display order; the last items are dropped first when the line gets too wide.
     const defs = [["time", "LOCAL"], ["vp", "VP"], ["ptr", "PTR"], ["load", "LOAD"], ["tools", "TOOLS"], ["upd", "UPD"],
-      ["scroll", "SCR"], ["spd", "SPD"], ["t", "T+"], ["fps", "FPS"], ["dpr", "DPR"], ["scheme", "SCHEME"], ["net", "NET"]];
+      ["scroll", "SCR"], ["spd", "SPD"], ["t", "SITE"], ["fps", "FPS"], ["dpr", "DPR"], ["scheme", "SCHEME"], ["net", "NET"]];
     defs.forEach(([key, name]) => {
       const item = document.createElement("span");
       item.className = `app-year__item app-year__item--${key}`;
@@ -192,7 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
     items.load.textContent = "---- MS";
     items.tools.textContent = "--";
     items.fps.textContent = "--";
-    items.t.textContent = "00:00";
+    items.t.textContent = "00:00:00";
     const modified = new Date(document.lastModified);
     items.upd.textContent = isNaN(modified) ? "----" : `${modified.getFullYear()}-${pad(modified.getMonth() + 1)}-${pad(modified.getDate())}`;
     window.addEventListener("resize", () => { setViewport(); setScroll(); });
@@ -232,8 +232,9 @@ document.addEventListener("DOMContentLoaded", () => {
       last = now;
       const d = new Date();
       items.time.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-      const secs = Math.floor((now - start) / 1000);
-      items.t.textContent = `${pad(secs / 60)}:${pad(secs % 60)}`;
+      // Time on the whole site (all pages), not just this page: AGData.siteTime (dataLayer.js).
+      const secs = Math.floor(window.AGData && window.AGData.siteTime ? window.AGData.siteTime() : (now - start) / 1000);
+      items.t.textContent = `${pad(Math.floor(secs / 3600))}:${pad(Math.floor(secs / 60) % 60)}:${pad(secs % 60)}`;
       items.fps.textContent = pad(frames * 1000 / dt);
       items.spd.textContent = `${pad(travelled * 1000 / dt, 4)} PX/S`;
       frames = 0;

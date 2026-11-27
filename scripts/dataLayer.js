@@ -6,30 +6,26 @@
 //
 // API (window.AGData)
 //   AGData.hud(stageEl, opts) -> hud
-//     Live readouts AROUND a canvas: two one-line text bands, just above and just below the canvas box,
-//     so nothing covers the artwork and nothing is drawn on or beside the frame itself. Colours follow the page (--ag-data-fg / currentColor).
-//     The tool leaves room for it: var(--ag-hud-band) (24px, 20px on mobile) above and below the canvas,
-//     and var(--ag-hud-side) beside it as breathing room. A band without room (nav, footer text, bottom sheet in the
-//     way) is left out; a band that is too narrow drops its lowest-priority lines (date, frame counter,
-//     T+, then app stats from the end). stageEl is the element that wraps the canvas (positioned:
-//     relative/absolute/fixed). If stageEl is the <canvas> itself (or another replaced element), the HUD
-//     is a fixed overlay that follows the element's box instead.
-//     opts.canvas   <canvas> to measure: pointer X/Y are reported in canvas pixels (CSS scaling undone)
-//                   and the bands hug the canvas' box. Default: stageEl if it is a canvas.
+//     Live readouts of a tool, gathered in ONE small list tucked into the bottom-right corner of the page
+//     (never on or around the canvas). Folded, the list shows only the time on the whole site and the
+//     current clock; hover, keyboard focus or a tap unfolds every value. Colours follow the page.
+//     opts.canvas   <canvas> to measure: canvas size and pointer X/Y in canvas pixels (CSS scaling undone).
+//                   Default: stageEl if it is a canvas.
 //     opts.code     specimen code, e.g. "ISO" -> "SPEC. ISO-0007" (counter in localStorage
 //                   "ag-specimen:<code>"). Omit for no specimen line.
-//     opts.pointer / opts.size / opts.fps / opts.time   false hides that part.
+//     opts.pointer / opts.size / opts.fps   false hides that part.
 //                   fps is only shown while the app reports frames (hud.frame()) and runs at >= 1 fps.
-//     opts.slots    where the built-in lines go, default { specimen: "tl", size: "tr", pointer: "bl", timing: "br" }
-//                   (tl/tr = band above the canvas, bl/br = band below).
-//     hud.set(key, value, unit?, slot?)  app stat (strokes, layers, colours...). slot: "tl"|"tr"|"bl"|"br",
-//                   default "tr". value null removes it. Numbers are shown as is: pass AGData.fmt() output.
+//     hud.set(key, value, unit?)  app value (strokes, layers, colours...), listed after canvas size.
+//                   value null removes it. Numbers are shown as is: pass AGData.fmt() output.
+//                   (A 4th "slot" argument from the old corner layout is accepted and ignored.)
 //     hud.frame(now?)   call once per rendered frame: fps then measures the app's real frame rate and a
 //                   frame counter appears.
-//     hud.newSpecimen() -> "ISO-0008"   next specimen id; also resets elapsed time and frame count.
+//     hud.newSpecimen() -> "ISO-0008"   next specimen id; also resets the frame count.
 //     hud.refresh()     re-measure after a layout change the HUD can't see (it watches resize + scroll).
 //     hud.destroy()
 //     Text updates at ~12 Hz from one rAF loop, skipped while the data layer is hidden or the tab is hidden.
+//     --ag-hud-band / --ag-hud-side (css/data.css) stay as the breathing room tools leave around a canvas.
+//   AGData.siteTime() -> seconds on the whole site (all pages and tabs; a visit ends after 30 min away).
 //   AGData.readouts(panelEl, opts) -> [{ input, el, created }]
 //     Gives every input[type=range] in the panel without a visible value display a compact .ag-readout
 //     (zero-padded to max's digits, decimals from step, unit from data-unit="px"). Existing displays
@@ -226,6 +222,126 @@
     };
   }
 
+  // ---------- Site time ----------
+  // Time on the whole site (not per page): one visit runs across pages and tabs until the site has
+  // been left alone for 30 minutes. Stored in localStorage "ag-site-visit" as {start, last}.
+  const VISIT_KEY = "ag-site-visit";
+  const VISIT_GAP = 30 * 60 * 1000;
+  let visitStart = 0;
+  let visitWritten = 0;
+
+  function siteTime() {
+    const now = Date.now();
+    if (!visitStart || now - visitWritten > 5000) {
+      let visit = null;
+      try {
+        visit = JSON.parse(storageGet(VISIT_KEY) || "null");
+      } catch (error) {
+        visit = null;
+      }
+      if (visit && Number.isFinite(visit.start) && Number.isFinite(visit.last) && now - visit.last < VISIT_GAP && visit.start <= now) {
+        visitStart = visit.start;
+      } else if (!visitStart || now - visitWritten > VISIT_GAP) {
+        visitStart = now;
+      }
+      visitWritten = now;
+      storageSet(VISIT_KEY, JSON.stringify({ start: visitStart, last: now }));
+    }
+    return (now - visitStart) / 1000;
+  }
+
+  function clockText(seconds) {
+    const t = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(t / 3600);
+    const m = Math.floor((t % 3600) / 60);
+    return `${fmt(h, 0, 2)}:${fmt(m, 0, 2)}:${fmt(t % 60, 0, 2)}`;
+  }
+
+  function nowText() {
+    const d = new Date();
+    return `${fmt(d.getHours(), 0, 2)}:${fmt(d.getMinutes(), 0, 2)}:${fmt(d.getSeconds(), 0, 2)}`;
+  }
+
+  // ---------- Info list (corner) ----------
+  // All small readouts of a page in one tidy list, tucked into the bottom-right corner. Folded it shows
+  // only the time on the site and the clock; hover, focus or a tap unfolds the full list upwards.
+  let infoBox = null;
+
+  function infoList() {
+    if (infoBox) {
+      return infoBox;
+    }
+    const box = el("div", "ag-info ag-data");
+    box.tabIndex = 0;
+    box.setAttribute("role", "button");
+    box.setAttribute("aria-expanded", "false");
+    box.setAttribute("aria-label", "Info: time on the site, clock and live values");
+    const list = el("div", "ag-info__list", box);
+    const summary = el("div", "ag-info__summary", box);
+    const siteRow = el("span", "ag-info__pair", summary);
+    el("span", "ag-info__k", siteRow).textContent = "Site";
+    const siteValue = document.createTextNode("00:00:00");
+    el("span", "ag-info__v", siteRow).appendChild(siteValue);
+    const nowRow = el("span", "ag-info__pair", summary);
+    el("span", "ag-info__k", nowRow).textContent = "Now";
+    const nowValue = document.createTextNode(nowText());
+    el("span", "ag-info__v", nowRow).appendChild(nowValue);
+
+    const setOpen = (open) => {
+      box.classList.toggle("is-open", open);
+      box.setAttribute("aria-expanded", String(open));
+    };
+    box.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setOpen(!box.classList.contains("is-open"));
+    });
+    box.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setOpen(!box.classList.contains("is-open"));
+      } else if (event.key === "Escape") {
+        setOpen(false);
+      }
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!box.contains(event.target)) {
+        setOpen(false);
+      }
+    }, { passive: true });
+
+    const mount = () => document.body.appendChild(box);
+    if (document.body) {
+      mount();
+    } else {
+      document.addEventListener("DOMContentLoaded", mount, { once: true });
+    }
+
+    // Above the mobile bottom sheet (settingsToggle.js sets --ag-sheet-h).
+    const place = () => {
+      const sheet = document.body && document.body.classList.contains("ag-sheet")
+        ? parseFloat(getComputedStyle(root).getPropertyValue("--ag-sheet-h")) || 0
+        : 0;
+      box.style.setProperty("--ag-info-lift", `${sheet}px`);
+    };
+    window.addEventListener("resize", place);
+    if (typeof MutationObserver === "function") {
+      new MutationObserver(place).observe(root, { attributes: true, attributeFilter: ["style"] });
+    }
+    place();
+
+    const tickClock = () => {
+      if (!document.hidden) {
+        setText(siteValue, clockText(siteTime()));
+        setText(nowValue, nowText());
+      }
+    };
+    tickClock();
+    setInterval(tickClock, 1000);
+
+    infoBox = { box, list };
+    return infoBox;
+  }
+
   // ---------- HUD ----------
   function readSpecimen(code) {
     const value = parseInt(storageGet(`ag-specimen:${code}`) || "0", 10);
@@ -236,76 +352,44 @@
     return `${code}-${fmt(number, 0, 4)}`;
   }
 
+  // Same API as before (set / frame / newSpecimen / refresh / destroy); the readouts now live in the
+  // corner list instead of around the canvas. The slot argument is accepted and ignored.
   function hud(stageEl, opts) {
     opts = opts || {};
     if (!stageEl) {
       throw new Error("AGData.hud: stage element missing");
     }
-    const isReplaced = /^(CANVAS|IMG|VIDEO|SVG)$/i.test(stageEl.tagName);
     const canvas = opts.canvas || (stageEl.tagName === "CANVAS" ? stageEl : null);
     const show = (name) => opts[name] !== false;
+    const { list } = infoList();
 
-    // Everything sits OUTSIDE the canvas box (one text band above, one below), so the readouts never
-    // cover the artwork. The box itself follows the canvas; its children overflow it.
-    const box = el("div", "ag-hud ag-data" + (isReplaced ? " ag-hud--fixed" : ""));
-    box.setAttribute("aria-hidden", "true");
-    const frameEl = el("div", "ag-hud__frame", box);
-    const bands = { top: el("div", "ag-hud__band ag-hud__band--top", frameEl), bottom: el("div", "ag-hud__band ag-hud__band--bottom", frameEl) };
-    const slots = {};
-    ["tl", "tr", "bl", "br"].forEach((corner) => {
-      slots[corner] = el("div", `ag-hud__slot ag-hud__slot--${corner}`, bands[corner[0] === "t" ? "top" : "bottom"]);
-    });
-
-    // One readout line: [label] value [unit]; returns its text nodes. prio: which lines give way first
-    // when a band runs out of width (highest number first, then the last one in the band).
-    let fitQueued = true;
-    const line = (slot, label, unit, prio) => {
-      const row = el("span", "ag-readout", slots[slot]);
-      row.dataset.prio = String(prio || 0);
-      const parts = { row, label: null, value: document.createTextNode(""), unit: null };
-      if (label) {
-        el("span", "ag-readout__label", row).textContent = label;
-      }
-      el("span", "ag-readout__value", row).appendChild(parts.value);
-      const unitEl = el("span", "ag-readout__unit", row);
-      parts.unit = document.createTextNode(unit || "");
-      unitEl.appendChild(parts.unit);
-      if (!unit) {
-        unitEl.hidden = true;
-      }
-      fitQueued = true;
-      return parts;
+    // Rows keep a fixed order by group: specimen + size first, app values, then pointer and timing.
+    const groups = { head: el("div", "ag-info__group", list), app: el("div", "ag-info__group", list), tail: el("div", "ag-info__group", list) };
+    const line = (group, label, unit) => {
+      const row = el("div", "ag-info__row", groups[group]);
+      el("span", "ag-info__k", row).textContent = label;
+      const valueEl = el("span", "ag-info__v", row);
+      const value = document.createTextNode("");
+      valueEl.appendChild(value);
+      const unitNode = document.createTextNode(unit ? ` ${unit}` : "");
+      el("span", "ag-info__u", valueEl).appendChild(unitNode);
+      return { row, value, unit: unitNode };
     };
 
-    const place = Object.assign({ specimen: "tl", size: "tr", pointer: "bl", timing: "br" }, opts.slots);
     const code = opts.code ? String(opts.code).toUpperCase() : "";
     let specimen = code ? Math.max(1, readSpecimen(code)) : 0;
     if (code && !readSpecimen(code)) {
       storageSet(`ag-specimen:${code}`, String(specimen));
     }
-    const specLine = code ? line(place.specimen, "Spec.", "", 0) : null;
-    const dateLine = code ? line(place.specimen, "", "", 5) : null;
-    if (dateLine) {
-      const now = new Date();
-      setText(dateLine.value, `${now.getFullYear()}.${fmt(now.getMonth() + 1, 0, 2)}.${fmt(now.getDate(), 0, 2)}`);
-    }
-    const sizeLine = show("size") && canvas ? line(place.size, "", "px", 1) : null;
-    const pointerLine = show("pointer") ? line(place.pointer, "", "", 1) : null;
-    const fpsLine = show("fps") ? line(place.timing, "", "fps", 2) : null;
-    const timeLine = show("time") ? line(place.timing, "T+", "", 3) : null;
-    // fps only means something while the app is producing frames: hidden until a measured window has some.
-    let fpsShown = false;
-    const showFps = (on) => {
-      if (fpsLine && on !== fpsShown) {
-        fpsShown = on;
-        fpsLine.row.classList.toggle("is-idle", !on);
-        fitQueued = true;
-      }
-    };
-    if (fpsLine) {
-      fpsLine.row.classList.add("is-idle");
-    }
+    const specLine = code ? line("head", "Spec.", "") : null;
+    const sizeLine = show("size") && canvas ? line("head", "Canvas", "px") : null;
+    const pointerLine = show("pointer") ? line("tail", "Pointer", "") : null;
+    const fpsLine = show("fps") ? line("tail", "Rate", "fps") : null;
+    const timeLine = null; // time is site-wide now: see the folded line (siteTime)
     let frameLine = null;
+    if (fpsLine) {
+      fpsLine.row.hidden = true;
+    }
     const custom = new Map();
 
     const renderSpecimen = () => {
@@ -315,122 +399,21 @@
     };
     renderSpecimen();
 
-    if (isReplaced) {
-      document.body.appendChild(box);
-    } else {
-      stageEl.appendChild(box);
-    }
-
     let clientX = NaN;
     let clientY = NaN;
-    let lastPointerText = "";
-
-    // Each band is one line: when a band is too narrow, lines give way by priority (see line()).
-    const fit = () => {
-      fitQueued = false;
-      ["top", "bottom"].forEach((name) => {
-        const band = bands[name];
-        const rows = band.querySelectorAll(".ag-readout");
-        rows.forEach((row) => row.classList.remove("is-overflow"));
-        if (box.classList.contains(`ag-hud--no-${name}`) || !band.clientWidth) {
-          return;
-        }
-        // Widths are summed (rows never shrink), so overflow on either side counts.
-        const bandSlots = Array.prototype.filter.call(band.children, (slot) => slot.classList.contains("ag-hud__slot"));
-        const bandGap = parseFloat(getComputedStyle(band).columnGap) || 0;
-        const rowGap = bandSlots.length ? parseFloat(getComputedStyle(bandSlots[0]).columnGap) || 0 : 0;
-        const available = band.clientWidth;
-        const shown = (row) => !row.classList.contains("is-overflow") && !row.classList.contains("is-idle");
-        for (let guard = 0; guard < 40; guard += 1) {
-          let need = 0;
-          let used = 0;
-          let victim = null;
-          bandSlots.forEach((slot) => {
-            const visibleRows = Array.prototype.filter.call(slot.children, shown);
-            if (!visibleRows.length) {
-              return;
-            }
-            used += 1;
-            visibleRows.forEach((row) => {
-              need += row.offsetWidth;
-            });
-            need += rowGap * (visibleRows.length - 1);
-            // The first line of a corner always stays.
-            visibleRows.slice(1).forEach((row) => {
-              if (!victim || Number(row.dataset.prio) >= Number(victim.dataset.prio)) {
-                victim = row;
-              }
-            });
-          });
-          need += bandGap * Math.max(0, used - 1);
-          if (need <= available || !victim) {
-            break;
-          }
-          victim.classList.add("is-overflow");
-        }
-      });
-    };
-
-    // Layout, cached; refreshed on resize/scroll/ResizeObserver, never per frame.
     let canvasRect = null;
     let scaleX = 1;
     let scaleY = 1;
     const layout = () => {
-      // navMenu.js builds these after the app scripts ran, so look them up each time.
-      const nav = document.querySelector(".site-nav");
-      const foot = document.querySelector(".app-year");
-      const stageRect = stageEl.getBoundingClientRect();
-      const target = canvas || stageEl;
-      const rect = target.getBoundingClientRect();
+      if (!canvas) {
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
       canvasRect = rect;
-      if (canvas && rect.width && rect.height) {
+      if (rect.width && rect.height) {
         scaleX = canvas.width / rect.width;
         scaleY = canvas.height / rect.height;
       }
-      // Free room around the canvas: below the nav, above a mobile bottom sheet (settingsToggle.js sets
-      // --ag-sheet-h) and the footer text, inside the canvas' parent horizontally.
-      const sheet = document.body.classList.contains("ag-sheet")
-        ? parseFloat(getComputedStyle(root).getPropertyValue("--ag-sheet-h")) || 0
-        : 0;
-      const screenBottom = window.innerHeight - sheet;
-      let topLimit = 0;
-      if (nav) {
-        const navBottom = nav.getBoundingClientRect().bottom;
-        topLimit = navBottom > 0 ? navBottom : 0;
-      }
-      let bottomLimit = screenBottom;
-      if (foot && foot.getClientRects().length) {
-        const range = document.createRange();
-        range.selectNodeContents(foot);
-        const text = range.getBoundingClientRect();
-        if (text.width && text.right > rect.left && text.left < rect.right) {
-          bottomLimit = Math.min(bottomLimit, text.top);
-        }
-      }
-      const parent = target.parentElement;
-      const parentRect = parent && parent !== document.body ? parent.getBoundingClientRect() : { left: 0, right: window.innerWidth };
-      const band = parseFloat(getComputedStyle(box).getPropertyValue("--ag-hud-band")) || 20;
-      box.classList.toggle("ag-hud--no-top", rect.top - topLimit < band - 2);
-      box.classList.toggle("ag-hud--no-bottom", bottomLimit - rect.bottom < band - 4);
-      // Canvas edge on the screen edge (phones): the text keeps a small gutter.
-      box.classList.toggle("ag-hud--edge", rect.left < 4 || rect.right > window.innerWidth - 4);
-
-      const visibleBottom = Math.min(rect.bottom, screenBottom);
-      const height = Math.max(0, visibleBottom - rect.top);
-      if (isReplaced) {
-        box.style.left = `${rect.left}px`;
-        box.style.top = `${rect.top}px`;
-        box.style.width = `${rect.width}px`;
-        box.style.height = `${height}px`;
-        frameEl.style.cssText = `left:0;top:0;width:${rect.width}px;height:${height}px`;
-      } else {
-        frameEl.style.cssText = `left:${rect.left - stageRect.left - stageEl.clientLeft}px;top:${rect.top - stageRect.top - stageEl.clientTop}px;width:${rect.width}px;height:${height}px`;
-      }
-      lastPointerText = "";
-      if (sizeLine) {
-        setText(sizeLine.value, `${fmt(canvas.width, 0, 4)} × ${fmt(canvas.height, 0, 4)}`);
-      }
-      fit();
     };
     let layoutQueued = false;
     const queueLayout = () => {
@@ -444,25 +427,13 @@
     };
     window.addEventListener("resize", queueLayout);
     window.addEventListener("scroll", queueLayout, { passive: true, capture: true });
-    // The nav and footer (navMenu.js, deferred) and web fonts arrive later and change the free room.
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", queueLayout, { once: true });
-    }
-    window.addEventListener("load", queueLayout, { once: true });
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(queueLayout);
-    }
     let observer = null;
-    if (typeof ResizeObserver === "function") {
+    if (typeof ResizeObserver === "function" && canvas) {
       observer = new ResizeObserver(queueLayout);
-      observer.observe(stageEl);
-      if (canvas && canvas !== stageEl) {
-        observer.observe(canvas);
-      }
+      observer.observe(canvas);
     }
     layout();
 
-    // Pointer, in client coordinates; mapped at text-update time.
     const onPointer = (event) => {
       clientX = event.clientX;
       clientY = event.clientY;
@@ -470,55 +441,44 @@
     window.addEventListener("pointermove", onPointer, { passive: true });
     window.addEventListener("pointerdown", onPointer, { passive: true });
 
-    // Timing.
     let start = performance.now();
     let appFrames = 0;
     let usesAppFrames = false;
     let windowFrames = 0;
     let windowStart = start;
     let lastText = 0;
-    let fps = 0;
-    let lastCanvasW = canvas ? canvas.width : 0;
-    let lastCanvasH = canvas ? canvas.height : 0;
     let raf = 0;
-    let lastFit = 0;
     let alive = true;
+    let lastSize = "";
 
     const update = (now) => {
-      if (sizeLine && (canvas.width !== lastCanvasW || canvas.height !== lastCanvasH)) {
-        lastCanvasW = canvas.width;
-        lastCanvasH = canvas.height;
-        layout();
+      if (sizeLine) {
+        const size = `${fmt(canvas.width, 0, 4)} × ${fmt(canvas.height, 0, 4)}`;
+        if (size !== lastSize) {
+          lastSize = size;
+          setText(sizeLine.value, size);
+          layout();
+        }
       }
       if (pointerLine) {
-        let text = "X ---- · Y ----";
+        let text = "---- · ----";
         if (canvasRect && clientX >= canvasRect.left && clientX <= canvasRect.right && clientY >= canvasRect.top && clientY <= canvasRect.bottom) {
-          text = `X ${fmt(Math.floor((clientX - canvasRect.left) * scaleX), 0, 4)} · Y ${fmt(Math.floor((clientY - canvasRect.top) * scaleY), 0, 4)}`;
+          text = `${fmt(Math.floor((clientX - canvasRect.left) * scaleX), 0, 4)} · ${fmt(Math.floor((clientY - canvasRect.top) * scaleY), 0, 4)}`;
         }
-        if (text !== lastPointerText) {
-          lastPointerText = text;
-          setText(pointerLine.value, text);
-        }
+        setText(pointerLine.value, text);
       }
       if (fpsLine && now - windowStart >= 500) {
-        fps = (windowFrames * 1000) / (now - windowStart);
+        const fps = (windowFrames * 1000) / (now - windowStart);
         windowFrames = 0;
         windowStart = now;
         setText(fpsLine.value, fmt(fps, 0, 2));
-        showFps(usesAppFrames && fps >= 1);
+        fpsLine.row.hidden = !(usesAppFrames && fps >= 1);
       }
       if (timeLine) {
-        const t = (now - start) / 1000;
-        const minutes = Math.floor(t / 60);
-        setText(timeLine.value, `${fmt(minutes, 0, 2)}:${fmt(t - minutes * 60, 2, 2)}`);
+        setText(timeLine.value, clockText((now - start) / 1000));
       }
       if (frameLine) {
         setText(frameLine.value, fmt(appFrames, 0, 6));
-      }
-      // Values change width now and then (LIVE vs a clock): re-check the bands once a second.
-      if (fitQueued || now - lastFit > 1000) {
-        lastFit = now;
-        fit();
       }
     };
 
@@ -539,26 +499,24 @@
     raf = requestAnimationFrame(loop);
 
     const api = {
-      element: box,
+      element: list,
       get specimen() {
         return code ? specimenId(code, specimen) : "";
       },
-      set(key, value, unit, slot) {
+      set(key, value, unit) {
         let entry = custom.get(key);
         if (value === null || value === undefined) {
           if (entry) {
             entry.row.remove();
             custom.delete(key);
-            fitQueued = true;
           }
           return api;
         }
         if (!entry) {
-          entry = line(slot || "tr", key, unit, 2);
+          entry = line("app", key, unit);
           custom.set(key, entry);
         } else if (unit !== undefined) {
-          setText(entry.unit, unit || "");
-          entry.unit.parentNode.hidden = !unit;
+          setText(entry.unit, unit ? ` ${unit}` : "");
         }
         setText(entry.value, String(value));
         return api;
@@ -569,7 +527,7 @@
           windowFrames = 0;
           windowStart = performance.now();
           if (show("fps")) {
-            frameLine = line(place.timing, "F", "", 4);
+            frameLine = line("tail", "Frames", "");
           }
         }
         appFrames += 1;
@@ -603,7 +561,7 @@
         if (observer) {
           observer.disconnect();
         }
-        box.remove();
+        Object.values(groups).forEach((group) => group.remove());
       },
     };
     return api;
@@ -734,6 +692,7 @@
 
   const AGData = {
     hud,
+    siteTime,
     readouts,
     spring,
     tick,

@@ -87,52 +87,84 @@
 }
 .ag-guide--v { border-top: 0; border-left: var(--ag-data-line) dashed var(--ag-data-dim); align-self: stretch; }
 
-/* ---------- HUD (AGData.hud) ----------
-   The box follows the canvas; two one-line text bands sit just outside it, above and below. Nothing is
-   drawn on or beside the frame. --ag-hud-band is the room a tool leaves above and below its canvas for
-   them, --ag-hud-side the breathing room beside it (0 on mobile). */
-:root { --ag-hud-band: 24px; --ag-hud-side: 16px; }
-.ag-hud {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  pointer-events: none;
-  user-select: none;
-  color: var(--ag-data-fg);
-  overflow: visible;
-  contain: layout style;
-}
-.ag-hud--fixed { position: fixed; inset: auto; }
-.ag-hud__frame { position: absolute; }
-.ag-hud__band {
-  position: absolute;
-  left: 0;
-  right: 0;
+/* ---------- Info list (AGData.hud) ----------
+   Every small readout of a page in one list, tucked into the bottom-right corner. Folded it is one line
+   (time on the site + clock); hover, focus or a tap unfolds the rest upwards. --ag-hud-band and
+   --ag-hud-side remain the breathing room tools leave around their canvas. */
+:root { --ag-hud-band: 16px; --ag-hud-side: 16px; }
+.ag-info {
+  position: fixed;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: calc(var(--ag-info-lift, 0px) + max(7px, env(safe-area-inset-bottom)));
+  z-index: 10000;
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 18px;
-  white-space: nowrap;
-}
-.ag-hud__band--top { bottom: calc(100% + 9px); }
-.ag-hud__band--bottom { top: calc(100% + 5px); }
-.ag-hud__slot {
-  display: flex;
-  flex: 0 1 auto;
-  align-items: baseline;
-  gap: 0 14px;
+  flex-direction: column;
+  align-items: stretch;
   min-width: 0;
-  overflow: hidden;
+  max-width: calc(100vw - 28px);
+  padding: 0;
+  color: var(--ui-fg, var(--ag-data-fg, #fff));
+  font-family: var(--ag-data-font);
+  font-size: var(--ag-data-size);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ag-data-track);
+  line-height: 1.25;
+  text-transform: uppercase;
+  cursor: default;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
 }
-.ag-hud__slot:empty { display: none; }
-.ag-hud__slot--tr,
-.ag-hud__slot--br { margin-left: auto; justify-content: flex-end; }
-.ag-hud .ag-readout { gap: .45em; flex: none; }
-.ag-hud .ag-readout.is-overflow,
-.ag-hud .ag-readout.is-idle { display: none; }
-.ag-hud--edge .ag-hud__band { left: 8px; right: 8px; }
-.ag-hud--no-top .ag-hud__band--top,
-.ag-hud--no-bottom .ag-hud__band--bottom { display: none; }
+.ag-info__summary {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-left: auto;
+  padding: 1px 0 1px 6px;
+  background: var(--ui-bg, transparent);
+  white-space: nowrap;
+  opacity: .62;
+  transition: opacity var(--ag-dur-2) var(--ag-ease-out);
+}
+.ag-info__pair,
+.ag-info__row { display: flex; gap: .7em; justify-content: space-between; white-space: nowrap; }
+.ag-info__k { color: var(--ag-data-dim); }
+.ag-info__v { font-weight: 500; }
+.ag-info__u { color: var(--ag-data-dim); font-weight: 400; }
+.ag-info__list {
+  display: grid;
+  gap: 2px;
+  min-width: 190px;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    max-height var(--ag-dur-3) var(--ag-ease-out),
+    opacity var(--ag-dur-2) var(--ag-ease-out),
+    transform var(--ag-dur-3) var(--ag-ease-out),
+    padding var(--ag-dur-3) var(--ag-ease-out);
+  background: var(--ui-bg, #000);
+  box-shadow: 0 0 0 8px var(--ui-bg, #000);
+}
+.ag-info__group { display: grid; gap: 2px; }
+.ag-info__group:empty { display: none; }
+.ag-info__group + .ag-info__group:not(:empty) { margin-top: 6px; }
+.ag-info__row[hidden] { display: none; }
+.ag-info:hover .ag-info__summary,
+.ag-info:focus-visible .ag-info__summary,
+.ag-info.is-open .ag-info__summary { opacity: 1; }
+.ag-info:hover .ag-info__list,
+.ag-info:focus-visible .ag-info__list,
+.ag-info.is-open .ag-info__list {
+  max-height: 60vh;
+  opacity: 1;
+  transform: none;
+  padding: 8px 0 8px;
+}
+.ag-info:focus-visible { outline: 1px solid var(--ag-data-dim); outline-offset: 6px; }
+.ag-info:hover,
+.ag-info.is-open { cursor: pointer; }
 
 /* Global D toggle: fades every .ag-data element. */
 .ag-data {
@@ -144,12 +176,8 @@ html.ag-data-hidden .ag-data {
   transition: opacity var(--ag-dur-2) var(--ag-ease-out), visibility 0s linear var(--ag-dur-2);
 }
 @media (max-width: 768px) {
-  :root { --ag-hud-band: 20px; --ag-hud-side: 0px; }
-  .ag-hud { --ag-data-size: 9px; }
-  .ag-hud__band--top { bottom: calc(100% + 7px); }
-  .ag-hud__band--bottom { top: calc(100% + 4px); }
-  .ag-hud__band { gap: 12px; }
-  .ag-hud__slot { gap: 0 10px; }
+  :root { --ag-hud-band: 10px; --ag-hud-side: 0px; }
+  .ag-info { --ag-data-size: 9px; }
 }
 
 /* ---------- Secondary motion (html.ag-motion is set by dataLayer.js; remove it to opt out) ----------
