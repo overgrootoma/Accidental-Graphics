@@ -43,7 +43,7 @@
     }
     .layer-card__row {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
       align-items: center;
       gap: 8px;
     }
@@ -59,7 +59,7 @@
       font-size: 13px;
     }
     html body.tool-ui:not(#_) #controls .layer-card.is-active .layer-title::after {
-      content: "Active";
+      content: none;
       margin-left: 8px;
       color: var(--ui-faint);
       font-family: var(--ui-text);
@@ -68,7 +68,7 @@
       letter-spacing: 0.06em;
     }
     html body.tool-ui:not(#_) #controls .layer-icon {
-      width: 28px;
+      width: 26px;
       min-height: 28px;
       padding: 0;
       font-family: var(--ui-text);
@@ -79,6 +79,15 @@
       display: grid;
       gap: 14px;
     }
+    html body.tool-ui:not(#_) #controls .layer-icon:disabled { opacity: .3; }
+    /* Reorder by dragging a card (desktop); the arrows do the same on touch. */
+    html body.tool-ui:not(#_) #controls .layer-card__row[draggable="true"] { cursor: grab; }
+    html body.tool-ui:not(#_) #controls .layer-card.is-dragging { opacity: .4; }
+    html body.tool-ui:not(#_) #controls .layer-card.drop-before { box-shadow: 0 -2px 0 var(--ui-fg); }
+    html body.tool-ui:not(#_) #controls .layer-card.drop-after { box-shadow: 0 2px 0 var(--ui-fg); }
+    .place-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: end; }
+    #canvas.can-move { cursor: grab; }
+    #canvas.is-moving { cursor: grabbing; }
     .focus-row {
       display: grid;
       grid-template-columns: 56px minmax(0, 1fr);
@@ -157,7 +166,7 @@
           <h1 class="tool-title">Color Range</h1>
           <span data-settings-toggle-slot></span>
         </div>
-        <p class="tool-lede">Pull colour bands out of images and paint with them. Each image is a layer.</p>
+        <p class="tool-lede">Pull colour bands out of images and stack them. Each image is a layer you can move, scale and reorder.</p>
         <div class="tool-actions">
           <label class="file-button">
             Import image
@@ -175,7 +184,7 @@
           <div class="layer-list" id="layerList">
             <p class="muted">Import an image or pick a sample to start.</p>
           </div>
-          <p class="tool-hint">Click a layer name to make it active. Paint on the canvas to reveal the active layer. Visible layers are flattened with their blend mode and opacity on export.</p>
+          <p class="tool-hint">The top of the list is the top of the stack: drag a layer (or use the arrows) to change the order. Click a layer to select it, then drag the picture on the canvas to move it and scroll or pinch to scale it. Visible layers are flattened with their blend mode and opacity on export.</p>
         </div>
       </details>
     </div>
@@ -355,21 +364,29 @@
         const w = viewWidth;
         const h = viewHeight;
         const cached = layer.src;
-        if (cached && cached.w === w && cached.h === h) return cached;
-        const c = document.createElement('canvas');
+        const key = `${layer.tx}|${layer.ty}|${layer.scale}`;
+        if (cached && cached.w === w && cached.h === h && cached.key === key) return cached;
+        const c = cached && cached.w === w && cached.h === h ? cached.canvas : document.createElement('canvas');
         c.width = w;
         c.height = h;
         const cx = c.getContext('2d', { willReadFrequently: true });
-        const fit = fitImage(layer.image, w, h);
-        cx.drawImage(layer.image, fit.x, fit.y, fit.w, fit.h);
-        layer.src = { w, h, canvas: c, data: cx.getImageData(0, 0, w, h).data };
+        const box = placedBox(layer, w, h);
+        cx.drawImage(layer.image, box.x, box.y, box.w, box.h);
+        layer.src = { w, h, key, canvas: c, data: cx.getImageData(0, 0, w, h).data };
         return layer.src;
       }
 
+      // Where a layer's picture sits in the view: fitted, then scaled around its centre and moved by
+      // (tx, ty), a fraction of the view size, so the placement survives a window resize.
+      function placedBox(layer, w, h) {
+        const fit = fitImage(layer.image, w, h);
+        const bw = fit.w * layer.scale;
+        const bh = fit.h * layer.scale;
+        return { x: (w - bw) / 2 + layer.tx * w, y: (h - bh) / 2 + layer.ty * h, w: bw, h: bh };
+      }
+
+      // The canvas keeps the shape of the first image you loaded, also after reordering.
       function getAspect() {
-        if (layers.length && layers[0].image?.naturalWidth && layers[0].image?.naturalHeight) {
-          return layers[0].image.naturalWidth / layers[0].image.naturalHeight;
-        }
         return baseAspect;
       }
 
@@ -459,6 +476,9 @@
             image: img,
             ...layerDefaults,
             visible: true,
+            tx: 0,
+            ty: 0,
+            scale: 1,
             buffer: null,
             dirty: true,
             collapsed: false,
@@ -603,6 +623,7 @@
 
       function draw() {
         syncEmpty();
+        syncCanMove();
         const displayW = viewWidth;
         const displayH = viewHeight;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -660,6 +681,7 @@
         if (pickMode && pickHint) pickHint.textContent = coarsePointer ? 'Touch and drag, release to pick' : 'Click to pick a colour';
         canvas.classList.toggle('is-picking', pickMode);
         if (!pickMode) hideProbe();
+        syncCanMove();
         // The active layer's "Pick from canvas" button shows the state.
         layerList.querySelectorAll('.layer-card .focus-row button').forEach((btn) => {
           const on = pickMode && btn.closest('.layer-card')?.dataset.layerId === String(activeLayerId);
@@ -767,9 +789,158 @@
         if (color) commitPick(color);
       });
       canvas.addEventListener('pointercancel', hideProbe);
+
+      // ---------- Move and scale the selected layer on the canvas ----------
+      // Drag moves it, two fingers pinch it, the scroll wheel scales it around the pointer.
+      const movePointers = new Map();
+      let gesture = null;
+      const activeLayerObj = () => layers.find((l) => l.id === activeLayerId) || null;
+      const clampScale = (v) => Math.min(4, Math.max(0.1, v));
+
+      function syncCanMove() {
+        canvas.classList.toggle('can-move', !pickMode && !!activeLayerObj());
+      }
+
+      function syncSizeSlider(layer) {
+        const card = layerList.querySelector(`.layer-card[data-layer-id="${layer.id}"]`);
+        const range = card?.querySelector('input[data-role="scale"]');
+        if (!range) return;
+        range.value = layer.scale;
+        const out = range.closest('.field')?.querySelector('output');
+        if (out) out.textContent = `${Math.round(layer.scale * 100)} %`;
+      }
+
+      function gestureCentre() {
+        const pts = Array.from(movePointers.values());
+        const x = pts.reduce((sum, p) => sum + p.x, 0) / pts.length;
+        const y = pts.reduce((sum, p) => sum + p.y, 0) / pts.length;
+        const dist = pts.length > 1 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0;
+        return { x, y, dist };
+      }
+
+      function beginGesture(layer) {
+        const rect = canvas.getBoundingClientRect();
+        const c = gestureCentre();
+        gesture = { layer, tx: layer.tx, ty: layer.ty, scale: layer.scale, x: c.x, y: c.y, dist: c.dist, rect };
+      }
+
+      // Scale by k around a point (client coords), keeping the picture under that point in place.
+      function scaleAround(layer, base, k, clientX, clientY, rect) {
+        const next = clampScale(base.scale * k);
+        const ratio = next / base.scale;
+        const px = (clientX - rect.left) / rect.width - 0.5;
+        const py = (clientY - rect.top) / rect.height - 0.5;
+        layer.scale = next;
+        layer.tx = px - (px - base.tx) * ratio;
+        layer.ty = py - (py - base.ty) * ratio;
+      }
+
+      canvas.addEventListener('pointerdown', (evt) => {
+        if (pickMode) return;
+        const layer = activeLayerObj();
+        if (!layer || (evt.pointerType === 'mouse' && evt.button !== 0)) return;
+        evt.preventDefault();
+        try { canvas.setPointerCapture(evt.pointerId); } catch (err) { /* synthetic pointer */ }
+        movePointers.set(evt.pointerId, { x: evt.clientX, y: evt.clientY });
+        beginGesture(layer);
+        canvas.classList.add('is-moving');
+      });
+      canvas.addEventListener('pointermove', (evt) => {
+        if (!gesture || !movePointers.has(evt.pointerId)) return;
+        movePointers.set(evt.pointerId, { x: evt.clientX, y: evt.clientY });
+        const { layer, rect } = gesture;
+        const c = gestureCentre();
+        if (c.dist && gesture.dist) {
+          scaleAround(layer, gesture, c.dist / gesture.dist, gesture.x, gesture.y, rect);
+        } else {
+          layer.scale = gesture.scale;
+          layer.tx = gesture.tx;
+          layer.ty = gesture.ty;
+        }
+        layer.tx += (c.x - gesture.x) / rect.width;
+        layer.ty += (c.y - gesture.y) / rect.height;
+        layer.dirty = true;
+        syncSizeSlider(layer);
+        render();
+      });
+      const endMove = (evt) => {
+        if (!movePointers.delete(evt.pointerId)) return;
+        if (movePointers.size && gesture) {
+          beginGesture(gesture.layer);
+        } else {
+          gesture = null;
+          canvas.classList.remove('is-moving');
+        }
+      };
+      canvas.addEventListener('pointerup', endMove);
+      canvas.addEventListener('pointercancel', endMove);
+      canvas.addEventListener('wheel', (evt) => {
+        if (pickMode) return;
+        const layer = activeLayerObj();
+        if (!layer) return;
+        evt.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const delta = evt.deltaMode === 1 ? evt.deltaY * 16 : evt.deltaY;
+        scaleAround(layer, { scale: layer.scale, tx: layer.tx, ty: layer.ty }, Math.exp(-delta * 0.0015), evt.clientX, evt.clientY, rect);
+        layer.dirty = true;
+        syncSizeSlider(layer);
+        render();
+      }, { passive: false });
       canvas.addEventListener('pointerleave', (evt) => {
         if (evt.pointerType === 'mouse' && !probing) hideProbe();
       });
+
+      function moveLayerTo(layer, index) {
+        const from = layers.indexOf(layer);
+        const to = Math.max(0, Math.min(layers.length - 1, index));
+        if (from === -1 || from === to) return;
+        layers.splice(from, 1);
+        layers.splice(to, 0, layer);
+        renderLayerList();
+        render();
+      }
+
+      // Desktop drag and drop of whole cards; dropping on the upper half of a card puts the layer in
+      // front of it (the list runs from the top of the stack down).
+      let draggedLayer = null;
+      function makeCardDraggable(card, layer) {
+        if (coarsePointer) return;
+        // Only the head row starts a drag, so sliders and fields inside the card keep working.
+        const handle = card.querySelector('.layer-card__row');
+        handle.draggable = true;
+        handle.addEventListener('dragstart', (e) => {
+          draggedLayer = layer;
+          card.classList.add('is-dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', layer.id); } catch (err) { /* old browsers */ }
+        });
+        handle.addEventListener('dragend', () => {
+          draggedLayer = null;
+          layerList.querySelectorAll('.layer-card').forEach((c) => c.classList.remove('is-dragging', 'drop-before', 'drop-after'));
+        });
+        card.addEventListener('dragover', (e) => {
+          if (!draggedLayer || draggedLayer === layer) return;
+          e.preventDefault();
+          const rect = card.getBoundingClientRect();
+          const before = e.clientY < rect.top + rect.height / 2;
+          card.classList.toggle('drop-before', before);
+          card.classList.toggle('drop-after', !before);
+        });
+        card.addEventListener('dragleave', () => card.classList.remove('drop-before', 'drop-after'));
+        card.addEventListener('drop', (e) => {
+          if (!draggedLayer || draggedLayer === layer) return;
+          e.preventDefault();
+          const rect = card.getBoundingClientRect();
+          const inFront = e.clientY < rect.top + rect.height / 2;
+          const moving = draggedLayer;
+          layers.splice(layers.indexOf(moving), 1);
+          const target = layers.indexOf(layer);
+          layers.splice(inFront ? target + 1 : target, 0, moving);
+          draggedLayer = null;
+          renderLayerList();
+          render();
+        });
+      }
 
       function renderLayerList() {
         layerList.innerHTML = '';
@@ -781,7 +952,9 @@
           return;
         }
 
-        layers.forEach((layer) => {
+        // Top of the list = top of the stack (drawn last).
+        layers.slice().reverse().forEach((layer) => {
+          const stackIndex = layers.indexOf(layer);
           const card = document.createElement('div');
           const isActive = layer.id === activeLayerId;
           card.className = `layer-card ${isActive ? 'is-active' : ''} ${layer.collapsed ? 'is-collapsed' : ''}`;
@@ -845,8 +1018,26 @@
             render();
           });
 
-          row.append(visLabel, title, collapseBtn, removeBtn);
+          const upBtn = document.createElement('button');
+          upBtn.type = 'button';
+          upBtn.className = 'layer-icon';
+          upBtn.textContent = '↑';
+          upBtn.title = 'Move up (in front)';
+          upBtn.setAttribute('aria-label', `Move ${layer.name} up`);
+          upBtn.disabled = stackIndex === layers.length - 1;
+          upBtn.addEventListener('click', () => moveLayerTo(layer, stackIndex + 1));
+          const downBtn = document.createElement('button');
+          downBtn.type = 'button';
+          downBtn.className = 'layer-icon';
+          downBtn.textContent = '↓';
+          downBtn.title = 'Move down (behind)';
+          downBtn.setAttribute('aria-label', `Move ${layer.name} down`);
+          downBtn.disabled = stackIndex === 0;
+          downBtn.addEventListener('click', () => moveLayerTo(layer, stackIndex - 1));
+
+          row.append(visLabel, title, upBtn, downBtn, collapseBtn, removeBtn);
           card.appendChild(row);
+          makeCardDraggable(card, layer);
 
           // Colour to isolate: swatch + pick it from the canvas.
           const focusRow = document.createElement('div');
@@ -931,6 +1122,32 @@
             layer.opacity = Number.isFinite(v) ? v : layer.opacity;
             return layer.opacity;
           });
+          slider('Size', 0.1, 4, 0.01, layer.scale, (v) => `${Math.round(v * 100)} %`, (v) => {
+            layer.scale = Number.isFinite(v) ? v : layer.scale;
+            layer.dirty = true;
+            return layer.scale;
+          });
+          const sizeField = controlsWrap.lastElementChild;
+          sizeField.querySelector('input').dataset.role = 'scale';
+          const placeRow = document.createElement('div');
+          placeRow.className = 'place-row';
+          const placeHint = document.createElement('p');
+          placeHint.className = 'tool-hint';
+          placeHint.textContent = 'Drag the picture on the canvas to move it.';
+          const resetBtn = document.createElement('button');
+          resetBtn.type = 'button';
+          resetBtn.textContent = 'Reset';
+          resetBtn.title = 'Back to the original size and position';
+          resetBtn.addEventListener('click', () => {
+            layer.tx = 0;
+            layer.ty = 0;
+            layer.scale = 1;
+            layer.dirty = true;
+            setActiveLayer(layer.id);
+            render();
+          });
+          placeRow.append(placeHint, resetBtn);
+          controlsWrap.appendChild(placeRow);
 
           const blendField = document.createElement('div');
           blendField.className = 'field field--inline';
