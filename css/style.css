@@ -3098,13 +3098,9 @@ small {
   font-variation-settings: "ROND" 0;
 }
 
-/* Shared anti-design control language: square, tall, and typographically expanded. */
-button,
-input[type="button"],
-input[type="submit"],
-input[type="reset"],
-.file-button,
-.gallery-action {
+/* Shared anti-design control language: square, tall, and typographically expanded.
+   Not on the tools with the shared panel system (css/tool.css, body.tool-ui). */
+body:not(.tool-ui) :is(button, input[type="button"], input[type="submit"], input[type="reset"], .file-button, .gallery-action) {
   min-height: 48px !important;
   border-radius: 0 !important;
   font-family: var(--font-ui) !important;

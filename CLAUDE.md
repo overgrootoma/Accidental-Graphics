@@ -28,7 +28,8 @@ Code, commentaar en commitberichten zijn in het Engels.
 | `scripts/navConfig.js` | Laadt `content/*.json` → `window.AGContent`; gedeeld door alle pagina's |
 | `scripts/navMenu.js` | Zwarte menubalk bovenaan |
 | `scripts/settingsToggle.js` | Verberg/toon het instellingenpaneel (knop + H-toets) |
-| `scripts/dataLayer.js`, `css/data.css` | Gedeelde "labo-data"-stijl: `AGData.hud()` (meetwaarden rond het canvas, D-toets), `AGData.readouts()`, motion-tokens en `AGData.spring()`. API staat bovenaan het script |
+| `scripts/dataLayer.js`, `css/data.css` | Gedeelde "labo-data"-stijl: `AGData.hud()` (meetwaarden in één tekstregel boven en onder het canvas, D-toets), `AGData.readouts()`, motion-tokens en `AGData.spring()`. API staat bovenaan het script |
+| `css/tool.css` | Eén paneelsysteem voor alle tools (`body.tool-ui`, Isolation ook `tool-ui--light`): header met titel, één zin uitleg en hoofdacties, secties, velden, knoppen, sliders, checkboxes. Markup staat bovenaan het bestand |
 | `scripts/savedSettings.js` | `AGSettings.persist`: instellingen bewaren per tool |
 | `scripts/sampleMedia.js` | Voorbeeldbeelden/-video's in de tools |
 | `css/style.css`, `css/nav.css` | Gedeelde stijl |
@@ -38,8 +39,9 @@ Code, commentaar en commitberichten zijn in het Engels.
 ## Een nieuwe tool toevoegen
 
 1. Maak `apps/NaamTool.html` (of een map `apps/NaamTool/` als het groot wordt). Kopieer de `<head>`
-   van een bestaande tool: `../css/style.css`, `../css/nav.css`, favicon, en de scripts
-   `navConfig.js`, `navMenu.js` en `settingsToggle.js` met `data-panel="#jouwPaneel"`.
+   van een bestaande tool: `../css/style.css`, `../css/nav.css`, `../css/data.css`, `../css/tool.css`,
+   favicon, en de scripts `navConfig.js`, `navMenu.js` en `settingsToggle.js` met `data-panel="#jouwPaneel"`.
+   Geef `<body>` de class `tool-ui` en bouw het paneel met de markup uit `css/tool.css` (zoals `apps/fotogrid.html`).
 2. Zet een entry in `content/tools.json` (name, link, year, cover, description, archived, in_menu, hidden).
    De volgorde daar is de volgorde op de homepage. Hou `in_menu` op max. ~5 tools.
 3. Cover: korte, vierkante mp4 in `images/covers/` (zie agent `asset-prep`).
@@ -55,8 +57,12 @@ Code, commentaar en commitberichten zijn in het Engels.
 
 ## Stijl en mobiel
 
-- Data-stijl: echte meetwaarden (coördinaten, fps, tellers, specimen-nummers, resolutie), klein monospace,
-  haarlijnen. Altijd via `AGData` en als DOM-overlay: nooit in exports.
+- Data-stijl: echte meetwaarden (coördinaten, fps, tellers, specimen-nummers, resolutie), klein monospace.
+  Altijd via `AGData`, als DOM-overlay en **buiten** het canvas: nooit in exports. Geen meetlatjes,
+  hoekkruisjes of andere lijnen rond het canvas: die stonden het werk in de weg (Jorne, 2026-11-27).
+- Typografie: Doto voor titels, sectiekoppen, knoppen en het menu; systeem-monospace voor labels, waarden
+  en uitleg. Tooltitel groot bovenaan het paneel, geen kop "Settings". Aan/uit-opties zijn checkboxes,
+  niet "X: On"-knoppen. Eén hoofdactie per tool krijgt `.is-primary`.
 - Motion: gebruik de tokens `--ag-ease-out`, `--ag-ease-spring`, `--ag-dur-1/2/3`; respecteer `prefers-reduced-motion`.
 - Mobiel (≤768px): `settingsToggle.js` maakt van het paneel een bottom sheet en zet `--ag-sheet-h`.
   Laat het canvas de ruimte erboven vullen, gebruik pointer events en `touch-action: none` op tekenvlakken.

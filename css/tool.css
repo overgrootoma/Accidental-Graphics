@@ -1,0 +1,786 @@
+/* Accidental Graphics: one panel system for every tool.
+   Include after the other stylesheets and give <body> the class "tool-ui" (add "tool-ui--light" for a
+   black-on-white tool such as Isolation). The panel is #controls, #ui or #isoPanel.
+
+   Type system: two families, each with one job.
+     Display  "Doto" (the site's dot-matrix face): tool title, section headings, buttons, the nav.
+     Text     the system monospace (same as the lab data): labels, values, hints, inputs.
+   Scale: title 28 / section 13 / button 12 / label 12 / hint + value 11.
+
+   Panel markup:
+     <div id="controls">
+       <header class="tool-head">
+         <div class="tool-head__row"><h1 class="tool-title">Name</h1><span data-settings-toggle-slot></span></div>
+         <p class="tool-lede">One sentence on what the tool does.</p>
+         <div class="tool-actions">buttons…  (.is-primary for the main one)</div>
+       </header>
+       <details class="motion-group" open><summary>Section</summary><div class="motion-group-body">…</div></details>
+     </div>
+   Fields inside a section body:
+     <div class="field"><label for="x">Size</label><input type="range" id="x"></div>   label + value above a slider
+     <label class="check"><input type="checkbox"> Show grid</label>
+     <div class="field field--inline"><label for="y">Blend</label><select id="y">…</select></div>
+   Old markup (.motion-control rows, .motion-check, .file-button…) is restyled to the same look.
+
+   Selectors start with P = "html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel)": one extra id of
+   specificity, so these rules win over the older per-tool rules in style.css without !important. */
+
+.tool-ui {
+  --ui-fg: #fff;
+  --ui-bg: #000;
+  --ui-line: rgba(255, 255, 255, 0.2);
+  --ui-line-strong: rgba(255, 255, 255, 0.55);
+  --ui-muted: rgba(255, 255, 255, 0.66);
+  --ui-faint: rgba(255, 255, 255, 0.42);
+  --ui-hover: rgba(255, 255, 255, 0.08);
+  --ui-display: "Doto", system-ui, sans-serif;
+  --ui-text: var(--ag-data-font, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+  --ui-pad: 20px;
+  --ui-panel-w: 360px;
+  /* settingsToggle.js colours its Hide / Settings button with these. */
+  --ag-toggle-bg: var(--ui-bg);
+  --ag-toggle-fg: var(--ui-fg);
+  --ag-toggle-border: var(--ui-line-strong);
+}
+
+.tool-ui.tool-ui--light {
+  --ui-fg: #000;
+  --ui-bg: #fff;
+  --ui-line: rgba(0, 0, 0, 0.18);
+  --ui-line-strong: rgba(0, 0, 0, 0.6);
+  --ui-muted: rgba(0, 0, 0, 0.66);
+  --ui-faint: rgba(0, 0, 0, 0.45);
+  --ui-hover: rgba(0, 0, 0, 0.06);
+}
+
+/* ---------- Panel ---------- */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) {
+  box-sizing: border-box;
+  background: var(--ui-bg);
+  color: var(--ui-fg);
+  font-family: var(--ui-text);
+  font-size: 12px;
+  font-weight: 400;
+  font-variation-settings: normal;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-transform: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-line-strong) transparent;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) * {
+  box-sizing: border-box;
+}
+@media (min-width: 769px) {
+  html body.tool-ui:not(.ag-sheet):not(#_) :is(#controls, #ui, #isoPanel) {
+    flex: 0 0 var(--ui-panel-w);
+    width: var(--ui-panel-w);
+    max-width: 100%;
+    border-right: 1px solid var(--ui-line);
+  }
+}
+
+/* ---------- Header: title, one line of context, main actions ---------- */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .tool-head {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  margin: 0;
+  padding: 22px var(--ui-pad) var(--ui-pad);
+  border-bottom: 1px solid var(--ui-line);
+  background: var(--ui-bg);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .tool-head__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .tool-head__tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .tool-title {
+  margin: 0;
+  padding: 0;
+  color: var(--ui-fg);
+  font-family: var(--ui-display);
+  font-size: 28px;
+  font-weight: 800;
+  font-variation-settings: "ROND" 0;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .tool-lede {
+  margin: -4px 0 0;
+  color: var(--ui-muted);
+  font-family: var(--ui-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .tool-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .tool-actions > .is-wide {
+  grid-column: 1 / -1;
+}
+/* The Hide button that settingsToggle.js puts in the header slot. */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) button.ag-settings-toggle.is-in-slot {
+  width: auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border-color: var(--ui-line-strong);
+  font-family: var(--ui-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* ---------- Sections ---------- */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.motion-group, .control-group) {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--ui-line);
+  background: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.motion-group, .control-group) > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 0 var(--ui-pad);
+  color: var(--ui-fg);
+  font-family: var(--ui-display);
+  font-size: 13px;
+  font-weight: 700;
+  font-variation-settings: "ROND" 0;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.motion-group, .control-group) > summary::-webkit-details-marker {
+  display: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.motion-group, .control-group) > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin: -4px 2px 0 12px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.7;
+  transition: transform var(--ag-dur-2, 220ms) var(--ag-ease-out, ease-out);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.motion-group, .control-group)[open] > summary::after {
+  margin-top: 4px;
+  transform: rotate(-135deg);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.motion-group, .control-group) > summary:hover {
+  background: var(--ui-hover);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.motion-group-body, .group-body) {
+  display: grid;
+  gap: 14px;
+  padding: 2px var(--ui-pad) var(--ui-pad);
+}
+/* A sub-heading inside a section. */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .tool-subhead {
+  margin: 6px 0 -4px;
+  color: var(--ui-faint);
+  font-family: var(--ui-text);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ---------- Text: labels, hints ---------- */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(label, .control-label, legend) {
+  color: var(--ui-muted);
+  font-family: var(--ui-text);
+  font-size: 12px;
+  font-weight: 400;
+  font-variation-settings: normal;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-transform: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(p, .muted, .motion-muted, .motion-meter, .app-description, .tool-hint) {
+  margin: 0;
+  color: var(--ui-faint);
+  font-family: var(--ui-text);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-transform: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(output, .value-label, .ag-readout) {
+  color: var(--ui-fg);
+  font-family: var(--ui-text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .ag-readout__unit {
+  color: var(--ui-faint);
+}
+
+/* ---------- Fields ---------- */
+/* Label (with its value on the right) above a full-width slider. */
+html body.tool-ui:not(#_) :is(#controls, #ui) .field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui) .field > label:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui) .field--inline {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  align-items: center;
+  gap: 12px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui) .field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 12px;
+}
+/* Old row markup: label | slider | value  ->  label + value above the slider. */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "label value" "input input";
+  align-items: center;
+  gap: 4px 12px;
+  min-height: 0;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-control > label { grid-area: label; }
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-control > input[type="range"] { grid-area: input; }
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-control > :is(output, .motion-value-input, .ag-readout) {
+  grid-area: value;
+  justify-self: end;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-value-input {
+  width: 72px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0 6px;
+  text-align: right;
+  font-size: 11px;
+}
+
+/* ---------- Buttons ---------- */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(button:not(.key-button), .file-button, .motion-file-button) {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  height: auto;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ui-fg);
+  font-family: var(--ui-display);
+  font-size: 12px;
+  font-weight: 800;
+  font-variation-settings: "ROND" 0;
+  line-height: 1.15;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: normal;
+  cursor: pointer;
+  transform: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(button:not(.key-button), .file-button, .motion-file-button):hover:not(:disabled) {
+  border-color: var(--ui-fg);
+  background: var(--ui-hover);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(button:not(.key-button), .file-button, .motion-file-button):focus-visible {
+  outline: 2px solid var(--ui-fg);
+  outline-offset: 2px;
+}
+/* Primary action and the "on" state of toggles / choices: filled. */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(button:not(.key-button), .file-button, .motion-file-button):is(.is-primary, .is-active, .active, [aria-pressed="true"]),
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(button:not(.key-button), .file-button, .motion-file-button):is(.is-primary, .is-active, .active, [aria-pressed="true"]):hover:not(:disabled) {
+  border-color: var(--ui-fg);
+  background: var(--ui-fg);
+  color: var(--ui-bg);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(button, .file-button):disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+/* File inputs hide inside their label-button. */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.file-button, .motion-file-button) input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .button-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 6px;
+}
+/* Choice grids (modes, shapes). */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.mode-buttons, .choice-grid) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .choice-grid--icons {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+/* ---------- Inputs ---------- */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(select, input[type="number"], input[type="text"]) {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--ui-fg);
+  font-family: var(--ui-text);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 11px) 50%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) select option {
+  background: var(--ui-bg);
+  color: var(--ui-fg);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(select, input[type="number"], input[type="text"]):focus-visible {
+  outline: none;
+  border-color: var(--ui-fg);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="color"] {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  min-height: 32px;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 0; }
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="color"]::-moz-color-swatch { border: 0; border-radius: 0; }
+
+/* Sliders: hairline track, square thumb. */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="range"]:focus-visible {
+  outline: 1px dotted var(--ui-fg);
+  outline-offset: 2px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="range"]::-webkit-slider-runnable-track {
+  height: 1px;
+  border: 0;
+  border-radius: 0;
+  background: var(--ui-line-strong);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -5.5px;
+  border: 0;
+  border-radius: 0;
+  background: var(--ui-fg);
+  box-shadow: 0 0 0 3px var(--ui-bg);
+  transition: transform var(--ag-dur-1, 120ms) var(--ag-ease-out, ease-out);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.25);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="range"]::-moz-range-track {
+  height: 1px;
+  border: 0;
+  background: var(--ui-line-strong);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="range"]::-moz-range-progress {
+  height: 1px;
+  background: var(--ui-fg);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--ui-fg);
+  box-shadow: 0 0 0 3px var(--ui-bg);
+}
+
+/* Checkboxes: square box, filled when on. */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.check, .motion-check, label:has(> input[type="checkbox"])) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  min-height: 22px;
+  color: var(--ui-fg);
+  cursor: pointer;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+  width: 14px;
+  height: 14px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="checkbox"]::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: var(--ui-bg);
+  transform: scale(0);
+  transition: transform var(--ag-dur-1, 120ms) var(--ag-ease-out, ease-out);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="checkbox"]:checked {
+  border-color: var(--ui-fg);
+  background: var(--ui-fg);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="checkbox"]:checked::before {
+  transform: scale(1);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--ui-fg);
+  outline-offset: 2px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .check-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+/* ---------- Empty state on the canvas ---------- */
+.tool-ui .tool-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--ui-faint);
+  font-family: var(--ui-text);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+.tool-ui .tool-empty strong {
+  color: var(--ui-fg);
+  font-family: var(--ui-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.tool-ui .tool-empty[hidden] {
+  display: none;
+}
+
+/* ---------- Mobile bottom sheet: roomier targets, 16px inputs (no iOS zoom) ---------- */
+html body.tool-ui.ag-sheet:not(#_) :is(#controls, #ui, #isoPanel) .tool-head {
+  position: static;
+  padding-top: 16px;
+}
+html body.tool-ui.ag-sheet:not(#_) :is(#controls, #ui, #isoPanel) .tool-head__row,
+html body.tool-ui.ag-sheet:not(#_) :is(#controls, #ui, #isoPanel) .tool-lede {
+  display: none;
+}
+html body.tool-ui.ag-sheet:not(#_) :is(#controls, #ui, #isoPanel) :is(button:not(.key-button), .file-button, .motion-file-button) {
+  min-height: 44px;
+}
+html body.tool-ui.ag-sheet:not(#_) :is(#controls, #ui, #isoPanel) :is(select, input[type="number"], input[type="text"]) {
+  min-height: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+html body.tool-ui.ag-sheet:not(#_) :is(#controls, #ui, #isoPanel) input[type="range"] {
+  height: 32px;
+  min-height: 32px;
+}
+html body.tool-ui.ag-sheet:not(#_) :is(#controls, #ui, #isoPanel) input[type="range"]::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -8.5px;
+}
+html body.tool-ui.ag-sheet:not(#_) :is(#controls, #ui, #isoPanel) input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+html body.tool-ui.ag-sheet:not(#_) :is(#controls, #ui, #isoPanel) :is(.check, .motion-check, label:has(> input[type="checkbox"])) {
+  min-height: 36px;
+}
+html body.tool-ui.ag-sheet:not(#_) :is(#controls, #ui, #isoPanel) :is(.motion-group, .control-group) > summary {
+  min-height: 52px;
+}
+
+/* ---------- Sample carousel (scripts/sampleMedia.js) ---------- */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .sample-loader {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .sample-carousel-controls {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 6px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .sample-carousel-controls button {
+  padding: 0;
+  font-family: var(--ui-text);
+  font-size: 14px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .sample-carousel-name {
+  color: var(--ui-fg);
+  font-family: var(--ui-text);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .sample-preview {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--ui-line);
+  border-radius: 0;
+  background: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .sample-preview :is(img, video) {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 0;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .sample-preview :is(p, span, figcaption, .sample-preview__label) {
+  display: none;
+}
+
+/* ---------- Canvas prompt (older markup: .canvas-prompt) looks like .tool-empty ---------- */
+html body.tool-ui:not(#_) .canvas-prompt {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ui-faint);
+  font-family: var(--ui-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  white-space: normal;
+}
+
+/* ---------- Fixes for older inner markup ---------- */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) label > span,
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-check span {
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.check, .motion-check, label:has(> input[type="checkbox"])) {
+  color: var(--ui-fg);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="number"].motion-value-input {
+  flex: none;
+  width: 64px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-color: var(--ui-line);
+  text-align: right;
+  font-size: 11px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(button:not(.key-button), .file-button, .motion-file-button).is-primary:disabled {
+  background: transparent;
+  color: var(--ui-fg);
+  border-color: var(--ui-line-strong);
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) :is(.motion-meter, .tool-hint) {
+  padding: 0;
+  text-indent: 0;
+}
+/* MotionStills: canvas size preset + width / height. */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-canvas-size {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) minmax(0, 0.7fr);
+  align-items: center;
+  gap: 6px 6px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-canvas-size > select {
+  grid-column: 2 / -1;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-canvas-size > input:first-of-type {
+  grid-column: 2;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-custom-shape {
+  display: grid;
+  gap: 8px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-custom-shape__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-custom-shape__top span {
+  color: var(--ui-muted);
+  font-family: var(--ui-text);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-custom-shape__top button {
+  width: auto;
+  min-height: 28px;
+  padding: 0 12px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) .motion-custom-shape canvas {
+  border: 1px solid var(--ui-line);
+  border-radius: 0;
+}
+
+/* The "Settings" button that brings a hidden panel back (settingsToggle.js). */
+html body.tool-ui:not(#_) button.ag-settings-toggle:not(.is-in-slot) {
+  min-height: 28px;
+  height: 28px;
+  padding: 0 10px;
+  font-family: var(--ui-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+/* Isolation keeps its own row layouts (label | slider | value, key buttons); only the rhythm changes. */
+html body.tool-ui:not(#_) #isoPanel .group-body {
+  gap: 12px;
+}
+html body.tool-ui:not(#_) #isoPanel .group-body > * {
+  margin-top: 0;
+}
+html body.tool-ui:not(#_) #isoPanel .tool-actions .check {
+  justify-content: center;
+}
+html body.tool-ui:not(#_) #isoPanel :is(.color-row, .source-head) {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+html body.tool-ui:not(#_) #isoPanel .midi-row {
+  border-top-color: var(--ui-line);
+}
+html body.tool-ui:not(#_) #isoPanel :is(.midi-row, .audio-row) button {
+  flex: none;
+  width: auto;
+}
+
+/* File inputs that are shown as is. */
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="file"] {
+  width: 100%;
+  min-height: 36px;
+  padding: 0;
+  border: 1px dashed var(--ui-line-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ui-muted);
+  font-family: var(--ui-text);
+  font-size: 11px;
+}
+html body.tool-ui:not(#_) :is(#controls, #ui, #isoPanel) input[type="file"]::file-selector-button {
+  height: 34px;
+  margin: 0 10px 0 0;
+  padding: 0 12px;
+  border: 0;
+  border-right: 1px solid var(--ui-line-strong);
+  background: var(--ui-fg);
+  color: var(--ui-bg);
+  font-family: var(--ui-display);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}

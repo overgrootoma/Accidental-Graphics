@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
   <link rel="stylesheet" href="../css/data.css">
+<link rel="stylesheet" href="../css/tool.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
@@ -41,55 +42,63 @@
     body.ag-sheet.panel-ui-page .canvas-stage { flex: 1 1 auto; min-height: 0; padding: 0; }
     /* Desktop: end the stage at the footer line so the HUD corners stay visible. */
     @media (min-width: 901px) { body.panel-ui-page:not(.ag-sheet) .canvas-stage { align-self: flex-start; height: calc(100dvh - 72px - 34px); flex: 1 1 0; } }
-    body.ag-sheet .video-preview-wrapper {
-      position: fixed; top: 38%; left: 8px; right: auto; bottom: auto; left: auto;
-      align-items: flex-end; z-index: 90;
-    }
-    body.ag-sheet #video { width: 96px; height: auto; margin: 0; border-width: 1px; }
-    body.ag-sheet .video-preview__shrink { min-height: 40px; }
+    /* Tile list: compact rows, darkest tile first. */
+    html body.tool-ui:not(#_) #controls #imgOrderContainer { display: grid; gap: 4px; max-height: 320px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; overflow-y: auto; }
+    html body.tool-ui:not(#_) #controls #imgOrderContainer:not(.has-items) { display: none; }
+    html body.tool-ui:not(#_) #controls .imgOrderItem { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 4px; border: 1px solid var(--ui-line); border-radius: 0; background: none; box-shadow: none; }
+    html body.tool-ui:not(#_) #controls .imgOrderItem__thumb { width: 40px; height: 40px; border-radius: 0; border: 0; box-shadow: none; }
+    html body.tool-ui:not(#_) #controls .imgOrderItem span { color: var(--ui-muted); font-family: var(--ui-text); font-size: 11px; letter-spacing: 0; text-transform: none; font-weight: 400; }
+    html body.tool-ui:not(#_) #controls .imgOrderItem__controls { display: flex; flex-direction: row; gap: 4px; }
+    html body.tool-ui:not(#_) #controls .imgOrderItem__controls button { width: 28px; min-height: 28px; padding: 0; font-family: var(--ui-text); font-size: 12px; }
+    html body.tool-ui:not(#_) #controls .img-order-placeholder { margin: 0; padding: 0; border: 0; text-align: left; letter-spacing: 0; text-transform: none; }
+    /* Webcam preview lives in the panel's Webcam section. */
+    #controls .video-preview-wrapper { position: static; display: block; opacity: 1; }
+    #controls .video-preview-wrapper.is-hidden, #controls .video-preview-wrapper.collapsed { display: none; }
+    #controls #video { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; margin: 0; border: 1px solid var(--ui-line); object-fit: cover; }
     body.ag-sheet .app-year { display: none; }
     @media (max-width: 480px) { body.ag-sheet.panel-ui-page { --ag-nav-h: 60px; } }
     @media (min-width: 481px) { body.ag-sheet.panel-ui-page { --ag-nav-h: 72px; } }
   </style>
 </head>
 
-<body class="app-page panel-ui-page">
+<body class="app-page panel-ui-page tool-ui">
 
   <!-- Main layout: sidebar links + canvas rechts -->
   <div id="main">
     <div id="controls">
-      <div class="panel-ui-header">
-        <div>
-          <p class="motion-eyebrow">IMAGEine</p>
-          <h1>Settings</h1>
+      <header class="tool-head">
+        <div class="tool-head__row">
+          <h1 class="tool-title">IMAGEine</h1>
+          <span data-settings-toggle-slot></span>
         </div>
-        <label class="file-button file-button--full">Upload Images
-          <input type="file" id="imgUpload" multiple accept="image/*">
-        </label>
-        <div class="motion-primary-actions" aria-label="Main actions">
-          <button id="toggleCam" type="button">Start Webcam</button>
-          <button id="exportBtn" type="button">Export Still</button>
+        <p class="tool-lede">Rebuild your webcam out of tiles: your own images or ASCII characters, picked by brightness.</p>
+        <div class="tool-actions">
+          <button id="toggleCam" type="button">Start webcam</button>
+          <label class="file-button">Import images
+            <input type="file" id="imgUpload" multiple accept="image/*">
+          </label>
+          <button id="exportBtn" type="button" class="is-primary is-wide">Export PNG</button>
         </div>
-      </div>
+      </header>
 
-      <details class="motion-group">
-        <summary>Images</summary>
+      <details class="motion-group" open>
+        <summary>Tiles</summary>
         <div class="motion-group-body">
           <div class="button-row">
-            <button id="loadSamplesBtn" type="button">Load Sample Images</button>
-            <button id="resetImagesBtn" type="button">Reset Images</button>
+            <button id="randomAsciiBtn" type="button">ASCII set</button>
+            <button id="loadSamplesBtn" type="button">Samples</button>
+            <button id="resetImagesBtn" type="button">Clear</button>
           </div>
           <div id="imgOrderContainer"></div>
-          <div id="imgOrderPlaceholder" class="img-order-placeholder">Import images to build your ASCII stack.</div>
+          <p id="imgOrderPlaceholder" class="img-order-placeholder tool-hint">No tiles yet. Import images or start with the ASCII set. Drag tiles to change which brightness they stand for.</p>
         </div>
       </details>
 
-      <details class="motion-group">
-        <summary>ASCII</summary>
+      <details class="motion-group" open>
+        <summary>Mosaic</summary>
         <div class="motion-group-body">
-          <button id="randomAsciiBtn" type="button">Random ASCII</button>
           <div class="motion-control">
-            <label for="gridSize">Cell size</label>
+            <label for="gridSize">Tile size</label>
             <input type="range" id="gridSize" min="6" max="64" value="16" class="slider">
             <output id="gridSizeOut">16 px</output>
           </div>
@@ -98,40 +107,50 @@
             <input type="range" id="contrast" min="-100" max="100" value="0" class="slider">
             <output id="contrastOut">0</output>
           </div>
-          <button id="invertBtn" type="button" aria-pressed="false">Invert: Off</button>
-          <button id="toggleBaseBtn" type="button">Webcam Layer: On</button>
-          <label for="cameraFacing">Camera</label>
-          <select id="cameraFacing">
-            <option value="user" selected>Front (mirrored)</option>
-            <option value="environment">Back</option>
-          </select>
-          <label for="blendMode">Blend Mode</label>
-          <select id="blendMode">
-            <option value="source-over" selected>Normal</option>
-            <option value="screen">Screen</option>
-            <option value="lighten">Lighten</option>
-            <option value="darken">Darken</option>
-            <option value="multiply">Multiply</option>
-            <option value="overlay">Overlay</option>
-            <option value="difference">Difference</option>
-            <option value="color-dodge">Color Dodge</option>
-            <option value="hard-light">Hard Light</option>
-          </select>
+          <div class="field field--inline">
+            <label for="blendMode">Blend</label>
+            <select id="blendMode">
+              <option value="source-over" selected>Normal</option>
+              <option value="screen">Screen</option>
+              <option value="lighten">Lighten</option>
+              <option value="darken">Darken</option>
+              <option value="multiply">Multiply</option>
+              <option value="overlay">Overlay</option>
+              <option value="difference">Difference</option>
+              <option value="color-dodge">Color Dodge</option>
+              <option value="hard-light">Hard Light</option>
+            </select>
+          </div>
+          <label class="check"><input type="checkbox" id="invertBox"> Invert brightness</label>
+        </div>
+      </details>
+
+      <details class="motion-group">
+        <summary>Webcam</summary>
+        <div class="motion-group-body">
+          <div class="field field--inline">
+            <label for="cameraFacing">Camera</label>
+            <select id="cameraFacing">
+              <option value="user" selected>Front (mirrored)</option>
+              <option value="environment">Back</option>
+            </select>
+          </div>
+          <label class="check"><input type="checkbox" id="baseBox" checked> Show the webcam under the tiles</label>
+          <label class="check"><input type="checkbox" id="previewBox" checked> Show a preview here</label>
+          <div class="video-preview-wrapper is-hidden">
+            <video id="video" class="webcam-hidden" autoplay playsinline muted></video>
+          </div>
         </div>
       </details>
     </div>
 
     <!-- Canvas rechts -->
     <div class="canvas-stage">
-      <div class="canvas-prompt" id="webcamPrompt">Start Webcam</div>
+      <div class="tool-empty" id="webcamPrompt"><strong>Start the webcam</strong>Or import images: the mosaic follows the webcam, or your first image without one.</div>
       <canvas id="asciiCanvas"></canvas>
     </div>
   </div>
 
-<div class="video-preview-wrapper is-hidden">
-  <video id="video" class="webcam-hidden" autoplay playsinline muted></video>
-  <button type="button" id="videoToggleBtn" class="video-preview__shrink" aria-label="Toggle webcam preview">Show Preview</button>
-</div>
 <div class="app-year">2026 Accidental Graphics</div>
 <script src="../scripts/sampleMedia.js"></script>
 <script>
@@ -151,11 +170,11 @@ const exportBtn = document.getElementById('exportBtn');
 const resetImagesBtn = document.getElementById('resetImagesBtn');
 const loadSamplesBtn = document.getElementById('loadSamplesBtn');
 const randomAsciiBtn = document.getElementById('randomAsciiBtn');
-const videoToggleBtn = document.getElementById('videoToggleBtn');
+const previewBox = document.getElementById('previewBox');
 const videoPreviewWrapper = document.querySelector('.video-preview-wrapper');
 const imgOrderPlaceholder = document.getElementById('imgOrderPlaceholder');
-const toggleBaseBtn = document.getElementById('toggleBaseBtn');
-const invertBtn = document.getElementById('invertBtn');
+const baseBox = document.getElementById('baseBox');
+const invertBox = document.getElementById('invertBox');
 const toggleCamBtn = document.getElementById('toggleCam');
 const blendModeSelect = document.getElementById('blendMode');
 const cameraFacingSelect = document.getElementById('cameraFacing');
@@ -214,7 +233,7 @@ window.addEventListener('load', syncAsciiCanvasSize);
 
 // ---------- Prompt / order list ----------
 function syncWebcamPrompt() {
-  webcamPrompt?.classList.toggle('hidden', Boolean(webcamStream) || images.length > 0);
+  if (webcamPrompt) webcamPrompt.hidden = Boolean(webcamStream) || images.length > 0;
 }
 
 function updateOrderContainerState() {
@@ -396,19 +415,8 @@ function generateAsciiSymbolDataURL(char) {
 gridInput.addEventListener('input', () => { gridSize = parseInt(gridInput.value, 10) || 16; });
 contrastInput.addEventListener('input', () => { contrastFactor = Math.pow(2, (parseInt(contrastInput.value, 10) || 0) / 50); });
 
-function setToggleLabel(btn, label, on) {
-  btn.textContent = `${label}: ${on ? 'On' : 'Off'}`;
-  btn.setAttribute('aria-pressed', String(on));
-}
-toggleBaseBtn?.addEventListener('click', () => {
-  showVideoBase = !showVideoBase;
-  setToggleLabel(toggleBaseBtn, 'Webcam Layer', showVideoBase);
-});
-setToggleLabel(toggleBaseBtn, 'Webcam Layer', showVideoBase);
-invertBtn.addEventListener('click', () => {
-  invert = !invert;
-  setToggleLabel(invertBtn, 'Invert', invert);
-});
+baseBox.addEventListener('change', () => { showVideoBase = baseBox.checked; });
+invertBox.addEventListener('change', () => { invert = invertBox.checked; });
 blendModeSelect?.addEventListener('change', () => {
   blendMode = blendModeSelect.value || 'source-over';
 });
@@ -416,10 +424,8 @@ blendModeSelect?.addEventListener('change', () => {
 // ---------- Webcam ----------
 toggleCamBtn?.setAttribute('aria-pressed', 'false');
 function updatePreviewToggleLabel() {
-  if (!videoToggleBtn || !videoPreviewWrapper) return;
-  const hidden = videoPreviewWrapper.classList.contains('is-hidden') || videoPreviewWrapper.classList.contains('collapsed');
-  videoToggleBtn.setAttribute('aria-pressed', String(!hidden));
-  videoToggleBtn.textContent = hidden ? 'Show Preview' : 'Hide Preview';
+  if (!previewBox || !videoPreviewWrapper) return;
+  videoPreviewWrapper.classList.toggle('collapsed', !previewBox.checked);
 }
 async function startWebcamPreview() {
   if (webcamStream) return;
@@ -438,8 +444,7 @@ async function startWebcamPreview() {
     video.style.transform = cameraFacing === 'user' ? '' : 'none';
     video.classList.remove('webcam-hidden');
     videoPreviewWrapper?.classList.remove('is-hidden');
-    videoPreviewWrapper?.classList.remove('collapsed');
-    if (toggleCamBtn) toggleCamBtn.textContent = 'Stop Webcam';
+    if (toggleCamBtn) toggleCamBtn.textContent = 'Stop webcam';
     toggleCamBtn?.setAttribute('aria-pressed', 'true');
     syncWebcamPrompt();
     updatePreviewToggleLabel();
@@ -458,7 +463,7 @@ function stopWebcamPreview() {
   video.srcObject = null;
   video.classList.add('webcam-hidden');
   videoPreviewWrapper?.classList.add('is-hidden');
-  if (toggleCamBtn) toggleCamBtn.textContent = 'Start Webcam';
+  if (toggleCamBtn) toggleCamBtn.textContent = 'Start webcam';
   toggleCamBtn?.setAttribute('aria-pressed', 'false');
   syncWebcamPrompt();
   updatePreviewToggleLabel();
@@ -474,20 +479,17 @@ cameraFacingSelect?.addEventListener('change', () => {
     startWebcamPreview();
   }
 });
-videoToggleBtn?.addEventListener('click', () => {
-  if (!videoPreviewWrapper) return;
-  videoPreviewWrapper.classList.toggle('collapsed');
-  updatePreviewToggleLabel();
-});
+previewBox?.addEventListener('change', updatePreviewToggleLabel);
 updatePreviewToggleLabel();
 
 // Remember the settings between visits (scripts/savedSettings.js). Images are not stored.
 AGSettings.persist('imageine', {
   controls: ['gridSize', 'contrast', 'blendMode', 'cameraFacing'],
-  get: () => ({ showVideoBase, invert }),
+  get: () => ({ showVideoBase, invert, preview: previewBox.checked }),
   set: (saved) => {
-    if (typeof saved.showVideoBase === 'boolean' && saved.showVideoBase !== showVideoBase) toggleBaseBtn?.click();
-    if (typeof saved.invert === 'boolean' && saved.invert !== invert) invertBtn.click();
+    if (typeof saved.showVideoBase === 'boolean') { showVideoBase = saved.showVideoBase; baseBox.checked = showVideoBase; }
+    if (typeof saved.invert === 'boolean') { invert = saved.invert; invertBox.checked = invert; }
+    if (typeof saved.preview === 'boolean') { previewBox.checked = saved.preview; updatePreviewToggleLabel(); }
   },
 });
 
