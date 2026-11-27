@@ -28,7 +28,7 @@ Code, commentaar en commitberichten zijn in het Engels.
 | `scripts/navConfig.js` | Laadt `content/*.json` → `window.AGContent`; gedeeld door alle pagina's |
 | `scripts/navMenu.js` | Zwarte menubalk bovenaan |
 | `scripts/settingsToggle.js` | Verberg/toon het instellingenpaneel (knop + H-toets) |
-| `scripts/dataLayer.js`, `css/data.css` | Gedeelde "labo-data"-stijl: `AGData.hud()` (meetwaarden in één tekstregel boven en onder het canvas, D-toets), `AGData.readouts()`, motion-tokens en `AGData.spring()`. API staat bovenaan het script |
+| `scripts/dataLayer.js`, `css/data.css` | Gedeelde "labo-data"-stijl: `AGData.hud()` (alle meetwaarden in één lijstje rechtsonder, ingeklapt tot sitetijd + klok, openklappen met hover/tik, D-toets), `AGData.siteTime()` (tijd op de hele site), `AGData.readouts()`, motion-tokens en `AGData.spring()`. API staat bovenaan het script |
 | `css/tool.css` | Eén paneelsysteem voor alle tools (`body.tool-ui`, Isolation ook `tool-ui--light`): header met titel, één zin uitleg en hoofdacties, secties, velden, knoppen, sliders, checkboxes. Markup staat bovenaan het bestand |
 | `scripts/savedSettings.js` | `AGSettings.persist`: instellingen bewaren per tool |
 | `scripts/sampleMedia.js` | Voorbeeldbeelden/-video's in de tools |
@@ -58,7 +58,8 @@ Code, commentaar en commitberichten zijn in het Engels.
 ## Stijl en mobiel
 
 - Data-stijl: echte meetwaarden (coördinaten, fps, tellers, specimen-nummers, resolutie), klein monospace.
-  Altijd via `AGData`, als DOM-overlay en **buiten** het canvas: nooit in exports. Geen meetlatjes,
+  Altijd via `AGData`, als DOM-overlay en **buiten** het canvas: nooit in exports. Alles samen in één lijstje
+  in de hoek, niet verspreid over de hoeken (Jorne, 2026-11-27). Tijd = tijd op de hele site, plus de klok. Geen meetlatjes,
   hoekkruisjes of andere lijnen rond het canvas: die stonden het werk in de weg (Jorne, 2026-11-27).
 - Typografie: Doto voor titels, sectiekoppen, knoppen en het menu; systeem-monospace voor labels, waarden
   en uitleg. Tooltitel groot bovenaan het paneel, geen kop "Settings". Aan/uit-opties zijn checkboxes,
