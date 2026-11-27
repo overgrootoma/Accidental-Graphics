@@ -48,7 +48,7 @@
     html body.tool-ui:not(#_) #controls .motion-layer__state.is-busy { color: var(--ui-fg); }
     html body.tool-ui:not(#_) #controls .motion-layer__title { min-height: 30px; }
     html body.tool-ui:not(#_) #controls .motion-layer__actions {
-      grid-template-columns: 1fr 1fr 34px 34px 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 4px;
     }
     html body.tool-ui:not(#_) #controls .motion-layer__actions button {
@@ -57,6 +57,89 @@
       font-size: 10px;
     }
     html body.tool-ui:not(#_) #controls .motion-layer-list:empty { display: none; }
+    html body.tool-ui:not(#_) #controls #clipLengthRow[hidden] { display: none; }
+
+    /* Row = grip | body. The grip (two arrows) drags the layer up or down the stack. */
+    html body.tool-ui:not(#_) #controls .motion-layer {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr);
+      align-items: stretch;
+      gap: 0 8px;
+    }
+    html body.tool-ui:not(#_) #controls .motion-layer__body { display: grid; gap: 6px; min-width: 0; }
+    html body.tool-ui:not(#_) #controls button.motion-layer__grip {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      width: 22px;
+      min-height: 0;
+      height: auto;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--ui-faint);
+      font-size: 11px;
+      line-height: 1;
+      cursor: grab;
+      touch-action: none;
+    }
+    html body.tool-ui:not(#_) #controls button.motion-layer__grip:hover,
+    html body.tool-ui:not(#_) #controls button.motion-layer__grip:focus-visible,
+    html body.tool-ui:not(#_) #controls .motion-layer.is-dragging .motion-layer__grip { color: var(--ui-fg); background: transparent; }
+    html body.tool-ui:not(#_) #controls .motion-layer.is-dragging {
+      position: relative;
+      z-index: 2;
+      background: var(--ui-bg, #fff);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+      cursor: grabbing;
+    }
+    html body.tool-ui:not(#_) #controls .motion-layer.is-dragging .motion-layer__grip { cursor: grabbing; }
+    html body.tool-ui:not(#_) #controls .motion-layer-list.is-sorting .motion-layer:not(.is-dragging) {
+      transition: transform var(--ag-dur-2) var(--ag-ease-out), border-color var(--ag-dur-2) var(--ag-ease-out), background-color var(--ag-dur-2) var(--ag-ease-out);
+    }
+    html body.tool-ui:not(#_) #controls .motion-layer-list.is-sorting { user-select: none; -webkit-user-select: none; }
+
+    /* Name row: a tiny still of the clip, then the name. */
+    html body.tool-ui:not(#_) #controls .motion-layer__name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    html body.tool-ui:not(#_) #controls .motion-layer__name .motion-layer__title { flex: 1 1 auto; min-width: 0; }
+    html body.tool-ui:not(#_) #controls .motion-layer__thumb {
+      flex: 0 0 auto;
+      display: block;
+      width: 40px;
+      height: 28px;
+      border: 1px solid var(--ui-line);
+      background: #000;
+    }
+
+    /* Trim: the whole clip as a bar, the window is the part that plays. */
+    html body.tool-ui:not(#_) #controls .motion-trim { display: grid; gap: 4px; }
+    html body.tool-ui:not(#_) #controls .motion-trim__bar {
+      position: relative;
+      height: 18px;
+      border: 1px solid var(--ui-line);
+      background: repeating-linear-gradient(90deg, transparent 0 7px, var(--ui-line) 7px 8px);
+      cursor: pointer;
+      touch-action: none;
+    }
+    html body.tool-ui:not(#_) #controls .motion-trim__bar:focus-visible { outline: 1px solid var(--ui-fg); outline-offset: 2px; }
+    html body.tool-ui:not(#_) #controls .motion-trim__window {
+      position: absolute;
+      top: -1px;
+      bottom: -1px;
+      left: 0;
+      border: 1px solid var(--ui-fg);
+      background: color-mix(in srgb, var(--ui-fg) 22%, transparent);
+      cursor: grab;
+    }
+    html body.tool-ui:not(#_) #controls .motion-trim__bar.is-dragging .motion-trim__window { cursor: grabbing; background: color-mix(in srgb, var(--ui-fg) 34%, transparent); }
+    html body.tool-ui:not(#_) #controls .motion-trim__text {
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--ui-faint);
+    }
 
     /* Which layer the brush settings belong to. */
     html body.tool-ui:not(#_) #controls .motion-target {
@@ -137,11 +220,15 @@
         <div class="motion-group-body">
           <div class="motion-layer-list" id="layerList"></div>
           <p class="motion-meter" id="layerStatus">No video yet. Every video you import becomes a layer.</p>
+          <div class="motion-control" id="clipLengthRow" hidden>
+            <label for="clipLength">Length (sec)</label>
+            <input id="clipLength" type="range" min="0.5" max="10" step="0.1" value="10" class="slider">
+            <input id="clipLengthVal" class="motion-value-input" type="number" min="0.5" max="10" step="0.1" value="10" aria-label="Length in seconds">
+          </div>
           <label class="motion-check">
             <input id="weaveLayers" type="checkbox" checked>
-            <span>Weave crossing paths over and under</span>
+            <span>Weave paths</span>
           </label>
-          <p class="tool-hint">Each layer has its own video and its own brush. Play runs all of them together. Where the paths of two layers cross, they take turns going over and under, like a knot.</p>
         </div>
       </details>
 
@@ -428,6 +515,9 @@ const layerList = document.getElementById('layerList');
 const layerStatus = document.getElementById('layerStatus');
 const brushTarget = document.getElementById('brushTarget');
 const weaveEl = document.getElementById('weaveLayers');
+const clipLengthRow = document.getElementById('clipLengthRow');
+const clipLengthEl = document.getElementById('clipLength');
+const clipLengthVal = document.getElementById('clipLengthVal');
 const showVideoBackgroundEl = document.getElementById('showVideoBackground');
 const strokeEnabledEl = document.getElementById('strokeEnabled');
 const trackDotEnabledEl = document.getElementById('trackDotEnabled');
@@ -744,6 +834,8 @@ function createMotionLayer(name, settings){
     occ: new Uint8Array(occW * occH),
     weaveCount: 0,
     weaveTracks: new Map(),
+    inPoint: 0,                // start of the part of the clip that plays (seconds)
+    thumb: null,               // tiny still for the layer list
     newFrame: false,
     lastTime: -1,
     fps: 0,
@@ -799,6 +891,242 @@ function layerHasFrame(layer){
 function layerDuration(layer){
   const d = layer.video.duration;
   return layer.kind === 'file' && Number.isFinite(d) && d > 0 ? d : 0;
+}
+
+// ---------- Length + trim ----------
+// One length for the whole piece. A clip that is longer plays only its chosen part
+// (inPoint .. inPoint + length); a shorter clip plays whole.
+let clipLength = 0;            // seconds; 0 = the full length of the longest clip
+
+function longestClip(){
+  return motionLayers.reduce((max, layer) => Math.max(max, layerDuration(layer)), 0);
+}
+
+function outputLength(){
+  const full = longestClip();
+  return clipLength > 0 && full > 0 ? Math.min(clipLength, full) : full;
+}
+
+function layerSpan(layer){
+  const d = layerDuration(layer);
+  return d ? Math.min(d, outputLength() || d) : 0;
+}
+
+function layerIn(layer){
+  const d = layerDuration(layer);
+  return Math.max(0, Math.min(layer.inPoint || 0, d - layerSpan(layer)));
+}
+
+function layerOut(layer){
+  return layerIn(layer) + layerSpan(layer);
+}
+
+// Time inside the playing part, 0 .. span.
+function layerClock(layer){
+  return Math.max(0, Math.min(layerSpan(layer), layer.video.currentTime - layerIn(layer)));
+}
+
+function isTrimmed(layer){
+  return layerDuration(layer) - layerSpan(layer) > 0.05;
+}
+
+// Tiny cover-fit still of the layer's current frame, for the layer list.
+function drawLayerThumb(layer){
+  const v = layer.video;
+  if(!layer.thumb){
+    layer.thumb = document.createElement('canvas');
+    layer.thumb.className = 'motion-layer__thumb';
+    layer.thumb.width = 80;
+    layer.thumb.height = 56;
+    layer.thumb.setAttribute('aria-hidden', 'true');
+  }
+  const c = layer.thumb;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, c.width, c.height);
+  const vw = v.videoWidth;
+  const vh = v.videoHeight;
+  if(!vw || !vh || v.readyState < 2) return;
+  const scale = Math.max(c.width / vw, c.height / vh);
+  const sw = c.width / scale;
+  const sh = c.height / scale;
+  ctx.save();
+  if(layer.mirrored){
+    ctx.translate(c.width, 0);
+    ctx.scale(-1, 1);
+  }
+  try{ ctx.drawImage(v, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, c.width, c.height); } catch(error){}
+  ctx.restore();
+}
+
+// Shows the length slider once there is a video, ranging up to the longest clip.
+function syncClipLengthControl(){
+  if(!clipLengthRow) return;
+  const full = longestClip();
+  clipLengthRow.hidden = !(full > 0);
+  if(!(full > 0)) return;
+  const max = Math.max(0.5, Math.round(full * 10) / 10);
+  clipLengthEl.max = String(max);
+  clipLengthVal.max = String(max);
+  const value = clipLength > 0 ? Math.min(clipLength, max) : max;
+  clipLengthEl.value = String(value);
+  clipLengthVal.value = String(Math.round(value * 10) / 10);
+}
+
+function setClipLength(seconds){
+  const full = longestClip();
+  const max = Math.max(0.5, Math.round(full * 10) / 10);
+  const next = Math.max(0.5, Math.min(max, Number(seconds) || max));
+  // At the end of the slider: the full clips, also when a longer clip is added later.
+  clipLength = next >= max - 0.001 ? 0 : next;
+  syncClipLengthControl();
+  motionLayers.forEach(layer => {
+    if(layer.kind !== 'file') return;
+    layer.inPoint = layerIn(layer);
+    const v = layer.video;
+    if(v.currentTime > layerOut(layer) + 0.02 || v.currentTime < layerIn(layer) - 0.02){
+      if(v.paused) previewLayerIn(layer);
+      else {
+        v.currentTime = layerIn(layer);
+        resetLayerTracking(layer);
+      }
+    }
+  });
+  refreshTrimBars();
+  refreshLayerTimes();
+}
+
+// Seeks a paused layer to the start of its part, for the thumbnail (one seek at a time).
+function previewLayerIn(layer){
+  if(layer.kind !== 'file' || isVideoExporting) return;
+  if(layer.previewing){
+    layer.previewAgain = true;
+    return;
+  }
+  layer.previewing = true;
+  seekVideo(layer.video, layerIn(layer)).then(() => {
+    layer.previewing = false;
+    resetLayerTracking(layer);
+    drawLayerThumb(layer);
+    if(showVideoBackgroundEl?.checked) renderCompositeFrame();
+    refreshLayerTimes();
+    if(layer.previewAgain){
+      layer.previewAgain = false;
+      previewLayerIn(layer);
+    }
+  });
+}
+
+function setLayerIn(layer, seconds){
+  const d = layerDuration(layer);
+  layer.inPoint = Math.max(0, Math.min(seconds, d - layerSpan(layer)));
+  if(layer.video.paused) previewLayerIn(layer);
+}
+
+function trimText(layer){
+  return `${formatClock(layerIn(layer))} – ${formatClock(layerOut(layer))} of ${formatClock(layerDuration(layer))}`;
+}
+
+function updateTrimBar(layer, wrap){
+  const d = layerDuration(layer);
+  const show = layer.kind === 'file' && isTrimmed(layer);
+  wrap.hidden = !show;
+  if(!show || !d) return;
+  const win = wrap.querySelector('.motion-trim__window');
+  win.style.left = `${(layerIn(layer) / d) * 100}%`;
+  win.style.width = `${(layerSpan(layer) / d) * 100}%`;
+  const bar = wrap.querySelector('.motion-trim__bar');
+  bar.setAttribute('aria-valuemax', String(Math.round((d - layerSpan(layer)) * 10) / 10));
+  bar.setAttribute('aria-valuenow', String(Math.round(layerIn(layer) * 10) / 10));
+  bar.setAttribute('aria-valuetext', trimText(layer));
+  wrap.querySelector('.motion-trim__text').textContent = trimText(layer);
+}
+
+function refreshTrimBars(){
+  layerList?.querySelectorAll('.motion-layer[data-layer-id]').forEach(row => {
+    const layer = motionLayers.find(item => item.id === row.dataset.layerId);
+    const wrap = row.querySelector('.motion-trim');
+    if(layer && wrap) updateTrimBar(layer, wrap);
+  });
+}
+
+// The bar for one layer row: drag the window (or tap the bar) to choose which part plays.
+function makeTrimBar(layer){
+  const wrap = document.createElement('div');
+  wrap.className = 'motion-trim';
+  const bar = document.createElement('div');
+  bar.className = 'motion-trim__bar';
+  bar.tabIndex = 0;
+  bar.setAttribute('role', 'slider');
+  bar.setAttribute('aria-label', 'Part of the clip that plays');
+  bar.setAttribute('aria-valuemin', '0');
+  bar.title = 'Drag to choose which part of the clip plays';
+  const win = document.createElement('div');
+  win.className = 'motion-trim__window';
+  bar.appendChild(win);
+  const text = document.createElement('span');
+  text.className = 'motion-trim__text';
+  wrap.append(bar, text);
+
+  let grab = 0;
+  let dragging = false;
+  const timeAt = (clientX) => {
+    const rect = bar.getBoundingClientRect();
+    return ((clientX - rect.left) / Math.max(1, rect.width)) * layerDuration(layer);
+  };
+  const apply = (seconds) => {
+    setLayerIn(layer, seconds);
+    updateTrimBar(layer, wrap);
+  };
+  bar.addEventListener('pointerdown', event => {
+    if(event.pointerType === 'mouse' && event.button !== 0) return;
+    if(isVideoExporting) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const t = timeAt(event.clientX);
+    if(event.target === win) grab = t - layerIn(layer);
+    else {
+      grab = layerSpan(layer) / 2;
+      apply(t - grab);
+    }
+    dragging = true;
+    trimDragging = true;
+    bar.classList.add('is-dragging');
+    try{ bar.setPointerCapture(event.pointerId); } catch(error){}
+  });
+  bar.addEventListener('pointermove', event => {
+    if(dragging) apply(timeAt(event.clientX) - grab);
+  });
+  const end = () => {
+    if(!dragging) return;
+    dragging = false;
+    trimDragging = false;
+    bar.classList.remove('is-dragging');
+    // A playing layer jumps to the start of its new part.
+    const v = layer.video;
+    if(!v.paused && (v.currentTime < layerIn(layer) - 0.02 || v.currentTime > layerOut(layer))){
+      v.currentTime = layerIn(layer);
+      resetLayerTracking(layer);
+    }
+    refreshLayerTimes();
+    if(renderPending) renderLayers();
+  };
+  bar.addEventListener('pointerup', end);
+  bar.addEventListener('pointercancel', end);
+  bar.addEventListener('click', event => event.stopPropagation());
+  bar.addEventListener('keydown', event => {
+    const step = event.shiftKey ? 1 : 0.1;
+    let next = null;
+    if(event.key === 'ArrowLeft' || event.key === 'ArrowDown') next = layerIn(layer) - step;
+    else if(event.key === 'ArrowRight' || event.key === 'ArrowUp') next = layerIn(layer) + step;
+    else if(event.key === 'Home') next = 0;
+    else if(event.key === 'End') next = layerDuration(layer);
+    if(next === null) return;
+    event.preventDefault();
+    apply(next);
+  });
+  updateTrimBar(layer, wrap);
+  return wrap;
 }
 
 function resetLayerTracking(layer){
@@ -1006,6 +1334,8 @@ async function addLayerFromSource({url = null, file = null, stream = null, mirro
     resizeLayerCanvases();
   }
   configureLayerAnalysis(layer);
+  drawLayerThumb(layer);
+  syncClipLengthControl();
   setActiveLayer(layer.id);
   renderCompositeFrame();
   syncCanvasSizeControls();
@@ -1082,19 +1412,20 @@ function removeLayer(layer){
   if(activeLayerId === layer.id){
     setActiveLayer(motionLayers[Math.min(index, motionLayers.length - 1)].id, {render: false});
   }
+  syncClipLengthControl();
   renderLayers();
   renderCompositeFrame();
   updatePlayingState();
 }
 
-function moveLayer(layer, delta){
+function moveLayerTo(layer, next){
   const index = motionLayers.indexOf(layer);
-  const next = index + delta;
-  if(index < 0 || next < 0 || next >= motionLayers.length) return;
+  if(index < 0 || next < 0 || next >= motionLayers.length || next === index) return false;
   motionLayers.splice(index, 1);
   motionLayers.splice(next, 0, layer);
   renderLayers();
   renderCompositeFrame();
+  return true;
 }
 
 function resetProjectToNewCanvas(){
@@ -1105,6 +1436,8 @@ function resetProjectToNewCanvas(){
   soloLayerId = null;
   baseVideoLoaded = false;
   hasPlayed = false;
+  clipLength = 0;
+  syncClipLengthControl();
   hud.newSpecimen();
   updatePaintSize();
   dispCtx.clearRect(0, 0, canvasW, canvasH);
@@ -1129,7 +1462,25 @@ function playableLayers(){
 
 function atEnd(layer){
   const d = layerDuration(layer);
-  return d > 0 && (layer.video.ended || layer.video.currentTime >= d - 0.02);
+  return d > 0 && (layer.video.ended || layer.video.currentTime >= layerOut(layer) - 0.02);
+}
+
+function outsidePart(layer){
+  return layerDuration(layer) > 0 && (atEnd(layer) || layer.video.currentTime < layerIn(layer) - 0.02);
+}
+
+// A trimmed layer reaching the end of its part: like the video ending.
+function checkLayerOut(layer){
+  if(layer.kind !== 'file' || layer.video.paused || !isTrimmed(layer)) return false;
+  if(layer.video.currentTime < layerOut(layer) - 0.001) return false;
+  if(isPlaying && loopVideoEl?.checked && !soloLayerId){
+    resetLayerTracking(layer);
+    layer.video.currentTime = layerIn(layer);
+    return true;
+  }
+  layer.video.pause();
+  updatePlayingState();
+  return true;
 }
 
 function playAll(){
@@ -1140,8 +1491,8 @@ function playAll(){
   soloLayerId = null;
   let started = 0;
   motionLayers.forEach(layer => {
-    if(atEnd(layer)){
-      layer.video.currentTime = 0;
+    if(outsidePart(layer)){
+      layer.video.currentTime = layerIn(layer);
       resetLayerTracking(layer);
     }
     layer.video.play().catch(() => {});
@@ -1179,7 +1530,7 @@ function onLayerEnded(layer){
   if(isVideoExporting) return;
   if(isPlaying && loopVideoEl?.checked && !soloLayerId){
     resetLayerTracking(layer);
-    layer.video.currentTime = 0;
+    layer.video.currentTime = layerIn(layer);
     layer.video.play().catch(() => {});
     return;
   }
@@ -1190,7 +1541,7 @@ function onLayerEnded(layer){
 async function replayAll(){
   if(isVideoExporting || !hasVideoSource()) return;
   motionLayers.forEach(layer => layer.video.pause());
-  await Promise.all(motionLayers.filter(layer => layer.kind === 'file').map(layer => seekVideo(layer.video, 0)));
+  await Promise.all(motionLayers.filter(layer => layer.kind === 'file').map(layer => seekVideo(layer.video, layerIn(layer))));
   clearAllLayers();
   playAll();
 }
@@ -1199,7 +1550,7 @@ async function replayAll(){
 async function rerunLayer(layer){
   if(isVideoExporting || layer.kind !== 'file') return;
   motionLayers.forEach(item => item.video.pause());
-  await seekVideo(layer.video, 0);
+  await seekVideo(layer.video, layerIn(layer));
   clearLayer(layer);
   renderCompositeFrame();
   soloLayerId = layer.id;
@@ -1810,6 +2161,7 @@ function tick(){
   for(const layer of motionLayers){
     const v = layer.video;
     if(v.paused || v.ended || v.readyState < 2) continue;
+    if(checkLayerOut(layer)) continue;
     anyRunning = true;
     if(HAS_RVFC){
       if(!layer.newFrame) continue;
@@ -1849,7 +2201,7 @@ function updateHudText(){
   hud.set('Src', loaded ? `${active.video.videoWidth} × ${active.video.videoHeight}` : null, 'px');
   hud.set('Rate', loaded ? (active.fps ? AGData.fmt(active.fps, 2, 2) : '--.--') : null, 'fps');
   const timed = timelineLayer();
-  hud.set('Media', timed ? `${formatClock(timed.video.currentTime)} / ${formatClock(layerDuration(timed))}` : (loaded ? 'LIVE' : null), '');
+  hud.set('Media', timed ? `${formatClock(layerClock(timed))} / ${formatClock(layerSpan(timed))}` : (loaded ? 'LIVE' : null), '');
   hud.set('Motion', loaded ? AGData.fmt(active.stats.motion * 100, 1, 2) : null, '%');
   hud.set('Objects', loaded ? `${AGData.fmt(active.stats.tracked, 0, 2)} / ${AGData.fmt(active.cfg.maxBlobs, 0, 2)}` : null, '');
 }
@@ -1872,7 +2224,7 @@ function updatePlayhead(now){
     if(timeline) layoutPlayhead();
   }
   if(!timeline) return;
-  const target = Math.min(1, Math.max(0, timed.video.currentTime / layerDuration(timed)));
+  const target = Math.min(1, Math.max(0, layerClock(timed) / layerSpan(timed)));
   const dt = Math.min(64, now - (playheadLast || now));
   playheadLast = now;
   const diff = target - playheadShown;
@@ -1949,7 +2301,7 @@ function removeLayerRowAnimated(row, done){
 function layerTimeText(layer){
   if(layer.kind === 'cam') return 'LIVE';
   const d = layerDuration(layer);
-  return d ? `${formatClock(layer.video.currentTime)} / ${formatClock(d)}` : '--';
+  return d ? `${formatClock(layerClock(layer))} / ${formatClock(layerSpan(layer))}` : '--';
 }
 
 function layerStateText(layer){
@@ -1987,8 +2339,79 @@ function makeButton(label, title, onClick){
   return button;
 }
 
+// Drag a row by its grip: the other rows make room, release drops it there. Pointer events, so it
+// works with a mouse, a pen and on touch screens.
+let layerDrag = null;
+let trimDragging = false;
+let renderPending = false;
+function startLayerDrag(event, item, layer, grip){
+  if(layerDrag || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  const rows = [...layerList.querySelectorAll('.motion-layer[data-layer-id]')];
+  const from = rows.indexOf(item);
+  if(from < 0 || rows.length < 2) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const rects = rows.map(row => row.getBoundingClientRect());
+  const gap = rects[1].top - rects[0].bottom;
+  const shift = rects[from].height + gap;
+  const startY = event.clientY;
+  const minDy = rects[0].top - rects[from].top;
+  const maxDy = rects[rects.length - 1].bottom - rects[from].bottom;
+  let to = from;
+  layerDrag = {pointerId: event.pointerId};
+  try{ grip.setPointerCapture(event.pointerId); } catch(error){}
+  item.classList.add('is-dragging');
+  layerList.classList.add('is-sorting');
+
+  const move = (e) => {
+    if(e.pointerId !== layerDrag?.pointerId) return;
+    const dy = Math.max(minDy, Math.min(maxDy, e.clientY - startY));
+    item.style.transform = `translateY(${dy}px)`;
+    // Past the middle of a row with the leading edge: take its place.
+    const topEdge = rects[from].top + dy;
+    const bottomEdge = rects[from].bottom + dy;
+    to = from;
+    rects.forEach((rect, i) => {
+      const mid = (rect.top + rect.bottom) / 2;
+      if(i < from && topEdge < mid) to = Math.min(to, i);
+      if(i > from && bottomEdge > mid) to = Math.max(to, i);
+    });
+    rows.forEach((row, i) => {
+      if(i === from) return;
+      let offset = 0;
+      if(from < to && i > from && i <= to) offset = -shift;
+      if(to < from && i >= to && i < from) offset = shift;
+      row.style.transform = offset ? `translateY(${offset}px)` : '';
+    });
+  };
+  const end = (e) => {
+    if(e.pointerId !== layerDrag?.pointerId) return;
+    grip.removeEventListener('pointermove', move);
+    grip.removeEventListener('pointerup', end);
+    grip.removeEventListener('pointercancel', end);
+    layerDrag = null;
+    layerList.classList.remove('is-sorting');
+    item.classList.remove('is-dragging');
+    // The list shows the top of the stack first.
+    const moved = e.type === 'pointerup' && to !== from && moveLayerTo(layer, motionLayers.length - 1 - to);
+    if(!moved){
+      rows.forEach(row => { row.style.transform = ''; });
+      if(renderPending) renderLayers();
+    }
+  };
+  grip.addEventListener('pointermove', move);
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+}
+
 function renderLayers(){
   if(!layerList) return;
+  // Not while a row or a trim window is held: rebuilding would drop it. Runs when it is let go.
+  if(layerDrag || trimDragging){
+    renderPending = true;
+    return;
+  }
+  renderPending = false;
   const previousTops = measureLayerRows();
   layerList.innerHTML = '';
   updateBrushTarget();
@@ -2053,15 +2476,38 @@ function renderLayers(){
       rerunLayer(layer).catch(error => alert(error.message || 'Unable to rerun this layer.'));
     });
     rerun.disabled = layer.kind !== 'file' || isVideoExporting;
-    const up = makeButton('↑', 'Move up in the stack', () => moveLayer(layer, 1));
-    up.disabled = index === motionLayers.length - 1;
-    up.setAttribute('aria-label', 'Move layer up');
-    const down = makeButton('↓', 'Move down in the stack', () => moveLayer(layer, -1));
-    down.disabled = index === 0;
-    down.setAttribute('aria-label', 'Move layer down');
     const remove = makeButton('Delete', 'Remove this layer and its video', () => removeLayerRowAnimated(item, () => removeLayer(layer)));
-    actions.append(toggle, rerun, up, down, remove);
-    item.append(top, title, actions);
+    actions.append(toggle, rerun, remove);
+
+    const grip = document.createElement('button');
+    grip.type = 'button';
+    grip.className = 'motion-layer__grip';
+    grip.title = 'Drag up or down to move this layer in the stack';
+    grip.setAttribute('aria-label', `Move ${layer.name || 'layer'} in the stack (drag, or arrow keys)`);
+    grip.innerHTML = '<span aria-hidden="true">▲</span><span aria-hidden="true">▼</span>';
+    grip.disabled = motionLayers.length < 2;
+    grip.addEventListener('pointerdown', event => startLayerDrag(event, item, layer, grip));
+    grip.addEventListener('click', event => event.stopPropagation());
+    grip.addEventListener('keydown', event => {
+      const delta = event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0;
+      if(!delta) return;
+      event.preventDefault();
+      if(moveLayerTo(layer, motionLayers.indexOf(layer) + delta)){
+        layerList.querySelector(`.motion-layer[data-layer-id="${layer.id}"] .motion-layer__grip`)?.focus();
+      }
+    });
+
+    const name = document.createElement('div');
+    name.className = 'motion-layer__name';
+    if(!layer.thumb) drawLayerThumb(layer);
+    name.append(layer.thumb, title);
+
+    const body = document.createElement('div');
+    body.className = 'motion-layer__body';
+    body.append(top, name);
+    if(layer.kind === 'file') body.append(makeTrimBar(layer));
+    body.append(actions);
+    item.append(grip, body);
     layerList.appendChild(item);
   }
   refreshLayerTimes();
@@ -2362,6 +2808,8 @@ resetProjectBtn?.addEventListener('click', () => {
 analysisScaleEl?.addEventListener('change', () => motionLayers.forEach(configureLayerAnalysis));
 showVideoBackgroundEl.addEventListener('change', renderCompositeFrame);
 weaveEl?.addEventListener('change', renderCompositeFrame);
+clipLengthEl?.addEventListener('input', () => setClipLength(clipLengthEl.value));
+clipLengthVal?.addEventListener('change', () => setClipLength(clipLengthVal.value));
 window.addEventListener('resize', () => updatePaintSize());
 
 // ---------- Brush controls -> selected layer ----------
@@ -2772,12 +3220,12 @@ async function replayOffline(runLayers, fps, onFrame){
   if(!layers.length) throw new Error('There is no video layer to replay. The webcam cannot be replayed.');
   pauseAll();
   layers.forEach(clearLayer);
-  const duration = Math.max(...layers.map(layerDuration));
+  const duration = Math.max(...layers.map(layerSpan));
   const frameCount = Math.max(1, Math.ceil(duration * fps));
   for(let index = 0; index < frameCount; index++){
     const t = index / fps;
-    const due = layers.filter(layer => t < layerDuration(layer));
-    await Promise.all(due.map(layer => seekVideo(layer.video, t)));
+    const due = layers.filter(layer => t < layerSpan(layer));
+    await Promise.all(due.map(layer => seekVideo(layer.video, layerIn(layer) + t)));
     for(const layer of due) processLayerFrame(layer);
     paintFrame++;
     renderCompositeFrame();
@@ -2909,18 +3357,18 @@ async function recordProcessVideoLive(runLayers){
   });
   recorder.addEventListener('dataavailable', event => { if(event.data?.size) chunks.push(event.data); });
   const stopped = new Promise(resolve => recorder.addEventListener('stop', resolve, {once: true}));
-  const duration = Math.max(...runLayers.map(layerDuration));
+  const duration = Math.max(...runLayers.map(layerSpan));
   const loop = loopVideoEl.checked;
   loopVideoEl.checked = false;
   try{
-    await Promise.all(runLayers.map(layer => seekVideo(layer.video, 0)));
+    await Promise.all(runLayers.map(layer => seekVideo(layer.video, layerIn(layer))));
     clearAllLayers();
     recorder.start(1000);
     playAll();
     await new Promise(resolve => {
       const check = () => {
         const timed = timelineLayer();
-        if(timed) setExportProgress('Video', timed.video.currentTime / duration);
+        if(timed) setExportProgress('Video', layerClock(timed) / duration);
         if(!isPlaying) resolve();
         else setTimeout(check, 200);
       };
