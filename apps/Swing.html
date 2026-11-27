@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
   <link rel="stylesheet" href="../css/data.css">
+  <link rel="stylesheet" href="../css/tool.css">
   <link rel="icon" type="image/png" sizes="16x16" href="../images/face cursor.png">
   <script defer src="../scripts/navConfig.js"></script>
   <script defer src="../scripts/navMenu.js"></script>
@@ -16,16 +17,17 @@
   <script defer src="../scripts/settingsToggle.js" data-panel="#ui"></script>
   <script src="../scripts/savedSettings.js"></script>
   <style>
+    /* The canvas fills the page below the nav and beside the panel (css/tool.css, --ui-panel-w), with a
+       margin for the lab data (css/data.css) outside the painting. The sheet covers the bottom on mobile. */
     #c {
       --swing-bg: #111111;
+      --swing-left: 0px;
       background-color: var(--swing-bg);
       display: block;
       position: fixed;
-      /* Inset below the nav, above the footer and from the sides: the lab data (css/data.css) sits in
-         that margin, outside the painting. The sheet covers the bottom on mobile. */
       top: calc(var(--swing-top, 72px) + var(--ag-hud-band, 22px));
-      left: var(--ag-hud-side, 16px);
-      width: calc(100% - 2 * var(--ag-hud-side, 16px));
+      left: calc(var(--swing-left) + var(--ag-hud-side, 16px));
+      width: calc(100% - var(--swing-left) - 2 * var(--ag-hud-side, 16px));
       height: calc(100dvh - var(--swing-top, 72px) - var(--swing-foot, 34px) - 2 * var(--ag-hud-band, 22px));
       touch-action: none;
       -webkit-tap-highlight-color: transparent;
@@ -33,13 +35,20 @@
       -webkit-user-select: none;
       user-select: none;
     }
+    @media (min-width: 769px) {
+      body:not(.ag-sheet):has(#ui:not(.ag-settings-collapsed)) #c {
+        --swing-left: var(--ui-panel-w, 360px);
+      }
+    }
     body.ag-sheet #c {
       height: calc(100dvh - var(--swing-top, 72px) - var(--ag-hud-band, 18px));
     }
     html, body.app-page {
       overscroll-behavior: none;
     }
-    /* Lab data around the canvas: on the black page, not on the painting. */
+    body.app-page {
+      background: #000;
+    }
     .ag-hud {
       color: #fff;
     }
@@ -51,262 +60,149 @@
       background-size: 24px 24px;
       background-position: 0 0, 12px 12px;
     }
-    .bg-row {
-      display: flex;
-      gap: 8px;
-      align-items: stretch;
-      margin-top: 8px;
-    }
-    .bg-row button {
-      flex: 1;
-    }
-    #ui .bg-row button {
-      margin: 0;
-    }
-    .bg-row .color-input {
-      flex: 0 0 64px;
-      height: auto;
-      min-height: 38px;
-    }
+    /* Side panel on desktop; settingsToggle.js turns it into a bottom sheet on phones. */
     #ui {
       position: fixed;
-      top: 96px;
-      left: 20px;
-      width: min(320px, calc(100% - 40px));
-      background: rgba(0, 0, 0, 0.8);
-      padding: 16px;
-      border-radius: 14px;
-      font-family: var(--font-ui);
-      color: white;
-      box-shadow: 0 20px 35px rgba(0, 0, 0, 0.45);
-      backdrop-filter: blur(6px);
+      top: var(--swing-top, 72px);
+      left: 0;
+      bottom: 0;
       z-index: 200;
-      box-sizing: border-box;
-      /* Ends above the bottom-left overlay text. */
-      max-height: calc(100dvh - 190px);
       overflow-y: auto;
-      color: #fff;
     }
-    #ui * {
-      color: inherit;
-    }
-    #ui h1 {
-      font-family: var(--font-ui), system-ui;
-      font-weight: 900;
-      font-variation-settings: "ROND" 70;
-      text-transform: uppercase;
-      letter-spacing: 0.2em;
-    }
-    #ui button {
-      margin: 6px 4px 0 0;
-    }
-    .toggle-row {
-      display: flex;
+    .field-value {
+      display: inline-flex;
+      align-items: center;
       gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-      margin-top: 8px;
     }
-    .toggle-row button {
-      flex: 1;
-    }
-    .toggle-btn.active {
-      background: #fff;
-      color: #111;
-    }
-    #ui a,
-    #ui a:visited,
-    #ui a:active {
-      color: #fff;
-      text-decoration: none;
-    }
-    .control-label {
-      display: block;
-      margin-top: 12px;
-      font-size: 0.95rem;
-      font-weight: 500;
-    }
-    #ui select {
-      width: 100%;
-      margin-top: 6px;
-    }
-    .color-input {
-      flex: 1;
-      width: 100%;
-      padding: 0;
-      border: none;
-      height: 38px;
-      background: transparent;
-    }
-    .color-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-top: 6px;
-    }
-    .color-row .color-block {
-      flex: 1;
-    }
-    .color-row label {
-      display: block;
-      margin-bottom: 4px;
-    }
-    .slider-row {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin: 10px 0;
-    }
-    .slider-row label {
-      font-weight: 500;
-      min-width: 60px;
-    }
-    .slider-row input[type="range"] {
-      flex: 1 1 auto;
-    }
-    .value-label {
-      min-width: 50px;
-      text-align: right;
-    }
-    /* Fixed 28px box scaled with transform, so big brushes never push the panel layout around. */
+    /* Brush size preview: fixed 16px box scaled with transform, so big brushes never move the layout. */
     .size-preview {
       flex: 0 0 auto;
-      width: 28px;
-      height: 28px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
       background: #ff2d55;
-      border: 1px solid rgba(255,255,255,0.6);
-      box-sizing: border-box;
       transform: scale(var(--preview-scale, .43));
       transition: transform var(--ag-dur-2, 220ms) var(--ag-ease-spring, ease-out), background-color var(--ag-dur-2, 220ms);
     }
     @media (prefers-reduced-motion: reduce) {
       .size-preview { transition: none; }
     }
-    .shape-buttons {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 6px;
+    html body.tool-ui:not(#_) #ui .shape-btn {
+      padding: 0;
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      letter-spacing: 0;
     }
-    .action-row {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 16px;
-    }
-    .shape-btn {
-      flex: 0 0 auto;
-      min-width: 40px;
-      height: 36px;
-      border: 1px solid rgba(255, 255, 255, 0.35);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.08);
-      color: #fff;
-      font-size: 1rem;
-      cursor: pointer;
-      transition: background 0.2s, color 0.2s;
-    }
-    .shape-btn.active {
-      background: #fff;
-      color: #111;
+    html body.tool-ui:not(#_) #ui #importShapeBtn {
+      font-family: var(--ui-display);
+      font-size: 11px;
     }
     @media (max-width: 480px) {
       #c {
         --swing-top: 60px;
       }
     }
-    /* Bottom sheet (scripts/settingsToggle.js): roomy tap targets, 16px inputs, no iOS zoom. */
-    body.ag-sheet #ui select,
-    body.ag-sheet #ui input[type="number"] {
-      font-size: 16px;
-    }
-    body.ag-sheet #ui button,
-    body.ag-sheet .shape-btn {
-      min-height: 44px;
-    }
-    body.ag-sheet .shape-btn {
-      min-width: 44px;
-    }
-    body.ag-sheet .color-input {
-      min-height: 44px;
-    }
-    body.ag-sheet #ui input[type="range"] {
-      min-height: 32px;
-    }
   </style>
 </head>
 
-<body class="app-page">
+<body class="app-page tool-ui">
 <canvas id="c"></canvas>
 <div id="ui">
-  <h1>Swing</h1>
-  <p class="app-description">Pendulum-inspired brush physics that swing around your cursor for fast gestural paintings.</p>
+  <header class="tool-head">
+    <div class="tool-head__row">
+      <h1 class="tool-title">Swing</h1>
+      <span data-settings-toggle-slot></span>
+    </div>
+    <p class="tool-lede">Paint with a brush that swings on a rope behind your cursor. Move slowly for loops, fast for whips.</p>
+    <div class="tool-actions">
+      <button id="resetBtn" type="button" title="Clear the canvas (R)">Clear</button>
+      <button id="exportBtn" type="button" class="is-primary" title="Export PNG (E)">Export PNG</button>
+    </div>
+  </header>
 
-  <div class="color-row">
-    <div class="color-block">
-      <label for="color" class="control-label">Ball</label>
-      <input type="color" id="color" value="#ff2d55" class="color-input">
+  <details class="motion-group" open>
+    <summary>Brush</summary>
+    <div class="motion-group-body">
+      <div class="field">
+        <label id="shapeLabel">Shape</label>
+        <div class="choice-grid choice-grid--icons" role="group" aria-labelledby="shapeLabel">
+          <button type="button" class="shape-btn active" data-shape="circle" title="Circle" aria-label="Circle">●</button>
+          <button type="button" class="shape-btn" data-shape="square" title="Square" aria-label="Square">■</button>
+          <button type="button" class="shape-btn" data-shape="diamond" title="Diamond" aria-label="Diamond">◆</button>
+          <button type="button" class="shape-btn" data-shape="triangle" title="Triangle" aria-label="Triangle">▲</button>
+          <button type="button" class="shape-btn" data-shape="star" title="Star" aria-label="Star">★</button>
+          <button type="button" class="shape-btn" id="importShapeBtn" data-shape="image" data-import="true" title="Use an image as the brush" aria-label="Image">Img</button>
+        </div>
+        <input type="file" id="importShapeInput" accept="image/*" hidden>
+      </div>
+      <div class="field">
+        <label for="size"><span>Size</span><span class="field-value"><output class="value-label" id="sizeLabel">12 px</output><span class="size-preview" id="sizePreview" aria-hidden="true"></span></span></label>
+        <input type="range" id="size" min="2" max="300" value="12" class="slider" data-ag-readout="1">
+      </div>
+      <div class="field field--inline">
+        <label for="color">Colour</label>
+        <input type="color" id="color" value="#ff2d55">
+      </div>
+      <div class="field">
+        <label for="strokeWidth"><span>Outline</span><span class="field-value"><output class="value-label" id="strokeWidthLabel">0 px</output></span></label>
+        <input type="range" id="strokeWidth" min="0" max="40" value="0" class="slider" data-ag-readout="1">
+      </div>
+      <div class="field field--inline">
+        <label for="strokeColor">Outline colour</label>
+        <input type="color" id="strokeColor" value="#ffffff">
+      </div>
+      <label class="check"><input type="checkbox" id="ballBtn" checked> Show the brush</label>
     </div>
-    <div class="color-block">
-      <label for="ropeColor" class="control-label">Rope</label>
-      <input type="color" id="ropeColor" value="#ffffff" class="color-input">
+  </details>
+
+  <details class="motion-group" open>
+    <summary>Rope</summary>
+    <div class="motion-group-body">
+      <div class="field">
+        <label for="length"><span>Length</span><span class="field-value"><output class="value-label" id="lengthLabel">200 px</output></span></label>
+        <input type="range" id="length" min="40" max="800" value="200" class="slider" data-ag-readout="1">
+      </div>
+      <div class="field">
+        <label for="segments"><span>Segments</span><span class="field-value"><output class="value-label" id="segmentsLabel">1</output></span></label>
+        <input type="range" id="segments" min="1" max="6" value="1" class="slider" data-ag-readout="1">
+      </div>
+      <div class="field">
+        <label for="ropeWidth"><span>Width</span><span class="field-value"><output class="value-label" id="ropeWidthLabel">2 px</output></span></label>
+        <input type="range" id="ropeWidth" min="1" max="20" value="2" class="slider" data-ag-readout="1">
+      </div>
+      <div class="field field--inline">
+        <label for="ropeColor">Colour</label>
+        <input type="color" id="ropeColor" value="#ffffff">
+      </div>
+      <label class="check"><input type="checkbox" id="ropeBtn" checked> Paint the rope too</label>
+      <label class="check"><input type="checkbox" id="stretchBtn"> Elastic rope (stretches with speed)</label>
     </div>
-    <div class="color-block">
-      <label for="strokeColor" class="control-label">Outline</label>
-      <input type="color" id="strokeColor" value="#ffffff" class="color-input">
+  </details>
+
+  <details class="motion-group">
+    <summary>Physics</summary>
+    <div class="motion-group-body">
+      <div class="field">
+        <label for="gravity"><span>Gravity</span><span class="field-value"><output class="value-label" id="gravityLabel">1.0 ×</output></span></label>
+        <input type="range" id="gravity" min="0" max="3" step="0.1" value="1" class="slider" data-ag-readout="1">
+      </div>
+      <div class="field">
+        <label for="friction"><span>Friction</span><span class="field-value"><output class="value-label" id="frictionLabel">2.0 %</output></span></label>
+        <input type="range" id="friction" min="0" max="10" step="0.5" value="2" class="slider" data-ag-readout="1">
+      </div>
     </div>
-  </div>
-  <div class="slider-row">
-    <label for="size">Size</label>
-    <input type="range" id="size" min="2" max="300" value="12" class="slider">
-    <span class="value-label" id="sizeLabel">12 px</span>
-    <span class="size-preview" id="sizePreview" aria-hidden="true"></span>
-  </div>
-  <div class="slider-row">
-    <label for="strokeWidth">Outline</label>
-    <input type="range" id="strokeWidth" min="0" max="40" value="0" class="slider">
-    <span class="value-label" id="strokeWidthLabel">0 px</span>
-  </div>
-  <label for="segments">Segments: <span id="segmentsLabel">1</span></label>
-  <input type="range" id="segments" min="1" max="6" value="1" class="slider">
-  <label for="length">Length: <span id="lengthLabel">200 px</span></label>
-  <input type="range" id="length" min="40" max="800" value="200" class="slider">
-  <label for="gravity">Gravity: <span id="gravityLabel">1.0 ×</span></label>
-  <input type="range" id="gravity" min="0" max="3" step="0.1" value="1" class="slider">
-  <label for="friction">Friction: <span id="frictionLabel">2.0 %</span></label>
-  <input type="range" id="friction" min="0" max="10" step="0.5" value="2" class="slider">
-  <label for="ropeWidth">Rope width: <span id="ropeWidthLabel">2 px</span></label>
-  <input type="range" id="ropeWidth" min="1" max="20" value="2" class="slider">
-  <div class="toggle-row">
-    <button id="stretchBtn" class="toggle-btn" type="button">Stretch: Off</button>
-  </div>
-  <div class="bg-row">
-    <button id="bgBtn" class="toggle-btn active" type="button">Background: On</button>
-    <input type="color" id="bgColor" value="#111111" class="color-input" aria-label="Background color">
-  </div>
-  <div class="toggle-row">
-    <button id="ballBtn" class="toggle-btn active" type="button">Ball: On</button>
-    <button id="ropeBtn" class="toggle-btn active" type="button">Rope: On</button>
-  </div>
-  <label class="control-label">Ball Shape</label>
-  <div class="shape-buttons">
-    <button type="button" class="shape-btn active" data-shape="circle" title="Circle">●</button>
-    <button type="button" class="shape-btn" data-shape="square" title="Square">■</button>
-    <button type="button" class="shape-btn" data-shape="diamond" title="Diamond">◆</button>
-    <button type="button" class="shape-btn" data-shape="triangle" title="Triangle">▲</button>
-    <button type="button" class="shape-btn" data-shape="star" title="Star">★</button>
-  </div>
-  <input type="file" id="importShapeInput" accept="image/*" hidden>
-  <div class="action-row">
-    <button type="button" class="shape-btn" id="importShapeBtn" data-shape="image" data-import="true" title="Import image">IMG</button>
-  </div>
-  <div class="action-row">
-    <button id="resetBtn" type="button">Reset (R)</button>
-    <button id="exportBtn" type="button">Export (E)</button>
-  </div>
+  </details>
+
+  <details class="motion-group">
+    <summary>Background</summary>
+    <div class="motion-group-body">
+      <div class="field field--inline">
+        <label for="bgColor">Colour</label>
+        <input type="color" id="bgColor" value="#111111">
+      </div>
+      <label class="check"><input type="checkbox" id="bgBtn" checked> Solid background (off = transparent PNG)</label>
+    </div>
+  </details>
 </div>
 <script>
 const canvas = document.getElementById('c');
@@ -366,12 +262,10 @@ let backgroundColor = bgColorInput.value;
 function applyBackground(){
   canvas.style.setProperty('--swing-bg', backgroundColor);
   canvas.classList.toggle('bg-off', !showBackground);
-  bgBtn.textContent = `Background: ${showBackground ? 'On' : 'Off'}`;
-  bgBtn.classList.toggle('active', showBackground);
-  bgBtn.setAttribute('aria-pressed', String(showBackground));
+  bgBtn.checked = showBackground;
 }
-bgBtn.addEventListener('click', ()=>{
-  showBackground = !showBackground;
+bgBtn.addEventListener('change', ()=>{
+  showBackground = bgBtn.checked;
   applyBackground();
 });
 bgColorInput.addEventListener('input', e=>{
@@ -489,25 +383,24 @@ ropeWidthInput.addEventListener('input', e=>{
   ropeWidthLabel.textContent = `${ropeWidth} px`;
 });
 
-function syncToggle(btn, state, label){
-  btn.textContent = `${label}: ${state ? 'On' : 'Off'}`;
-  btn.classList.toggle('active', state);
-  btn.setAttribute('aria-pressed', String(state));
+// The on/off options are checkboxes.
+function syncToggle(box, state){
+  box.checked = state;
 }
 syncToggle(stretchBtn, stretchMode, 'Stretch');
 syncToggle(ballBtn, showBall, 'Ball');
 syncToggle(ropeBtn, showRope, 'Rope');
 
-stretchBtn.addEventListener('click', ()=>{
-  stretchMode = !stretchMode;
+stretchBtn.addEventListener('change', ()=>{
+  stretchMode = stretchBtn.checked;
   syncToggle(stretchBtn, stretchMode, 'Stretch');
 });
-ballBtn.addEventListener('click', ()=>{
-  showBall = !showBall;
+ballBtn.addEventListener('change', ()=>{
+  showBall = ballBtn.checked;
   syncToggle(ballBtn, showBall, 'Ball');
 });
-ropeBtn.addEventListener('click', ()=>{
-  showRope = !showRope;
+ropeBtn.addEventListener('change', ()=>{
+  showRope = ropeBtn.checked;
   syncToggle(ropeBtn, showRope, 'Rope');
 });
 ropeColorInput.addEventListener('input', e=>{
@@ -525,7 +418,7 @@ function updateSizePreview(size){
   paintSize = size;
   sizeLabel.textContent = `${size} px`;
   // The dot shows the brush up to 28 px; bigger brushes just fill it.
-  sizePreview.style.setProperty('--preview-scale', (Math.min(size, 28) / 28).toFixed(3));
+  sizePreview.style.setProperty('--preview-scale', (Math.min(size, 16) / 16).toFixed(3));
   sizePreview.style.backgroundColor = paintColor;
 }
 updateSizePreview(paintSize);

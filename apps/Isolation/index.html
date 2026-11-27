@@ -8,29 +8,32 @@
     <link rel="stylesheet" href="../../css/nav.css" />
     <link rel="stylesheet" href="../../css/data.css" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="../../css/tool.css" />
     <script defer src="../../scripts/navConfig.js"></script>
     <script defer src="../../scripts/navMenu.js"></script>
     <script src="../../scripts/dataLayer.js"></script>
     <script defer src="../../scripts/settingsToggle.js" data-panel=".panel"></script>
   </head>
-  <body class="isolation-page">
+  <body class="isolation-page tool-ui tool-ui--light">
     <main class="app">
-      <aside class="panel" aria-label="controls">
-        <header class="panel-header">
-          <div class="panel-title">
-            <p class="eyebrow">Isolation Grid</p>
-            <h1>Settings</h1>
-            <span class="settings-toggle-slot" data-settings-toggle-slot></span>
-            <button id="shortcutsToggle" class="help-toggle" type="button" aria-expanded="false" aria-controls="shortcuts" title="Keyboard shortcuts (?)">?</button>
+      <aside class="panel" id="isoPanel" aria-label="controls">
+        <header class="panel-header tool-head">
+          <div class="tool-head__row">
+            <h1 class="tool-title">Isolation</h1>
+            <div class="tool-head__tools">
+              <button id="shortcutsToggle" class="help-toggle" type="button" aria-expanded="false" aria-controls="shortcuts" title="Keyboard shortcuts (?)">?</button>
+              <span class="settings-toggle-slot" data-settings-toggle-slot></span>
+            </div>
           </div>
-          <div class="header-actions">
-            <button id="exportPng" type="button" title="Export PNG (E)">Export PNG</button>
+          <p class="tool-lede">Draw lines on a grid, drop in images and isolate shapes that push the lines around.</p>
+          <div class="header-actions tool-actions">
+            <button id="exportPng" type="button" class="is-primary" title="Export PNG (E)">Export PNG</button>
             <button id="exportSvg" type="button" title="Export SVG: vector paths for print, plotters and Illustrator (⇧E)">Export SVG</button>
+            <button id="resetAllTop" type="button">Reset all</button>
             <label class="check">
               <input id="showImage" type="checkbox" />
-              <span>Show Image</span>
+              <span>Show image (I)</span>
             </label>
-            <button id="resetAllTop" type="button">Reset All</button>
           </div>
           <div id="shortcuts" class="shortcuts" hidden>
             <p class="shortcuts-title">Shortcuts</p>
@@ -62,57 +65,7 @@
           </div>
         </header>
 
-        <details class="control-group">
-          <summary>Randomize</summary>
-          <div class="group-body">
-          <button id="randomizeAll" type="button">Randomize</button>
-          <label class="check">
-            <input id="randomizeGridSettings" type="checkbox" checked />
-            <span>Grid</span>
-          </label>
-          <label class="check">
-            <input id="randomizeDrawSettings" type="checkbox" checked />
-            <span>Draw</span>
-          </label>
-          <label class="check">
-            <input id="randomizeImageSettings" type="checkbox" />
-            <span>Image</span>
-          </label>
-          <label class="check">
-            <input id="randomizeIsolationSettings" type="checkbox" />
-            <span>Isolation</span>
-          </label>
-          <label class="check">
-            <input id="randomizeCanvasSettings" type="checkbox" />
-            <span>Canvas</span>
-          </label>
-          <label class="check">
-            <input id="randomizeSurfaceSettings" type="checkbox" />
-            <span>Surface</span>
-          </label>
-          <label class="check">
-            <input id="randomizeKeepColors" type="checkbox" checked />
-            <span>Keep Colors</span>
-          </label>
-          </div>
-        </details>
-
-        <details class="control-group">
-          <summary>Grid</summary>
-          <div class="group-body">
-          <label class="check">
-            <input id="showGrid" type="checkbox" />
-            <span>Show Grid Lines</span>
-          </label>
-          <div class="control">
-            <label for="gridSize">Size</label>
-            <input id="gridSize" type="range" min="9" max="201" step="2" value="25" />
-            <output id="gridSizeValue">25</output>
-          </div>
-          </div>
-        </details>
-
-        <details class="control-group">
+        <details class="control-group" open>
           <summary>Draw</summary>
           <div class="group-body">
           <div class="control">
@@ -217,137 +170,17 @@
         </details>
 
         <details class="control-group">
-          <summary>Image</summary>
+          <summary>Grid</summary>
           <div class="group-body">
-          <div class="source-head">
-            <label for="imageSource">Source</label>
-            <select id="imageSource" class="mini-select" title="Make the lines from an image, text you type or your camera. The camera image stays on this computer.">
-              <option value="image">Image</option>
-              <option value="text">Text</option>
-              <option value="camera">Camera</option>
-            </select>
-          </div>
-          <div id="cameraRow" class="camera-row" hidden>
-            <label class="check" title="Show the camera like a mirror">
-              <input id="cameraMirror" type="checkbox" checked />
-              <span>Mirror</span>
-            </label>
-            <button id="cameraFreeze" type="button" title="Keep the current camera frame as a still image">Freeze</button>
-          </div>
-          <div id="imageFileRow" class="file-row">
-            <input id="imageImport" type="file" accept="image/*" aria-label="Image" />
-          </div>
-          <div id="textControls" class="text-controls" hidden>
-            <textarea id="textContent" rows="2" aria-label="Text" spellcheck="false">ISOLATION</textarea>
-            <div class="split">
-              <div class="field">
-                <label for="textFont">Font</label>
-                <select id="textFont">
-                  <option value="sans">Sans</option>
-                  <option value="serif">Serif</option>
-                  <option value="mono">Mono</option>
-                  <option value="heavy">Heavy</option>
-                  <option value="rounded">Rounded</option>
-                  <option value="custom">Installed font…</option>
-                </select>
-              </div>
-              <div id="textFontNameField" class="field" hidden>
-                <label for="textFontName">Font name</label>
-                <input id="textFontName" type="text" placeholder="e.g. Futura" title="The name of a font installed on this computer" />
-              </div>
-            </div>
-            <div class="control">
-              <label for="textSize">Text Size</label>
-              <input id="textSize" type="range" min="5" max="100" step="1" value="80" title="100 is as big as the text fits on the canvas" />
-              <output id="textSizeValue">80</output>
-            </div>
-            <div class="control">
-              <label for="textTracking">Tracking</label>
-              <input id="textTracking" type="range" min="-200" max="800" step="10" value="0" title="Space between letters" />
-              <output id="textTrackingValue">0</output>
-            </div>
-          </div>
-          <div class="image-line-options" role="group" aria-label="Image lines">
-            <div class="image-line-head">
-              <p class="image-line-title">Image Lines</p>
-              <div class="layer-controls">
-                <select id="layerSelect" class="mini-select" aria-label="Line layer" title="The layer these settings belong to. Layer 1 uses Fill Color and Fill Size from Draw." hidden></select>
-                <button id="addLayer" class="mini-button" type="button" title="Add a line layer with its own threshold, colour and size, drawn on top">+ Layer</button>
-                <button id="removeLayer" class="mini-button" type="button" title="Remove this layer" hidden>Remove</button>
-              </div>
-            </div>
-            <label class="check">
-              <input id="imageLinesHorizontal" type="checkbox" checked />
-              <span>Horizontal</span>
-            </label>
-            <label class="check">
-              <input id="imageLinesVertical" type="checkbox" checked />
-              <span>Vertical</span>
-            </label>
-            <label class="check">
-              <input id="imageLinesDiagonal" type="checkbox" checked />
-              <span>Diagonal</span>
-            </label>
-            <label class="check" title="Lines at any angle you choose">
-              <input id="imageLinesAngle" type="checkbox" />
-              <span>Angle</span>
-            </label>
-          </div>
-          <div id="imageAngleRow" class="control" hidden>
-            <label for="imageAngle">Angle</label>
-            <input id="imageAngle" type="range" min="-90" max="90" step="1" value="30" title="Degrees; 0 is horizontal, 90 vertical" />
-            <output id="imageAngleValue">30°</output>
-          </div>
-          <div class="control">
-            <label for="imageThreshold">Threshold</label>
-            <input id="imageThreshold" type="range" min="0" max="255" step="1" value="128" />
-            <output id="imageThresholdValue">128</output>
-          </div>
-          <div id="layerColorRow" class="color-row" hidden>
-            <label for="layerColor">Layer Color</label>
-            <input id="layerColor" type="color" value="#ffffff" />
-          </div>
-          <div id="layerSizeRow" class="control" hidden>
-            <label for="layerSize">Layer Size</label>
-            <input id="layerSize" type="range" min="1" max="80" step="1" value="16" />
-            <output id="layerSizeValue">16</output>
-          </div>
-          <div class="control">
-            <label for="imageDetail">Detail</label>
-            <input id="imageDetail" type="range" min="2" max="8" step="1" value="5" title="Samples per grid cell" />
-            <output id="imageDetailValue">5</output>
-          </div>
-          <div class="control">
-            <label for="imageScale">Scale</label>
-            <input id="imageScale" type="range" min="10" max="250" step="1" value="100" />
-            <output id="imageScaleValue">100</output>
-          </div>
-          <div class="control">
-            <label for="imageOffsetX">X</label>
-            <input id="imageOffsetX" type="range" min="-50" max="50" step="1" value="0" />
-            <output id="imageOffsetXValue">0</output>
-          </div>
-          <div class="control">
-            <label for="imageOffsetY">Y</label>
-            <input id="imageOffsetY" type="range" min="-50" max="50" step="1" value="0" />
-            <output id="imageOffsetYValue">0</output>
-          </div>
-          <div class="control">
-            <label for="imageBrightness">Bright</label>
-            <input id="imageBrightness" type="range" min="-100" max="100" step="1" value="0" />
-            <output id="imageBrightnessValue">0</output>
-          </div>
-          <div class="control">
-            <label for="imageContrast">Contrast</label>
-            <input id="imageContrast" type="range" min="-100" max="100" step="1" value="0" />
-            <output id="imageContrastValue">0</output>
-          </div>
           <label class="check">
-            <input id="imageInvert" type="checkbox" />
-            <span>Invert Image</span>
+            <input id="showGrid" type="checkbox" />
+            <span>Show Grid Lines</span>
           </label>
-          <button id="clearImage" type="button">Clear Image</button>
-          <p id="imageStatus" class="meter">No image</p>
+          <div class="control">
+            <label for="gridSize">Size</label>
+            <input id="gridSize" type="range" min="9" max="201" step="2" value="25" />
+            <output id="gridSizeValue">25</output>
+          </div>
           </div>
         </details>
 
@@ -553,6 +386,141 @@
         </details>
 
         <details class="control-group">
+          <summary>Image</summary>
+          <div class="group-body">
+          <div class="source-head">
+            <label for="imageSource">Source</label>
+            <select id="imageSource" class="mini-select" title="Make the lines from an image, text you type or your camera. The camera image stays on this computer.">
+              <option value="image">Image</option>
+              <option value="text">Text</option>
+              <option value="camera">Camera</option>
+            </select>
+          </div>
+          <div id="cameraRow" class="camera-row" hidden>
+            <label class="check" title="Show the camera like a mirror">
+              <input id="cameraMirror" type="checkbox" checked />
+              <span>Mirror</span>
+            </label>
+            <button id="cameraFreeze" type="button" title="Keep the current camera frame as a still image">Freeze</button>
+          </div>
+          <div id="imageFileRow" class="file-row">
+            <input id="imageImport" type="file" accept="image/*" aria-label="Image" />
+          </div>
+          <div id="textControls" class="text-controls" hidden>
+            <textarea id="textContent" rows="2" aria-label="Text" spellcheck="false">ISOLATION</textarea>
+            <div class="split">
+              <div class="field">
+                <label for="textFont">Font</label>
+                <select id="textFont">
+                  <option value="sans">Sans</option>
+                  <option value="serif">Serif</option>
+                  <option value="mono">Mono</option>
+                  <option value="heavy">Heavy</option>
+                  <option value="rounded">Rounded</option>
+                  <option value="custom">Installed font…</option>
+                </select>
+              </div>
+              <div id="textFontNameField" class="field" hidden>
+                <label for="textFontName">Font name</label>
+                <input id="textFontName" type="text" placeholder="e.g. Futura" title="The name of a font installed on this computer" />
+              </div>
+            </div>
+            <div class="control">
+              <label for="textSize">Text Size</label>
+              <input id="textSize" type="range" min="5" max="100" step="1" value="80" title="100 is as big as the text fits on the canvas" />
+              <output id="textSizeValue">80</output>
+            </div>
+            <div class="control">
+              <label for="textTracking">Tracking</label>
+              <input id="textTracking" type="range" min="-200" max="800" step="10" value="0" title="Space between letters" />
+              <output id="textTrackingValue">0</output>
+            </div>
+          </div>
+          <div class="image-line-options" role="group" aria-label="Image lines">
+            <div class="image-line-head">
+              <p class="image-line-title">Image Lines</p>
+              <div class="layer-controls">
+                <select id="layerSelect" class="mini-select" aria-label="Line layer" title="The layer these settings belong to. Layer 1 uses Fill Color and Fill Size from Draw." hidden></select>
+                <button id="addLayer" class="mini-button" type="button" title="Add a line layer with its own threshold, colour and size, drawn on top">+ Layer</button>
+                <button id="removeLayer" class="mini-button" type="button" title="Remove this layer" hidden>Remove</button>
+              </div>
+            </div>
+            <label class="check">
+              <input id="imageLinesHorizontal" type="checkbox" checked />
+              <span>Horizontal</span>
+            </label>
+            <label class="check">
+              <input id="imageLinesVertical" type="checkbox" checked />
+              <span>Vertical</span>
+            </label>
+            <label class="check">
+              <input id="imageLinesDiagonal" type="checkbox" checked />
+              <span>Diagonal</span>
+            </label>
+            <label class="check" title="Lines at any angle you choose">
+              <input id="imageLinesAngle" type="checkbox" />
+              <span>Angle</span>
+            </label>
+          </div>
+          <div id="imageAngleRow" class="control" hidden>
+            <label for="imageAngle">Angle</label>
+            <input id="imageAngle" type="range" min="-90" max="90" step="1" value="30" title="Degrees; 0 is horizontal, 90 vertical" />
+            <output id="imageAngleValue">30°</output>
+          </div>
+          <div class="control">
+            <label for="imageThreshold">Threshold</label>
+            <input id="imageThreshold" type="range" min="0" max="255" step="1" value="128" />
+            <output id="imageThresholdValue">128</output>
+          </div>
+          <div id="layerColorRow" class="color-row" hidden>
+            <label for="layerColor">Layer Color</label>
+            <input id="layerColor" type="color" value="#ffffff" />
+          </div>
+          <div id="layerSizeRow" class="control" hidden>
+            <label for="layerSize">Layer Size</label>
+            <input id="layerSize" type="range" min="1" max="80" step="1" value="16" />
+            <output id="layerSizeValue">16</output>
+          </div>
+          <div class="control">
+            <label for="imageDetail">Detail</label>
+            <input id="imageDetail" type="range" min="2" max="8" step="1" value="5" title="Samples per grid cell" />
+            <output id="imageDetailValue">5</output>
+          </div>
+          <div class="control">
+            <label for="imageScale">Scale</label>
+            <input id="imageScale" type="range" min="10" max="250" step="1" value="100" />
+            <output id="imageScaleValue">100</output>
+          </div>
+          <div class="control">
+            <label for="imageOffsetX">X</label>
+            <input id="imageOffsetX" type="range" min="-50" max="50" step="1" value="0" />
+            <output id="imageOffsetXValue">0</output>
+          </div>
+          <div class="control">
+            <label for="imageOffsetY">Y</label>
+            <input id="imageOffsetY" type="range" min="-50" max="50" step="1" value="0" />
+            <output id="imageOffsetYValue">0</output>
+          </div>
+          <div class="control">
+            <label for="imageBrightness">Bright</label>
+            <input id="imageBrightness" type="range" min="-100" max="100" step="1" value="0" />
+            <output id="imageBrightnessValue">0</output>
+          </div>
+          <div class="control">
+            <label for="imageContrast">Contrast</label>
+            <input id="imageContrast" type="range" min="-100" max="100" step="1" value="0" />
+            <output id="imageContrastValue">0</output>
+          </div>
+          <label class="check">
+            <input id="imageInvert" type="checkbox" />
+            <span>Invert Image</span>
+          </label>
+          <button id="clearImage" type="button">Clear Image</button>
+          <p id="imageStatus" class="meter">No image</p>
+          </div>
+        </details>
+
+        <details class="control-group">
           <summary>Canvas</summary>
           <div class="group-body">
           <div class="field">
@@ -616,6 +584,44 @@
             <input id="transparentDrawing" type="checkbox" />
             <span>Transparent Drawing</span>
           </label>
+          </div>
+        </details>
+
+        <details class="control-group">
+          <summary>Randomize</summary>
+          <div class="group-body">
+          <button id="randomizeAll" type="button" class="is-primary">Randomize (R)</button>
+          <p class="tool-hint">Shuffles the ticked sections.</p>
+          <div class="check-list">
+          <label class="check">
+            <input id="randomizeGridSettings" type="checkbox" checked />
+            <span>Grid</span>
+          </label>
+          <label class="check">
+            <input id="randomizeDrawSettings" type="checkbox" checked />
+            <span>Draw</span>
+          </label>
+          <label class="check">
+            <input id="randomizeImageSettings" type="checkbox" />
+            <span>Image</span>
+          </label>
+          <label class="check">
+            <input id="randomizeIsolationSettings" type="checkbox" />
+            <span>Isolation</span>
+          </label>
+          <label class="check">
+            <input id="randomizeCanvasSettings" type="checkbox" />
+            <span>Canvas</span>
+          </label>
+          <label class="check">
+            <input id="randomizeSurfaceSettings" type="checkbox" />
+            <span>Surface</span>
+          </label>
+          <label class="check">
+            <input id="randomizeKeepColors" type="checkbox" checked />
+            <span>Keep colours</span>
+          </label>
+          </div>
           </div>
         </details>
 

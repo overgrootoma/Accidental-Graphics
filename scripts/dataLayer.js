@@ -6,20 +6,19 @@
 //
 // API (window.AGData)
 //   AGData.hud(stageEl, opts) -> hud
-//     Rulers, registration marks and live readouts AROUND a canvas: everything sits just outside the
-//     canvas box (one-line text bands above and below it, top/left ruler and corner crosses past the
-//     edges), so nothing covers the artwork. Colours follow the page (--ag-data-fg / currentColor).
+//     Live readouts AROUND a canvas: two one-line text bands, just above and just below the canvas box,
+//     so nothing covers the artwork and nothing is drawn on or beside the frame itself. Colours follow the page (--ag-data-fg / currentColor).
 //     The tool leaves room for it: var(--ag-hud-band) (24px, 20px on mobile) above and below the canvas,
-//     ~15px beside it for the ruler/marks. A band without room (nav, footer text, bottom sheet in the
+//     and var(--ag-hud-side) beside it as breathing room. A band without room (nav, footer text, bottom sheet in the
 //     way) is left out; a band that is too narrow drops its lowest-priority lines (date, frame counter,
 //     T+, then app stats from the end). stageEl is the element that wraps the canvas (positioned:
 //     relative/absolute/fixed). If stageEl is the <canvas> itself (or another replaced element), the HUD
 //     is a fixed overlay that follows the element's box instead.
 //     opts.canvas   <canvas> to measure: pointer X/Y are reported in canvas pixels (CSS scaling undone)
-//                   and the frame/rulers hug the canvas' box. Default: stageEl if it is a canvas.
+//                   and the bands hug the canvas' box. Default: stageEl if it is a canvas.
 //     opts.code     specimen code, e.g. "ISO" -> "SPEC. ISO-0007" (counter in localStorage
 //                   "ag-specimen:<code>"). Omit for no specimen line.
-//     opts.pointer / opts.size / opts.fps / opts.time / opts.rulers / opts.marks   false hides that part.
+//     opts.pointer / opts.size / opts.fps / opts.time   false hides that part.
 //                   fps is only shown while the app reports frames (hud.frame()) and runs at >= 1 fps.
 //     opts.slots    where the built-in lines go, default { specimen: "tl", size: "tr", pointer: "bl", timing: "br" }
 //                   (tl/tr = band above the canvas, bl/br = band below).
@@ -36,7 +35,7 @@
 //     (zero-padded to max's digits, decimals from step, unit from data-unit="px"). Existing displays
 //     (<output>, number input, a label/sibling that already shows the value) are left alone; with
 //     opts.tick (default true) they still get the tick animation. Programmatic value changes are seen too.
-//     opts.pad (default true) zero-pads. Returned list .refresh() re-renders all.
+//     opts.pad (default false) zero-pads. Returned list .refresh() re-renders all.
 //   AGData.setVisible(bool) / AGData.visible   overlays on/off (D key does the same; remembered in
 //     localStorage "ag-data-visible", default on). Fires "ag-data-visibility" on window ({detail:{visible}}).
 //   AGData.spring(from, to, { stiffness=170, damping=26, mass=1, velocity=0, precision=0.01, onUpdate, onDone })
@@ -246,18 +245,11 @@
     const canvas = opts.canvas || (stageEl.tagName === "CANVAS" ? stageEl : null);
     const show = (name) => opts[name] !== false;
 
-    // Everything sits OUTSIDE the canvas box (bands above/below, ruler and marks past the edges), so the
-    // readouts never cover the artwork. The box itself follows the canvas; its children overflow it.
+    // Everything sits OUTSIDE the canvas box (one text band above, one below), so the readouts never
+    // cover the artwork. The box itself follows the canvas; its children overflow it.
     const box = el("div", "ag-hud ag-data" + (isReplaced ? " ag-hud--fixed" : ""));
     box.setAttribute("aria-hidden", "true");
     const frameEl = el("div", "ag-hud__frame", box);
-    if (show("rulers")) {
-      el("div", "ag-ruler ag-ruler--top", frameEl);
-      el("div", "ag-ruler ag-ruler--left", frameEl);
-    }
-    if (show("marks")) {
-      ["tl", "tr", "bl", "br"].forEach((corner) => el("span", `ag-reg ag-reg--${corner}`, frameEl));
-    }
     const bands = { top: el("div", "ag-hud__band ag-hud__band--top", frameEl), bottom: el("div", "ag-hud__band ag-hud__band--bottom", frameEl) };
     const slots = {};
     ["tl", "tr", "bl", "br"].forEach((corner) => {
@@ -418,11 +410,8 @@
       const parent = target.parentElement;
       const parentRect = parent && parent !== document.body ? parent.getBoundingClientRect() : { left: 0, right: window.innerWidth };
       const band = parseFloat(getComputedStyle(box).getPropertyValue("--ag-hud-band")) || 20;
-      const sideRoom = Math.min(rect.left - Math.max(0, parentRect.left), Math.min(window.innerWidth, parentRect.right) - rect.right);
       box.classList.toggle("ag-hud--no-top", rect.top - topLimit < band - 2);
       box.classList.toggle("ag-hud--no-bottom", bottomLimit - rect.bottom < band - 4);
-      box.classList.toggle("ag-hud--no-side", sideRoom < 9);
-      box.classList.toggle("ag-hud--no-marks", sideRoom < 15);
       // Canvas edge on the screen edge (phones): the text keeps a small gutter.
       box.classList.toggle("ag-hud--edge", rect.left < 4 || rect.right > window.innerWidth - 4);
 
@@ -437,12 +426,6 @@
       } else {
         frameEl.style.cssText = `left:${rect.left - stageRect.left - stageEl.clientLeft}px;top:${rect.top - stageRect.top - stageEl.clientTop}px;width:${rect.width}px;height:${height}px`;
       }
-      // Ruler ticks every 10 canvas px (100 when that gets too dense).
-      let tickPx = canvas ? 10 / scaleX : 10;
-      if (tickPx < 4) {
-        tickPx *= 10;
-      }
-      frameEl.style.setProperty("--ag-tick", `${tickPx}px`);
       lastPointerText = "";
       if (sizeLine) {
         setText(sizeLine.value, `${fmt(canvas.width, 0, 4)} × ${fmt(canvas.height, 0, 4)}`);
@@ -671,7 +654,7 @@
 
   function readouts(panelEl, opts) {
     opts = opts || {};
-    const pad = opts.pad !== false;
+    const pad = opts.pad === true;
     const doTick = opts.tick !== false;
     const list = [];
     if (!panelEl) {

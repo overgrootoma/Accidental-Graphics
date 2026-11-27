@@ -6,7 +6,20 @@
   --gap: 14px;
   /* Height of the black menu bar (css/nav.css). */
   --iso-nav: 72px;
-  font-family: Arial, Helvetica, sans-serif;
+  /* Same two faces as the rest of the site (css/tool.css): monospace for text, Doto for buttons/titles. */
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.isolation-page .app {
+  font-size: 12px;
+}
+
+/* Buttons outside the panel (timeline, MIDI menu) use the display face like every other button. */
+.isolation-page button {
+  font-family: "Doto", system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 * {

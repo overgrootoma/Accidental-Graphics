@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/nav.css">
   <link rel="stylesheet" href="../css/data.css">
+  <link rel="stylesheet" href="../css/tool.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Doto:wght,ROND@100..900,0..100&display=swap" rel="stylesheet">
@@ -99,89 +100,98 @@
   </style>
 </head>
 
-<body class="app-page panel-ui-page">
+<body class="app-page panel-ui-page tool-ui">
 
   <!-- Main layout: sidebar links + canvas rechts -->
 <div id="main">
   <!-- Controls / sidebar -->
   <div id="controls">
-    <div class="panel-ui-header">
-      <div>
-        <p class="motion-eyebrow">PhotoGrid</p>
-        <h1>Settings</h1>
+    <header class="tool-head">
+      <div class="tool-head__row">
+        <h1 class="tool-title">PhotoGrid</h1>
+        <span data-settings-toggle-slot></span>
       </div>
-      <label class="file-button file-button--full">
-        Upload Image
-        <input type="file" id="imageInput" accept="image/*">
-      </label>
-      <div class="motion-primary-actions" aria-label="Main actions">
-        <button type="button" id="pauseBtn">Pause Animation</button>
-        <button type="button" id="exportBtn">Export PNG</button>
+      <p class="tool-lede">Lay a grid over a photo and let it move. Push the grid around with your cursor.</p>
+      <div class="tool-actions">
+        <label class="file-button">
+          Import image
+          <input type="file" id="imageInput" accept="image/*">
+        </label>
+        <button type="button" id="pauseBtn">Pause</button>
+        <button type="button" id="exportBtn" class="is-primary is-wide">Export PNG</button>
       </div>
-    </div>
+    </header>
+
+    <details class="motion-group" open>
+      <summary>Motion</summary>
+      <div class="motion-group-body">
+        <div class="field">
+          <label id="animationModeLabel">Pattern</label>
+          <div class="mode-buttons" role="group" aria-labelledby="animationModeLabel">
+            <button type="button" data-mode="wave" class="mode-btn is-active" aria-pressed="true">Wave</button>
+            <button type="button" data-mode="chaotic" class="mode-btn">Chaos</button>
+            <button type="button" data-mode="tide" class="mode-btn">Tide</button>
+            <button type="button" data-mode="spiral" class="mode-btn">Spiral</button>
+            <button type="button" data-mode="vortex" class="mode-btn">Vortex</button>
+            <button type="button" data-mode="ripple-shift" class="mode-btn">Ripple</button>
+            <button type="button" data-mode="pulse" class="mode-btn">Pulse</button>
+            <button type="button" data-mode="shear" class="mode-btn">Shear</button>
+            <button type="button" data-mode="orbit" class="mode-btn">Orbit</button>
+            <button type="button" data-mode="fold" class="mode-btn">Fold</button>
+            <button type="button" data-mode="glitch" class="mode-btn">Glitch</button>
+            <button type="button" data-mode="drift" class="mode-btn">Drift</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="distortion">Strength</label>
+          <input type="range" id="distortion" min="0" max="1" step="0.01" value="0.3" class="slider">
+        </div>
+        <div class="field">
+          <label for="speed">Speed</label>
+          <input type="range" id="speed" min="0" max="5" step="0.1" value="1" class="slider" data-unit="×">
+        </div>
+        <div class="field">
+          <label for="timeScrub">Moment</label>
+          <input type="range" id="timeScrub" min="0" max="1" step="0.001" value="0" class="slider">
+        </div>
+        <div class="field">
+          <label for="pointerPush">Cursor push</label>
+          <input type="range" id="pointerPush" min="0" max="1" step="0.05" value="0.3" class="slider">
+        </div>
+        <p class="tool-hint">Pause, then drag Moment to pick the exact frame you export.</p>
+      </div>
+    </details>
+
+    <details class="motion-group" open>
+      <summary>Grid</summary>
+      <div class="motion-group-body">
+        <div class="field">
+          <label for="gridRes">Columns</label>
+          <input type="range" id="gridRes" min="4" max="40" value="15" class="slider">
+        </div>
+        <div class="field">
+          <label for="lineThickness">Line width</label>
+          <input type="range" id="lineThickness" min="0" max="5" step="0.1" value="1" class="slider" data-unit="px">
+        </div>
+        <div class="field field--inline">
+          <label for="gridColor">Line colour</label>
+          <input type="color" id="gridColor" value="#ffffff">
+        </div>
+        <label class="check"><input type="checkbox" id="showGridBox" checked> Show grid lines</label>
+      </div>
+    </details>
 
     <details class="motion-group">
-      <summary>Samples</summary>
+      <summary>Sample images</summary>
       <div class="motion-group-body">
         <div class="sample-loader sample-loader--carousel">
-          <label>Use a sample image</label>
           <div class="sample-carousel-controls">
             <button type="button" id="photoGridSamplePrev" aria-label="Previous sample">&#8592;</button>
             <span class="sample-carousel-name" id="photoGridSampleName">Sample 01</span>
             <button type="button" id="photoGridSampleNext" aria-label="Next sample">&#8594;</button>
           </div>
           <div class="sample-preview" id="photoGridSamplePreview"></div>
-          <div class="sample-loader__actions">
-            <button type="button" id="photoGridSampleBtn">Load sample</button>
-          </div>
-        </div>
-      </div>
-    </details>
-
-    <details class="motion-group">
-      <summary>Grid</summary>
-      <div class="motion-group-body">
-        <label for="gridRes">Grid Resolution</label>
-        <input type="range" id="gridRes" min="4" max="40" value="15" class="slider" data-unit="cols">
-        <label for="lineThickness">Grid Line Thickness</label>
-        <input type="range" id="lineThickness" min="0" max="5" step="0.1" value="1" class="slider" data-unit="px">
-        <label for="gridColor">Grid Line Colour</label>
-        <input type="color" id="gridColor" value="#ffffff">
-        <button type="button" id="toggleGridBtn">Hide Grid</button>
-      </div>
-    </details>
-
-    <details class="motion-group">
-      <summary>Animation</summary>
-      <div class="motion-group-body">
-        <label for="distortion">Distortion</label>
-        <input type="range" id="distortion" min="0" max="1" step="0.01" value="0.3" class="slider">
-        <label for="speed">Animation Speed</label>
-        <input type="range" id="speed" min="0" max="5" step="0.1" value="1" class="slider" data-unit="×">
-        <label for="timeScrub">Animation Phase</label>
-        <input type="range" id="timeScrub" min="0" max="1" step="0.001" value="0" class="slider">
-        <label for="pointerPush">Pointer Push</label>
-        <input type="range" id="pointerPush" min="0" max="1" step="0.05" value="0.3" class="slider">
-      </div>
-    </details>
-
-    <details class="motion-group">
-      <summary>Modes</summary>
-      <div class="motion-group-body">
-        <label id="animationModeLabel">Animation Mode</label>
-        <div class="mode-buttons" role="group" aria-labelledby="animationModeLabel">
-          <button type="button" data-mode="wave" class="mode-btn is-active" aria-pressed="true">Wave</button>
-          <button type="button" data-mode="chaotic" class="mode-btn">Chaos</button>
-          <button type="button" data-mode="tide" class="mode-btn">Tide</button>
-          <button type="button" data-mode="spiral" class="mode-btn">Spiral</button>
-          <button type="button" data-mode="vortex" class="mode-btn">Vortex</button>
-          <button type="button" data-mode="ripple-shift" class="mode-btn">Ripple</button>
-          <button type="button" data-mode="pulse" class="mode-btn">Pulse</button>
-          <button type="button" data-mode="shear" class="mode-btn">Shear</button>
-          <button type="button" data-mode="orbit" class="mode-btn">Orbit</button>
-          <button type="button" data-mode="fold" class="mode-btn">Fold</button>
-          <button type="button" data-mode="glitch" class="mode-btn">Glitch</button>
-          <button type="button" data-mode="drift" class="mode-btn">Drift</button>
+          <button type="button" id="photoGridSampleBtn">Use this sample</button>
         </div>
       </div>
     </details>
@@ -215,7 +225,7 @@ const lineThicknessSlider = document.getElementById('lineThickness');
 const gridColorInput = document.getElementById('gridColor');
 const pointerPushSlider = document.getElementById('pointerPush');
 const exportBtn = document.getElementById('exportBtn');
-const toggleGridBtn = document.getElementById('toggleGridBtn');
+const showGridBox = document.getElementById('showGridBox');
 
 let img = new Image();
 let gridRes = +gridResSlider.value;
@@ -230,9 +240,6 @@ let showGrid = true;
 let isPaused = false;
 let isScrubbing = false;
 let dirty = true; // a still frame is only redrawn when something changed
-toggleGridBtn.textContent = showGrid ? 'Hide Grid' : 'Show Grid';
-toggleGridBtn.setAttribute('aria-pressed', String(!showGrid));
-pauseBtn.setAttribute('aria-pressed', 'false');
 
 // Grid points in flat arrays (index = row * (cols + 1) + col): rest position o*, animated position p*.
 let cols = 0, rows = 0;
@@ -610,8 +617,7 @@ modeButtons.forEach((btn)=>{
 
 pauseBtn.addEventListener('click', ()=>{
   isPaused = !isPaused;
-  pauseBtn.textContent = isPaused ? 'Resume Animation' : 'Pause Animation';
-  pauseBtn.setAttribute('aria-pressed', String(isPaused));
+  pauseBtn.textContent = isPaused ? 'Play' : 'Pause';
 });
 
 timeScrub.addEventListener('pointerdown', ()=>{ isScrubbing = true; });
@@ -643,10 +649,8 @@ exportBtn.addEventListener('click', ()=>{
   }, 'image/png');
 });
 
-toggleGridBtn.addEventListener('click', ()=>{
-  showGrid = !showGrid;
-  toggleGridBtn.textContent = showGrid ? 'Hide Grid' : 'Show Grid';
-  toggleGridBtn.setAttribute('aria-pressed', String(!showGrid));
+showGridBox.addEventListener('change', ()=>{
+  showGrid = showGridBox.checked;
   markDirty();
 });
 
@@ -656,9 +660,15 @@ AGSettings.persist('photogrid', {
   get: () => ({ mode, showGrid }),
   set: (saved) => {
     modeButtons.find((btn) => btn.dataset.mode === saved.mode)?.click();
-    if (typeof saved.showGrid === 'boolean' && saved.showGrid !== showGrid) toggleGridBtn.click();
+    if (typeof saved.showGrid === 'boolean') { showGrid = saved.showGrid; showGridBox.checked = showGrid; }
   },
 });
+
+// Start with a picture instead of an empty grid: the first sample, unless one was already chosen.
+if (sampleCarousel?.hasSamples && !img.src) {
+  const first = sampleCarousel.getCurrentSample?.();
+  if (first?.src) setImageSource(first.src);
+}
 
 resizeCanvas();
 requestAnimationFrame(animate);
